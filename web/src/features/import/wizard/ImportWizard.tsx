@@ -12,6 +12,11 @@ import type { SourceConnector } from '../connectors/types';
 import { expandArchives } from '../zipEntries';
 import { ingestAndCategorise, commitItems, type IngestProgress, type CommitProgress } from './pipeline';
 import ReviewStage from './ReviewStage';
+// Photos do not go through stage -> categorise -> ReviewStage like documents do. They have their
+// own engine (shared with the desktop import dialog and the phone capture page) because the
+// question for a pile of photos is not "which notebook does each one belong in" but "which of
+// these are pages of the SAME note" - and that has to be answered before filing anything.
+import PhotoImportFlow from '../photos/PhotoImportFlow';
 
 export interface ImportWizardProps {
   open: boolean;
@@ -21,7 +26,7 @@ export interface ImportWizardProps {
   onCommitted: () => void;
 }
 
-type Stage = 'source' | 'ingest' | 'review' | 'commit' | 'done';
+type Stage = 'source' | 'ingest' | 'photos' | 'review' | 'commit' | 'done';
 
 const STEPS: Array<{ key: Stage; label: string }> = [
   { key: 'source', label: 'Source' },
@@ -46,6 +51,9 @@ export default function ImportWizard({ open, initialSource, notebooks, onClose, 
   const [categoriser, setCategoriser] = useState('heuristic');
   const [commit, setCommit] = useState<CommitProgress | null>(null);
   const [useOcr, setUseOcr] = useState(true);
+  /** Photos picked for the grouped flow. It owns its own batch, so nothing is staged here. */
+  const [photoFiles, setPhotoFiles] = useState<File[]>([]);
+  const [photoResult, setPhotoResult] = useState<{ created: number; failed: number } | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -60,6 +68,8 @@ export default function ImportWizard({ open, initialSource, notebooks, onClose, 
     setIngestDone(false);
     setItems([]);
     setCommit(null);
+    setPhotoFiles([]);
+    setPhotoResult(null);
     setError(null);
     api.importSources().then(({ sources }) => setAvailability(Object.fromEntries(sources.map((s) => [s.id, s])))).catch(() => {});
   }, [open, initialSource]);
@@ -112,6 +122,21 @@ export default function ImportWizard({ open, initialSource, notebooks, onClose, 
       return;
     }
     setError(null);
+
+    // Photos: skip staging and categorising entirely. PhotoImportFlow reads the text, groups by
+    // capture time, and runs its own review - creating its own batch, which is why none is made
+    // here. Making one would leave an empty batch behind on every photo import.
+    if (connector.id === 'photos') {
+      const picked = docs.map((d) => d.file).filter((f): f is File => !!f);
+      if (!picked.length) {
+        setError('None of those files are photos. Try a different source or file type.');
+        return;
+      }
+      setPhotoFiles(picked);
+      setStage('photos');
+      return;
+    }
+
     let bId = batchId;
     try {
       if (!bId) {
@@ -147,7 +172,9 @@ export default function ImportWizard({ open, initialSource, notebooks, onClose, 
   }
 
   const activeStepIndex = useMemo(() => {
-    const map: Record<Stage, number> = { source: 0, ingest: 1, review: 2, commit: 2, done: 3 };
+    // The photo flow covers reading AND review inside one stage, so it sits on the Read step
+    // until it finishes; its own header shows where within that it has got to.
+    const map: Record<Stage, number> = { source: 0, ingest: 1, photos: 1, review: 2, commit: 2, done: 3 };
     return map[stage];
   }, [stage]);
 
@@ -229,10 +256,16 @@ export default function ImportWizard({ open, initialSource, notebooks, onClose, 
                     </div>
                   </div>
                   {connector.id === 'photos' && (
-                    <label className="iw-ocr">
-                      <input type="checkbox" checked={useOcr} onChange={(e) => setUseOcr(e.target.checked)} />
-                      Read text from photos (OCR). Slower, and needs the text-recognition model to load.
-                    </label>
+                    <>
+                      <label className="iw-ocr">
+                        <input type="checkbox" checked={useOcr} onChange={(e) => setUseOcr(e.target.checked)} />
+                        Read the text in each photo. Needs a one-off 7MB download the first time, then it is cached.
+                      </label>
+                      <p className="iw-tip">
+                        <Icon name="info" size={14} />
+                        Photos taken close together are grouped into one note, and you can change the grouping before anything is saved.
+                      </p>
+                    </>
                   )}
                   <button type="button" className="iw-linkbtn" onClick={() => setStage('source')}>← Choose a different source</button>
                 </>
@@ -266,6 +299,29 @@ export default function ImportWizard({ open, initialSource, notebooks, onClose, 
             </div>
           )}
 
+          {stage === 'photos' && (
+            <div className="iw-photos">
+              <PhotoImportFlow
+                files={photoFiles}
+                notebooks={notebooks}
+                readText={useOcr}
+                // Recorded so closing the WHOLE wizard discards the flow's batch too; without
+                // this, an X on the dialog would leave the staged photos in Postgres forever.
+                onBatchCreated={setBatchId}
+                onDone={(res) => {
+                  setPhotoResult(res);
+                  setStage('done');
+                  onCommitted();
+                }}
+                onCancel={() => {
+                  setBatchId(null); // the flow discards its own batch on cancel
+                  setPhotoFiles([]);
+                  setStage('ingest');
+                }}
+              />
+            </div>
+          )}
+
           {stage === 'review' && batchId && (
             <ReviewStage
               batchId={batchId}
@@ -290,12 +346,16 @@ export default function ImportWizard({ open, initialSource, notebooks, onClose, 
           {stage === 'done' && (
             <div className="iw-done">
               <span className="iw-done-mark"><Icon name="check" size={26} /></span>
+              {/* The photo flow reports its own totals; the document path reports commit's. */}
               <p className="iw-done-title">
-                Done. {commit?.created ?? 0} note{(commit?.created ?? 0) === 1 ? '' : 's'} imported
-                {commit && commit.createdNotebooks.length ? ` into ${commit.createdNotebooks.length} new notebook${commit.createdNotebooks.length === 1 ? '' : 's'}` : ''}.
+                Done. {(photoResult?.created ?? commit?.created) ?? 0} note{((photoResult?.created ?? commit?.created) ?? 0) === 1 ? '' : 's'} imported
+                {!photoResult && commit && commit.createdNotebooks.length ? ` into ${commit.createdNotebooks.length} new notebook${commit.createdNotebooks.length === 1 ? '' : 's'}` : ''}.
               </p>
-              {commit && commit.failed > 0 && <p className="iw-warn">{commit.failed} item{commit.failed === 1 ? '' : 's'} could not be imported.</p>}
-              {commit && commit.createdNotebooks.length > 0 && (
+              {photoResult && photoResult.failed > 0 && (
+                <p className="iw-warn">{photoResult.failed} photo{photoResult.failed === 1 ? '' : 's'} could not be imported.</p>
+              )}
+              {!photoResult && commit && commit.failed > 0 && <p className="iw-warn">{commit.failed} item{commit.failed === 1 ? '' : 's'} could not be imported.</p>}
+              {!photoResult && commit && commit.createdNotebooks.length > 0 && (
                 <p className="iw-done-nbs">New: {commit.createdNotebooks.map((n) => n.name).join(', ')}</p>
               )}
               <button type="button" className="iw-btn iw-btn-primary" onClick={onClose}>Close</button>

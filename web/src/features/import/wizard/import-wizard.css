@@ -259,3 +259,12 @@
 @media (prefers-reduced-motion: reduce) {
   .iw-progress > span { transition: none; }
 }
+
+/* The photo flow brings its own layout (contact sheet + review); the wizard just gives it the
+   whole content column and gets out of the way. */
+.iw-photos {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
