@@ -1,7 +1,15 @@
 // The editor page (`/note/:noteId`) - the crown jewel. Loads the note, then hands off
 // to NoteWorkspace (keyed by note id) which owns the title, TipTap editor, autosave,
 // history/AI/import affordances and the backlinks sections.
-import { useCallback, useEffect, useRef, useState, type ChangeEvent, type KeyboardEvent } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type KeyboardEvent,
+} from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import type { Editor } from '@tiptap/core';
 import { api, ApiError } from '../../lib/api';
@@ -41,6 +49,9 @@ import { AiReviewPluginKey, createAiReviewPlugin, setReviewEdits } from './AiRev
 import { fetchCheckCatalogue, resolveFamilies } from '../../lib/checksApi';
 import { extractHashtags, normalizeTags, unionTags, invalidateTagVocabulary } from '../../lib/tags';
 import './notePage.css';
+
+/** Where the reader's writing-column width lives. Absent means full width. */
+const WIDTH_KEY = 'folio.noteWidth';
 
 export default function NotePage() {
   const { noteId } = useParams<{ noteId: string }>();
@@ -182,6 +193,17 @@ function NoteWorkspace({ initialNote, initialBacklinks }: NoteWorkspaceProps) {
   // now, defaulting to on so wide screens behave exactly as they did before. The media
   // query still decides whether there is ROOM for it; this decides whether it exists.
   const [outlineOpen, setOutlineOpen] = useState(true);
+  // Full width by default - the note used to be capped at 760px inside a 1400px page, which
+  // on any normal laptop left more empty page than note. A reader who wants a book measure
+  // back can have it, and the choice is a property of the reader rather than of the note,
+  // so it lives in localStorage and applies to every note they open.
+  const [focusedWidth, setFocusedWidth] = useState<boolean>(() => {
+    try {
+      return window.localStorage.getItem(WIDTH_KEY) === 'focused';
+    } catch {
+      return false;
+    }
+  });
   const [historyOpen, setHistoryOpen] = useState(false);
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [commentsOpen, setCommentsOpen] = useState(false);
@@ -304,7 +326,7 @@ function NoteWorkspace({ initialNote, initialBacklinks }: NoteWorkspaceProps) {
    * caret away from someone who came to read, and would scroll a long note back to
    * the top on mobile.
    */
-  const titleInputRef = useRef<HTMLInputElement | null>(null);
+  const titleInputRef = useRef<HTMLTextAreaElement | null>(null);
   const focusedNoteRef = useRef<string | null>(null);
   useEffect(() => {
     if (focusedNoteRef.current === initialNote.id) return; // don't re-grab on re-render
@@ -315,6 +337,33 @@ function NoteWorkspace({ initialNote, initialBacklinks }: NoteWorkspaceProps) {
     const raf = requestAnimationFrame(() => titleInputRef.current?.focus());
     return () => cancelAnimationFrame(raf);
   }, [initialNote.id, initialNote.title, initialNote.contentText]);
+
+  /* Auto-grow the title. A textarea has no intrinsic height, so it is reset to one row and
+     re-measured on every change - and on width changes too, since opening the AI drawer
+     narrows the column and can push a one-line title onto two.
+     The observer watches the COLUMN, not the textarea, and only re-fits when the column's
+     width actually changes: observing the textarea would have it react to the height this
+     effect just set, which is the classic "ResizeObserver loop" warning. */
+  useLayoutEffect(() => {
+    const el = titleInputRef.current;
+    if (!el) return;
+    const fit = () => {
+      el.style.height = 'auto';
+      el.style.height = `${el.scrollHeight}px`;
+    };
+    fit();
+
+    const column = el.parentElement;
+    if (!column || typeof ResizeObserver === 'undefined') return;
+    let lastWidth = column.clientWidth;
+    const ro = new ResizeObserver(() => {
+      if (column.clientWidth === lastWidth) return;
+      lastWidth = column.clientWidth;
+      fit();
+    });
+    ro.observe(column);
+    return () => ro.disconnect();
+  }, [title]);
 
   // Pull fresh server content into the LIVE editor after a history restore or an import that
   // targets this open note, killing any pending/stale autosave first so it can't revert the
@@ -452,13 +501,16 @@ function NoteWorkspace({ initialNote, initialBacklinks }: NoteWorkspaceProps) {
     }
   }
 
-  function handleTitleChange(e: ChangeEvent<HTMLInputElement>) {
-    setTitle(e.target.value);
-    titleRef.current = e.target.value;
+  function handleTitleChange(e: ChangeEvent<HTMLTextAreaElement>) {
+    /* A pasted multi-line title collapses to one line here rather than being stored with
+       newlines the tab title, share dialog and search results would all render as spaces. */
+    const value = e.target.value.replace(/[\r\n]+/g, ' ');
+    setTitle(value);
+    titleRef.current = value;
     capturePending();
     autosave.schedule();
   }
-  function handleTitleKeyDown(e: KeyboardEvent<HTMLInputElement>) {
+  function handleTitleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === 'Enter') {
       e.preventDefault();
       editorRef.current?.commands.focus('start');
@@ -686,6 +738,38 @@ function NoteWorkspace({ initialNote, initialBacklinks }: NoteWorkspaceProps) {
     setImportOpen(true);
   }
 
+  /**
+   * Drop a built-in template into an empty note.
+   *
+   * Templates were previously reachable only from the notebook page's "New note ▾", so a
+   * note you had already opened - the blank page you are actually staring at - had no way
+   * to become a structured one. Matched by the server's stable builtin id rather than by
+   * name, because a user can rename their own copy.
+   */
+  async function applyTemplate(builtinId: string, label: string) {
+    const ed = editorRef.current;
+    if (!ed || ed.isDestroyed) return;
+    try {
+      const { templates } = await api.templates();
+      const tpl = templates.find((t) => t.id === builtinId);
+      if (!tpl) {
+        toast(`The ${label} template is not available`, 'error');
+        return;
+      }
+      ed.chain().focus().setContent(tpl.contentJson as Record<string, unknown>).run();
+      capturePending();
+      autosave.schedule();
+      toast(`${label} template applied`, 'ok');
+    } catch (e) {
+      toast(errorMessage(e, 'Could not load templates'), 'error');
+    }
+  }
+
+  /* "Nothing written yet" - driven by the LIVE word count rather than the loaded note, so
+     the starters vanish on the first keystroke instead of lingering until the next save.
+     A canvas has no prose body, so it is never "empty" in this sense. */
+  const isEmptyNote = note.kind !== 'canvas' && wordCount === 0 && !title.trim();
+
   const notebook = note.notebook;
   const savedLabel =
     autosave.status === 'saving'
@@ -699,20 +783,20 @@ function NoteWorkspace({ initialNote, initialBacklinks }: NoteWorkspaceProps) {
   return (
     <div
       className="folio-note-page"
+      data-width={focusedWidth ? 'focused' : 'wide'}
+      // The Find popover is fixed to the same top-right corner the outline rail hangs from;
+      // this lets the rail drop below it rather than sit underneath it (notePage.css).
+      data-find={findMode !== null ? 'open' : undefined}
       onBlur={(e) => {
         if (!e.currentTarget.contains(e.relatedTarget as Node)) void autosave.flush();
       }}
     >
       <div className="folio-note-main">
         <div className="folio-note-shell" ref={shellRef}>
-          <div className="folio-breadcrumb">
-            <Link to={`/notebook/${notebook.id}`} className="folio-breadcrumb-notebook">
-              {notebook.emoji} {notebook.name}
-            </Link>
-            <span className="folio-breadcrumb-sep">›</span>
-            <span className="folio-breadcrumb-title">{title || 'Untitled'}</span>
-          </div>
-
+          {/* The bar comes FIRST in the document, not after the breadcrumb: it is sticky
+              chrome that the whole article scrolls under, and anything above it inside the
+              same scroll box is permanently hidden behind it. The breadcrumb belongs to
+              the article, so it sits below with the title it names. */}
           <NoteActionBar
             note={note}
             title={title}
@@ -727,7 +811,28 @@ function NoteWorkspace({ initialNote, initialBacklinks }: NoteWorkspaceProps) {
             onSummarize={handleSummarize}
             onSuggestTitle={handleTitleSuggest}
             outlineOpen={outlineOpen}
-            onToggleOutline={() => setOutlineOpen((v) => !v)}
+            onToggleOutline={() => {
+              // A wide right-hand drawer stands the rail down (see drawerInset.ts), and a
+              // toggle that leaves nothing on screen reads as a broken button. Say why
+              // instead, and leave the toggle where it was.
+              if (!outlineOpen && document.documentElement.hasAttribute('data-drawer-crowds-rail')) {
+                toast('Not enough room beside the panel. Narrow it and the outline comes back', 'info');
+                return;
+              }
+              setOutlineOpen((v) => !v);
+            }}
+            focusedWidth={focusedWidth}
+            onToggleWidth={() =>
+              setFocusedWidth((v) => {
+                const next = !v;
+                try {
+                  window.localStorage.setItem(WIDTH_KEY, next ? 'focused' : 'wide');
+                } catch {
+                  // Private mode. The width still applies for this session.
+                }
+                return next;
+              })
+            }
             commentsOpen={commentsOpen}
             onToggleComments={() => setCommentsOpen((v) => !v)}
             unresolvedComments={unresolvedComments}
@@ -753,21 +858,94 @@ function NoteWorkspace({ initialNote, initialBacklinks }: NoteWorkspaceProps) {
             onRetrySave={() => void autosave.flush()}
           />
 
-          {/* Placeholder is not a label - it disappears on first keystroke and is not
+          {/* The notebook's colour leads the trail, the same dot the sidebar uses, so
+              "which module am I in" is answered before the word is read. */}
+          <div className="folio-breadcrumb">
+            <span
+              className="folio-breadcrumb-dot"
+              aria-hidden="true"
+              style={notebook.color ? { background: notebook.color } : undefined}
+            />
+            <Link to={`/notebook/${notebook.id}`} className="folio-breadcrumb-notebook">
+              {notebook.name}
+            </Link>
+            <span className="folio-breadcrumb-sep" aria-hidden="true">/</span>
+            <span className="folio-breadcrumb-title">{title || 'Untitled'}</span>
+          </div>
+
+          {/* A textarea, not an input, because at 46px a real note title ("Lecture 9:
+              B-trees and B+ trees") is wider than the column and an input can only scroll
+              it out of sight - you would be typing a heading you cannot read. It wraps and
+              auto-grows instead; Enter is still swallowed below, so it never holds a
+              newline and stays a single-line value everywhere else in the app.
+              Placeholder is not a label - it disappears on first keystroke and is not
               reliably exposed. This is the highest-traffic input in the product. */}
-          <input
+          <textarea
             ref={titleInputRef}
             className="folio-title-input"
             aria-label="Note title"
+            rows={1}
             value={title}
             placeholder="Untitled"
+            spellCheck={false}
             onChange={handleTitleChange}
             onKeyDown={handleTitleKeyDown}
           />
 
-          <TagEditor tags={tags} autoTags={bodyTags} onChange={handleTagsChange} onOpenTag={openTag} />
+          <TagEditor
+            tags={tags}
+            autoTags={bodyTags}
+            onChange={handleTagsChange}
+            onOpenTag={openTag}
+            wordCount={wordCount}
+          />
 
           <AttachmentStrip attachments={note.attachments} />
+
+          {/* A blank note used to be a blank page with nothing on it but a caret, while
+              every way to start from something you already have (templates, slide import,
+              a photo of your handwriting) lived behind a menu somewhere else. This is the
+              one moment those are worth offering, so it shows only while the note is
+              genuinely empty and disappears on the first keystroke. */}
+          {isEmptyNote && (
+            <div className="folio-note-blank" data-testid="blank-note-starters">
+              <p className="folio-note-blank__title">A blank page, but not a cold start.</p>
+              <p className="folio-note-blank__lead">
+                Start typing, or begin from something you already have. Slash commands work anywhere
+                in the note.
+              </p>
+              <div className="folio-note-blank__actions">
+                <button
+                  type="button"
+                  className="folio-note-blank__btn"
+                  onClick={() => void applyTemplate('builtin-01-lecture-note', 'Lecture note')}
+                >
+                  Lecture note template
+                </button>
+                <button
+                  type="button"
+                  className="folio-note-blank__btn"
+                  onClick={() => void applyTemplate('builtin-02-cornell-notes', 'Cornell notes')}
+                >
+                  Cornell layout
+                </button>
+                <button
+                  type="button"
+                  className="folio-note-blank__btn"
+                  onClick={() => openImport('slides', () => {})}
+                >
+                  Import slides or a recording
+                </button>
+                <button
+                  type="button"
+                  className="folio-note-blank__btn"
+                  onClick={() => openImport('photo', () => {})}
+                >
+                  Photo of handwritten notes
+                </button>
+              </div>
+            </div>
+          )}
 
           <FolioEditor
             content={note.contentJson}

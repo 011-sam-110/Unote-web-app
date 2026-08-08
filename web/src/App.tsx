@@ -194,7 +194,9 @@ function AppShell() {
           <Icon name="menu" size={18} />
         </button>
         <div className="app-topbar__brand">
-          <span aria-hidden="true">📓</span>
+          {/* Same drawn monogram as the sidebar - the phone header was still showing the
+              old 📓 emoji, so the two chromes disagreed about what the product looks like. */}
+          <span className="sidebar__brand-mark" aria-hidden="true">U</span>
           <span>Unote</span>
         </div>
         <div className="app-topbar__spacer" />

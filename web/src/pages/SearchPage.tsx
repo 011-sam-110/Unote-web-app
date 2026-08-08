@@ -217,7 +217,7 @@ export default function SearchPage() {
   return (
     <div className="sr-page">
       <div className="sr-page__crumb">Search</div>
-      <h1 className="sr-page__title">Search your notes</h1>
+      <h1 className="sr-page__title">Everything you have written</h1>
 
       <div className="sr-search-box" data-tour="search-box">
         <Icon name="search" size={18} className="sr-search-box__icon" />

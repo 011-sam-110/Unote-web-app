@@ -1,26 +1,23 @@
 /* Export / Import pair in the sidebar footer, plus the two dialogs they open. */
 
+/* Two icon buttons inside the sidebar's utility row, alongside theme and phone capture -
+   the row of "things about my account and my data". They read as icons but each keeps an
+   aria-label and a tooltip, so the affordance is compact, not hidden. */
 .data-controls {
   flex: 0 0 auto;
-  display: flex;
-  gap: 6px;
-  padding: 0 8px 6px;
+  display: contents;
 }
 
 .data-controls__btn {
-  flex: 1 1 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 6px 8px;
-  min-height: 30px;
-  border: 1px solid var(--line);
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border: none;
   border-radius: var(--radius);
   background: transparent;
   color: var(--ink-2);
-  font-size: 12.5px;
-  font-weight: 600;
   cursor: pointer;
   transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
 }
@@ -30,10 +27,11 @@
   color: var(--ink);
 }
 
-/* The account row already owns the margin-top:auto that pushes this block down, so this
-   pair must not claim it as well or the two fight over the leftover space. */
-.sidebar-account + .data-controls {
-  margin-top: 0;
+@media (pointer: coarse) {
+  .data-controls__btn {
+    width: 44px;
+    height: 44px;
+  }
 }
 
 .export-modal__lead {

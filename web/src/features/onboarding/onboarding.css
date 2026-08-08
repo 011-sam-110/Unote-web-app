@@ -271,16 +271,18 @@
   box-shadow: var(--focus-ring);
 }
 
+/* Ink, not indigo - the same primary rule the rest of the app follows now. The tour is
+   the first thing a new account sees, so an indigo button here taught the wrong idiom
+   before the user had met a single real one. */
 .tour-btn--primary {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--accent-ink);
+  background: var(--solid);
+  border-color: var(--solid);
+  color: var(--solid-ink);
 }
 
 .tour-btn--primary:hover:not(:disabled) {
-  background: var(--accent);
-  border-color: var(--accent);
-  filter: brightness(1.08);
+  background: var(--solid-hover);
+  border-color: var(--solid-hover);
 }
 
 .tour-btn--ghost {

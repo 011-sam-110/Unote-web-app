@@ -9,9 +9,16 @@
 
 /* ---------- Core typography ---------- */
 
+/* The note body is the one place in the app set in the reading serif. Newsreader at 19px
+   with a 1.75 leading is a book measure, not a UI measure: it is what makes an hour of
+   lecture notes readable, and it is the whole argument of the redesign - chrome in Plex,
+   your own writing in a face you would want to read.
+   `em`-based sizing below means every nested element (headings, code, callouts) scales
+   from this one number. */
 .folio-prosemirror {
-  font-size: 16px;
-  line-height: 1.7;
+  font-family: var(--font-display);
+  font-size: 19px;
+  line-height: 1.75;
   color: var(--ink);
   outline: none;
   min-height: 40vh;
@@ -26,19 +33,23 @@
   margin: 0;
 }
 
+/* Headings stay in the serif but drop to 600: Newsreader's bold is heavy enough at this
+   size that 700 read as a shout rather than a section. */
 .folio-prosemirror h1,
 .folio-prosemirror h2,
 .folio-prosemirror h3 {
-  font-weight: 700;
-  line-height: 1.25;
-  margin-top: 1.6em;
-  margin-bottom: 0.3em;
+  font-family: var(--font-display);
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  margin-top: 1.55em;
+  margin-bottom: 0.32em;
   scroll-margin-top: 80px;
 }
 
-.folio-prosemirror h1 { font-size: 1.9em; }
-.folio-prosemirror h2 { font-size: 1.5em; }
-.folio-prosemirror h3 { font-size: 1.25em; }
+.folio-prosemirror h1 { font-size: 1.72em; }
+.folio-prosemirror h2 { font-size: 1.37em; }
+.folio-prosemirror h3 { font-size: 1.16em; }
 
 .folio-prosemirror h1:first-child,
 .folio-prosemirror h2:first-child,
@@ -115,11 +126,11 @@
 }
 
 .folio-prosemirror code {
-  font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
-  background: var(--bg-hover);
+  font-family: var(--font-code);
+  background: var(--bg-active);
   border-radius: 4px;
   padding: 0.15em 0.4em;
-  font-size: 0.88em;
+  font-size: 0.76em;
 }
 
 .folio-prosemirror mark {
@@ -210,12 +221,18 @@
   }
 }
 
+/* A table is data, not prose. Left in the 19px serif its cells came out enormous and the
+   columns stopped scanning, so it steps into the UI face at a data size - the same move
+   the callout makes, for the same reason. */
 .folio-prosemirror th,
 .folio-prosemirror td {
   border: 1px solid var(--line);
-  padding: 0.45em 0.6em;
+  padding: 0.5em 0.7em;
   vertical-align: top;
   position: relative;
+  font-family: var(--font-ui);
+  font-size: 0.74em;
+  line-height: 1.55;
 }
 
 .folio-prosemirror th {
@@ -266,7 +283,7 @@
   color: var(--ink-2);
   background: transparent;
   border: none;
-  font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+  font-family: var(--font-code);
 }
 
 .folio-codeblock-copy {
@@ -293,9 +310,11 @@
 }
 
 .folio-codeblock code {
-  font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
-  font-size: 0.86em;
-  line-height: 1.55;
+  font-family: var(--font-code);
+  /* Relative to the 19px serif body, so code lands at ~14px - a size you would actually
+     write code at, rather than 16px+ set to match a reading measure. */
+  font-size: 0.72em;
+  line-height: 1.6;
   background: none;
   padding: 0;
 }
@@ -313,11 +332,16 @@
 
 /* ---------- Callout ---------- */
 
+/* A callout is an aside ABOUT the prose, not more prose, so it steps out of the serif
+   into the UI face. The change of voice is what makes it read as a box you can skip. */
 .folio-callout {
-  border-radius: var(--radius-lg);
-  padding: 0.8em 1em;
+  border-radius: 12px;
+  padding: 0.85em 1.05em;
   border: 1px solid var(--line);
   background: var(--bg-hover);
+  font-family: var(--font-ui);
+  font-size: 0.74em;
+  line-height: 1.6;
 }
 
 .folio-callout-info { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 30%, var(--line)); }
@@ -474,18 +498,19 @@
   display: inline;
 }
 
+/* Accent ink on a hairline rule, not a filled chip. At the serif body's 19px a filled
+   pill on every wikilink turned a paragraph into a row of buttons and broke the line of
+   the prose; the underline reads as a link inside a sentence, which is what it is. */
 a.folio-wikilink {
   color: var(--accent);
-  background: var(--accent-soft);
-  border-radius: 4px;
-  padding: 0.02em 0.35em;
+  border-bottom: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
   text-decoration: none;
   cursor: pointer;
-  font-weight: 500;
 }
 
 a.folio-wikilink:hover {
-  text-decoration: underline;
+  border-bottom-color: var(--accent);
+  background: var(--accent-soft);
 }
 
 /* Inline #hashtags (HashtagExtension.ts). Deliberately quieter than a wikilink: a
@@ -690,12 +715,15 @@ a.folio-wikilink--missing:hover {
 
 /* ---------- Bubble menus (selection + table) ---------- */
 
+/* An inverted bar: ink ground, paper text. It has to be written as --ink over --bg
+   rather than as a literal #fff, because in the dark theme --ink IS near-white and a
+   hard-coded white label was rendering invisible on it. */
 .folio-bubble {
   display: flex;
   align-items: center;
   gap: 2px;
   background: var(--ink);
-  color: #fff;
+  color: var(--bg);
   border-radius: 10px;
   padding: 4px;
   box-shadow: var(--shadow-pop);
@@ -712,15 +740,17 @@ a.folio-wikilink--missing:hover {
   line-height: 1;
 }
 
+/* Mixed off --bg (the bar's own foreground) so the wash lightens an ink bar in light
+   mode and darkens a paper bar in dark mode, instead of always adding white. */
 .folio-bubble button:hover,
 .folio-bubble button.active {
-  background: rgba(255, 255, 255, 0.16);
+  background: color-mix(in srgb, var(--bg) 18%, transparent);
 }
 
 .folio-bubble-sep {
   width: 1px;
   align-self: stretch;
-  background: rgba(255, 255, 255, 0.2);
+  background: color-mix(in srgb, var(--bg) 24%, transparent);
   margin: 2px 2px;
 }
 
@@ -786,9 +816,9 @@ a.folio-wikilink--missing:hover {
 }
 
 .folio-link-popover button {
-  border: 1px solid var(--line);
+  border: 1px solid var(--accent);
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-ink);
   border-radius: 6px;
   padding: 5px 10px;
   font-size: 13px;

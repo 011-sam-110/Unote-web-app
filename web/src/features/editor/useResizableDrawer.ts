@@ -31,15 +31,29 @@ export interface ResizableDrawer {
 const STEP = 24;
 
 /**
- * The widest the drawer may get, given the window it is in.
+ * The narrowest the page beside the drawer may be squeezed to, including its own padding.
+ *
+ * `window.innerWidth * 0.72` was measured against the wrong thing: the drawer overlays the
+ * MAIN COLUMN, not the window, and the sidebar is not space the note can borrow back. On a
+ * 1440 laptop that let the drawer reach 880 over a 1166px column, and once the 32px gutters
+ * and the outline rail had taken their share the note itself computed to zero width - title,
+ * body and all. Worse, the width is persisted, so re-opening the panel restored the collapse.
+ */
+const MIN_CANVAS = 420;
+
+/**
+ * The widest the drawer may get, given the space it actually has.
  *
  * A drawer can always be dragged wide, but never so wide that the note it is about is gone:
  * the panel exists to act on the text beside it, and a full-width drawer is a modal wearing
- * a drawer's clothes. The floor keeps the cap sane on a phone-width window.
+ * a drawer's clothes. The floor keeps the cap sane on a phone-width window, where the drawer
+ * is legitimately most of the screen.
  */
 function maxWidth(): number {
   if (typeof window === 'undefined') return 720;
-  return Math.max(320, Math.min(880, Math.round(window.innerWidth * 0.72)));
+  const main = document.querySelector('.app-main');
+  const available = main ? main.getBoundingClientRect().width : window.innerWidth;
+  return Math.max(320, Math.min(880, Math.round(window.innerWidth * 0.72), Math.round(available - MIN_CANVAS)));
 }
 
 const MIN = 320;
@@ -78,10 +92,15 @@ export function useResizableDrawer(storageKey: string, initial: number, label = 
 
   // A window narrow enough to invalidate the saved width has to pull it back in, or the
   // drawer sits wider than the viewport with its grip off-screen and no way to shrink it.
+  //
+  // Run once on mount too. The first clamp happens during render, when `.app-main` has not
+  // been committed yet and maxWidth() can only fall back to the window - so a width saved
+  // from a wider window, or from before the cap existed, is still too wide at that point.
   useEffect(() => {
     function onResize() {
       setWidth((w) => clamp(w));
     }
+    onResize();
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
   }, []);

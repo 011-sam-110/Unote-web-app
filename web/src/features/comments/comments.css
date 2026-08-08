@@ -231,7 +231,9 @@
 .folio-comment-composer-actions button.primary {
   border-color: var(--accent);
   background: var(--accent);
-  color: #fff;
+  /* The dark theme's accent is a LIGHT indigo, so white text on it measured ~1.2:1.
+     --accent-ink is the per-theme foreground for that fill. */
+  color: var(--accent-ink);
 }
 
 .folio-comment-composer-actions button:disabled {
@@ -254,7 +256,8 @@
   padding: 0 3px;
   border-radius: 999px;
   background: var(--warn);
-  color: #fff;
+  /* Amber is a light fill in both themes; --solid-ink is dark wherever --warn is. */
+  color: var(--solid-ink);
   font-size: 10px;
   font-weight: 700;
   display: flex;

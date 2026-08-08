@@ -20,28 +20,30 @@ export default function DataControls() {
 
   return (
     <div className="data-controls">
-      <Tooltip content="Download every note as Markdown">
+      {/* Right, not the default above: these sit on the sidebar's bottom row, directly under
+          the account identity. See the note on that row in Sidebar.tsx. */}
+      <Tooltip content="Export. Download every note as Markdown" placement="right">
         <button
           type="button"
           className="data-controls__btn"
           data-testid="export-button"
+          aria-label="Export notes"
           onClick={() => setExportOpen(true)}
         >
-          <Icon name="download" size={14} />
-          <span>Export</span>
+          <Icon name="download" size={15} />
         </button>
       </Tooltip>
-      <Tooltip content="Bring notes in from files or a Unote export">
+      <Tooltip content="Import. Bring notes in from files or a Unote export" placement="right">
         <button
           type="button"
           className="data-controls__btn"
           data-testid="import-button"
+          aria-label="Import notes"
           // The wizard stages everything server-side, so a guest gets the browser-local
           // path instead of a dialog that would fail on its first request.
           onClick={() => (guest ? setGuestImportOpen(true) : openImportWizard())}
         >
-          <Icon name="upload" size={14} />
-          <span>Import</span>
+          <Icon name="upload" size={15} />
         </button>
       </Tooltip>
 

@@ -186,8 +186,12 @@ export default function AskPage() {
   return (
     <div className="ak-page">
       <div className="ak-hero">
-        <h1>Ask your notes</h1>
-        <p className="ak-hero__sub">Answers are generated only from what you've written, with sources.</p>
+        <div className="ak-hero__crumb">Ask AI</div>
+        <h1>Ask across everything you have written.</h1>
+        <p className="ak-hero__sub">
+          Answers cite the notes they came from. Nothing is written back into a note unless you add it
+          yourself.
+        </p>
 
         <div className="ak-chips">
           <button type="button" className={`ak-chip${notebookFilter === null ? ' is-active' : ''}`} onClick={() => setNotebookFilter(null)}>
@@ -211,7 +215,9 @@ export default function AskPage() {
             value={question}
             onChange={e => setQuestion(e.target.value)}
             onKeyDown={onKeyDown}
-            placeholder="Ask your notes…"
+            /* A real question rather than an instruction: it shows the SHAPE of what works
+               here, which "Ask your notes…" never did. */
+            placeholder="What is the difference between a B-tree and a B+ tree?"
             rows={2}
             aria-label="Ask your notes"
           />
@@ -281,6 +287,33 @@ export default function AskPage() {
 }
 
 function renderMarkdown(md: string): string {
-  const html = marked.parse(md, { async: false }) as string;
+  const html = marked.parse(normalizeAnswer(md), { async: false }) as string;
   return DOMPurify.sanitize(html);
+}
+
+/**
+ * Tidy the two things models reliably get wrong here, in prose the reader cannot edit.
+ *
+ * The prompt asks for ASCII citations and plain-text maths (see askPrompt on the server), but
+ * a prompt is a request, not a guarantee, and a model that ignores it lands full-width CJK
+ * brackets and bare LaTeX macros in the middle of a serif paragraph. Repairing the rendering
+ * costs two expressions and does not depend on which gateway answered.
+ */
+function normalizeAnswer(md: string): string {
+  return (
+    md
+      // Full-width brackets around a citation, which the source chips below already carry.
+      // Any spacing already in front of the marker is absorbed rather than doubled - and
+      // only that spacing, because leading indentation is what makes a Markdown list nest.
+      .replace(/[ \t]*【\s*([^】]*?)\s*】/g, (_m, inner: string) => (inner ? ` [${inner}]` : ''))
+      // Inline-math delimiters. Markdown renders \( as a literal "(", so "\(O(n log n)\)"
+      // reached the page as "(O(n log n))" - a second pair of brackets around the answer.
+      .replace(/\\[()[\]]/g, '')
+      // Bare LaTeX for the handful of operators that actually turn up in a maths answer.
+      // The macro carries its own spacing in LaTeX ("n\log n"), so dropping the backslash
+      // alone would close the gap and read as "nlog n".
+      .replace(/(\w)?\\(log|ln|sin|cos|tan|exp|max|min|lim|sqrt)\b/g, (_m, before: string | undefined, fn: string) =>
+        before ? `${before} ${fn}` : fn,
+      )
+  );
 }

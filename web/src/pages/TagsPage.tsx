@@ -127,10 +127,17 @@ export default function TagsPage() {
   return (
     <div className="tg-page">
       <div className="tg-page__crumb">Tags</div>
+      {/* The heading states the size of the collection rather than naming the page - the
+          caption above it already says "Tags", so "Browse by tag" was the same word twice. */}
       <div className="tg-page__header">
-        <h1 className="tg-page__title">Browse by tag</h1>
-        {tags && tags.length > 0 && <div className="tg-page__count">{plural(tags.length, 'tag')} across your notes</div>}
+        <h1 className="tg-page__title">
+          {tags && tags.length > 0 ? `${plural(tags.length, 'tag')} across your notes` : 'Tags'}
+        </h1>
       </div>
+      <p className="tg-page__lead">
+        Rename or merge a tag and every note follows. Tags typed as #hashtags in a note body keep their
+        own source of truth.
+      </p>
 
       {tagsLoading ? (
         <div className="tg-cloud">
@@ -204,7 +211,7 @@ export default function TagsPage() {
 
           {selected.length > 0 && (
             <div className="tg-active-filters">
-              <span>Showing notes tagged</span>
+              <span className="tg-active-filters__label">Filtered by</span>
               {selected.map((t) => (
                 <button key={t} type="button" className="chip active" onClick={() => toggleTag(t)}>
                   #{t} <Icon name="x" size={11} />
@@ -420,8 +427,12 @@ function ManageTagDialog({ tag, allTags, onClose, onDone }: ManageTagDialogProps
                 {busy === 'merge' ? 'Merging…' : 'Merge'}
               </button>
             </div>
+            {/* Named the destination or nothing: the hint used to render "gets #… instead"
+                before a target was chosen, which reads as a tag literally called "…". */}
             <p className="tg-manage__hint">
-              Every note tagged #{tag.tag} gets #{mergeInto || '…'} instead. #{tag.tag} disappears.
+              {mergeInto
+                ? `Every note tagged #${tag.tag} gets #${mergeInto} instead. #${tag.tag} disappears.`
+                : `Pick a tag above and every note tagged #${tag.tag} moves onto it. #${tag.tag} disappears.`}
             </p>
           </section>
         )}

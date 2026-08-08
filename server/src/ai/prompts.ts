@@ -148,6 +148,8 @@ Rules:
 - If the excerpts don't fully cover the question, say so plainly (e.g. "Your notes don't cover this yet.") instead of guessing. You may still answer the part that IS covered and flag the rest as not covered.
 - Never invent facts that aren't in the excerpts.
 - Answer in concise, student-friendly Markdown.
+- Cite with plain ASCII square brackets [Title]. Never use the full-width brackets U+3010/U+3011.
+- Write mathematics as readable plain text ("log n", "n^2", "O(n log n)"). Never write LaTeX macros like \\log or \\frac: nothing renders them here and they reach the reader as backslashes.
 - Never use em dashes (U+2014) or en dashes (U+2013) in your answer. Use commas, colons, full stops, or parentheses instead.`,
     },
     {

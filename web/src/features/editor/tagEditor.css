@@ -7,7 +7,29 @@
   display: flex;
   align-items: flex-start;
   gap: 8px;
-  margin: 0 0 18px;
+  margin: 0 0 26px;
+}
+
+/* Word count and reading time, pushed hard right on the tag row. It belongs to the note
+   as a whole, so it sits with the tags rather than in the toolbar, where it was one more
+   thing competing with the controls. Mono, so it never reads as a tag. */
+.folio-tags__stats {
+  flex: 0 0 auto;
+  /* Top-aligned, not centred: when the chips wrap onto a second line a centred stat
+     floated into the middle of the block instead of staying level with the first row. */
+  align-self: flex-start;
+  margin-top: 6px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--ink-3);
+  white-space: nowrap;
+  padding-left: 10px;
+}
+
+@media (max-width: 700px) {
+  .folio-tags__stats {
+    display: none;
+  }
 }
 
 .folio-tags__icon {
@@ -35,12 +57,12 @@
 .folio-tag-chip {
   display: inline-flex;
   align-items: center;
-  height: 26px;
+  height: 25px;
   border-radius: 999px;
-  background: var(--bg-hover);
+  background: var(--tint);
   border: 1px solid transparent;
   color: var(--ink-2);
-  font-size: 12.5px;
+  font-size: 12px;
   font-weight: 500;
   transition:
     background var(--dur-fast) var(--ease-out),
@@ -123,6 +145,10 @@
   align-items: center;
   min-width: 110px;
   flex: 1 1 110px;
+  /* Positioning context for the suggestion popup, which lives inside this <li> so it
+     opens under the CARET. Anchored to the row instead, it opened ~290px to the left,
+     under the chips - you typed in one place and the suggestions appeared in another. */
+  position: relative;
 }
 
 .folio-tags__input {
@@ -148,12 +174,19 @@
   box-shadow: var(--focus-ring);
 }
 
+/* ONE ring, on the wrapper. The bare input also picks up base.css's global
+   :focus-visible ring, and the two drew concentric rectangles at different radii
+   (999px outside, 9px inside) around the same field. */
+.folio-tags__input:focus-visible {
+  box-shadow: none;
+}
+
 /* --- suggestions --- */
 
 .folio-tags__menu {
   position: absolute;
-  top: calc(100% + 4px);
-  left: 21px; /* clears the hash glyph so the popup lines up with the chips */
+  top: calc(100% + 6px);
+  left: 0; /* the input's own left edge - see .folio-tags__input-wrap */
   z-index: 40;
   min-width: 200px;
   max-height: 260px;

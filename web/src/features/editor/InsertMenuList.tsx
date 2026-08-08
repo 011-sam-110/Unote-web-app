@@ -5,7 +5,7 @@
 // shared Arrow / Enter / Tab handling that both parents reuse.
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Icon, { isIconName } from '../../components/Icon';
-import { INSERT_SECTIONS, type InsertItem } from './insertables';
+import { type InsertItem } from './insertables';
 
 /** Arrow/Enter/Tab handling shared by the "/" menu and the "+"/toolbar popover. */
 export function useInsertNavigation(items: InsertItem[], choose: (item: InsertItem) => void) {
@@ -71,10 +71,20 @@ export default function InsertMenuList({
     );
   }
 
-  const groups = INSERT_SECTIONS.map((section) => ({
-    section,
-    rows: items.filter((i) => i.section === section),
-  })).filter((g) => g.rows.length);
+  // Grouped in the order the items arrive rather than in a fixed section order. Unfiltered,
+  // the catalog is already written section by section, so browsing looks exactly as before;
+  // filtered, getInsertItems has ranked the results, and honouring that ranking is what puts
+  // the best match first in the DOM - which is where the initial selection, and therefore
+  // Enter, lands. Re-sorting into section order here would have quietly undone it.
+  // A section takes its place from its best-ranked member, so the very first row rendered is
+  // the best match overall; later matches join the group they belong to instead of opening a
+  // second heading with the same name.
+  const groups: { section: InsertItem['section']; rows: InsertItem[] }[] = [];
+  for (const item of items) {
+    const group = groups.find((g) => g.section === item.section);
+    if (group) group.rows.push(item);
+    else groups.push({ section: item.section, rows: [item] });
+  }
 
   let flat = -1;
   return (

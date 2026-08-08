@@ -71,6 +71,11 @@ export interface NoteActionBarProps {
   assistantOpen: boolean;
   onToggleAssistant: () => void;
 
+  /** True while the writing column is held to a book measure instead of filling the page.
+   *  A view preference rather than a panel, so it lives in More rather than the toggle row. */
+  focusedWidth: boolean;
+  onToggleWidth: () => void;
+
   // --- Note actions zone ---
   onOpenHistory: () => void;
   onImport: (kind: 'photo' | 'slides' | 'transcript', close: () => void) => void;
@@ -110,6 +115,8 @@ export default function NoteActionBar(props: NoteActionBarProps) {
     onToggleFind,
     assistantOpen,
     onToggleAssistant,
+    focusedWidth,
+    onToggleWidth,
     onOpenHistory,
     onImport,
     onExport,
@@ -153,7 +160,7 @@ export default function NoteActionBar(props: NoteActionBarProps) {
           share a behaviour (each opens/closes a surface beside the note) that five
           separate buttons in a flat row did nothing to convey. */}
       <div className="folio-segmented" role="group" aria-label="Note panels">
-        {/* The outline rail is a ≥1200px affordance (see .folio-outline in
+        {/* The outline rail is a ≥1280px affordance (see .folio-outline in
             notePage.css) - the toggle governs whether it renders at all, the media
             query still governs whether there is room to show it. */}
         <SegButton
@@ -196,6 +203,7 @@ export default function NoteActionBar(props: NoteActionBarProps) {
             title="Ask a question about this note"
             testId="assistant-open"
           >
+            <Icon name="sparkles" size={12} />
             Assistant
           </SegButton>
         )}
@@ -263,6 +271,27 @@ export default function NoteActionBar(props: NoteActionBarProps) {
                 )}
               </MenuGroup>
 
+              {/* The note fills the page by default. This puts the old book measure back
+                  for anyone who finds a 1500px line hard to read, and it is a property of
+                  the reader, not of this note - it applies to every note they open. It
+                  sits in More rather than the toggle row because it changes how the page
+                  is read rather than opening a panel. */}
+              <MenuGroup label="View">
+                <button
+                  type="button"
+                  role="menuitemcheckbox"
+                  aria-checked={focusedWidth}
+                  onClick={() => { close(); onToggleWidth(); }}
+                >
+                  <Icon name="maximize" size={14} /> Focused width
+                  {focusedWidth && (
+                    <span className="folio-menu-item__check" aria-hidden="true">
+                      <Icon name="check" size={14} />
+                    </span>
+                  )}
+                </button>
+              </MenuGroup>
+
               {/* Both go through the same one-at-a-time AI queue as the AI menu, so
                   they disable while a call is in flight - the AI menu's own trigger
                   already does that for itself, and firing a second request from here
@@ -309,13 +338,19 @@ export default function NoteActionBar(props: NoteActionBarProps) {
         >
           {saveStatus === 'error' ? (
             <>
+              <span className="folio-save-chip__dot" aria-hidden="true" />
               Save failed
               <button type="button" onClick={onRetrySave}>
                 Retry
               </button>
             </>
           ) : (
-            savedLabel
+            savedLabel && (
+              <>
+                <span className="folio-save-chip__dot" aria-hidden="true" />
+                {savedLabel}
+              </>
+            )
           )}
         </span>
       </div>

@@ -249,13 +249,29 @@ test.describe('AI kill-switch', () => {
     await expect(page.getByPlaceholder('Untitled')).toHaveValue(note.title, { timeout: 10_000 });
 
     // AI surfaces present while enabled.
-    await expect(page.getByRole('button', { name: 'AI', exact: true })).toBeVisible();
+    //
+    // The old first assertion here looked for `button[name="AI"]`, which stopped existing
+    // when the AI dropdown became the "Assistant" panel - ai.spec.ts has a comment about
+    // exactly that selector rotting, and this copy of it was missed. It failed the "on"
+    // branch outright, and made the "off" branch vacuous (toHaveCount(0) trivially passes
+    // for an element that never existed).
+    //
+    // Replaced with the More menu's AI group, which is a real AI affordance inside the
+    // note that nothing else in this test covers - the assistant toggle on the next line
+    // already covers the toolbar.
+    const moreButton = page.getByRole('main').getByRole('button', { name: /^more$/i });
+    await moreButton.click();
+    await expect(page.getByRole('button', { name: /^summarise$/i })).toBeVisible();
+    await page.keyboard.press('Escape');
+
     await expect(page.getByTestId('assistant-open')).toBeVisible();
     await expect(sidebarNav(page).getByRole('link', { name: 'Ask AI' })).toBeVisible();
 
     // Flip the switch off.
     await page.getByTestId('ai-toggle').click();
-    await expect(page.getByRole('button', { name: 'AI', exact: true })).toHaveCount(0);
+    await moreButton.click();
+    await expect(page.getByRole('button', { name: /^summarise$/i })).toHaveCount(0);
+    await page.keyboard.press('Escape');
     await expect(page.getByTestId('assistant-open')).toHaveCount(0);
     await expect(sidebarNav(page).getByRole('link', { name: 'Ask AI' })).toHaveCount(0);
 
@@ -266,14 +282,14 @@ test.describe('AI kill-switch', () => {
     // The preference survives a reload.
     await page.goto(`/note/${note.id}`);
     await expect(page.getByPlaceholder('Untitled')).toHaveValue(note.title, { timeout: 10_000 });
-    await expect(page.getByRole('button', { name: 'AI', exact: true })).toHaveCount(0);
+    await expect(page.getByTestId('assistant-open')).toHaveCount(0);
 
     // And "Turn AI back on" from the Ask page restores everything.
     await page.goto('/ask');
     await page.getByRole('button', { name: /turn ai back on/i }).click();
     await expect(sidebarNav(page).getByRole('link', { name: 'Ask AI' })).toBeVisible({ timeout: 5_000 });
     await page.goto(`/note/${note.id}`);
-    await expect(page.getByRole('button', { name: 'AI', exact: true })).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByTestId('assistant-open')).toBeVisible({ timeout: 10_000 });
   });
 });
 

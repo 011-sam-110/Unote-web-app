@@ -31,6 +31,7 @@ import Spinner from '../../components/Spinner';
 import { useDialogFocus } from '../../components/useDialogFocus';
 import { markdownToSafeHtml } from './markdown';
 import { useResizableDrawer } from './useResizableDrawer';
+import { useDrawerInset } from './drawerInset';
 import { QUICK_ACTIONS, toolLabel, type ToolOutcome } from './assistantActions';
 import AiReviewRail from './AiReviewRail';
 import type { Attachment } from '../../lib/types';
@@ -128,6 +129,9 @@ export default function AssistantPanel({
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const { width, gripProps, dragging } = useResizableDrawer('folio.aiPanelWidth', DEFAULT_WIDTH, 'Resize AI panel');
+
+  // Push the note out from under the panel instead of covering the text it is about.
+  useDrawerInset('assistant', width, open);
 
   // Non-modal drawer: the note behind stays readable and editable, so Tab is NOT trapped.
   // Focus still has to move in, or the Escape handler never fires (focus would still be on
@@ -285,7 +289,7 @@ export default function AssistantPanel({
 
         <div className="folio-history-head">
           <h3>
-            <Icon name="sparkles" size={14} /> AI
+            <Icon name="sparkles" size={14} /> Assistant
           </h3>
           <button type="button" className="folio-btn-icon" onClick={onClose} aria-label="Close AI panel">
             ✕
@@ -293,7 +297,12 @@ export default function AssistantPanel({
         </div>
 
         {/* The shortcuts. Flat and labelled rather than folded into a menu: taking away a
-            layer of hiding is why they moved into this panel in the first place. */}
+            layer of hiding is why they moved into this panel in the first place.
+            The "why is this off" line sits UNDER the row rather than inside the chip: as a
+            second line of italic text inside a pill it stretched that one chip to three
+            times the width of its neighbours and broke the row. It is still visible text
+            (not a title-only tooltip, which a touch user can never open) and is wired to
+            the control it explains with aria-describedby. */}
         <div className="folio-ai-chat__quick" role="group" aria-label="Suggested actions">
           {QUICK_ACTIONS.map((action) => {
             const blocked = action.needsUploads && !hasUploads;
@@ -304,22 +313,27 @@ export default function AssistantPanel({
                 className="folio-ai-action"
                 disabled={busy || blocked}
                 title={blocked ? GAPS_NO_UPLOADS : action.message}
+                aria-describedby={blocked ? 'folio-ai-quick-blocked' : undefined}
                 onClick={() => void send(action.message, action.intent)}
               >
                 {action.label}
-                {blocked && <span className="folio-ai-action__hint">{GAPS_NO_UPLOADS}</span>}
               </button>
             );
           })}
+          {QUICK_ACTIONS.some((a) => a.needsUploads) && !hasUploads && (
+            <p className="folio-ai-action__hint" id="folio-ai-quick-blocked">
+              {GAPS_NO_UPLOADS}
+            </p>
+          )}
         </div>
 
         <div className="folio-ai-chat__thread" data-testid="assistant-thread">
           {turns.length === 0 && (
             <div className="folio-ai-chat__empty">
-              <p className="folio-ai-chat__empty-title">Ask about this note, or pick something above.</p>
+              <p className="folio-ai-chat__empty-title">Ask about this note</p>
               <p className="folio-ai-chat__empty-hint">
-                Every change is shown to you as a suggestion first. Nothing is written into the note until
-                you approve it.
+                Every change arrives as a suggestion first. Nothing is written into the note until you
+                approve it.
               </p>
             </div>
           )}
@@ -369,30 +383,33 @@ export default function AssistantPanel({
         </div>
 
         <div className="folio-ai-chat__composer">
-          <textarea
-            ref={composerRef}
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={onComposerKeyDown}
-            placeholder="Ask about this note…"
-            aria-label="Ask about this note"
-            rows={2}
-            disabled={busy}
-            data-testid="assistant-composer"
-          />
-          <div className="folio-ai-chat__composer-row">
-            <button type="button" className="folio-ai-linkbtn" onClick={onOpenChecks}>
-              Choose what to check…
-            </button>
-            <button
-              type="button"
-              className="folio-btn-primary"
-              disabled={busy || !draft.trim()}
-              onClick={() => void send(draft)}
-              data-testid="assistant-send"
-            >
-              {busy ? 'Working…' : 'Send'}
-            </button>
+          {/* Field and controls in one card - see .folio-ai-chat__composer-box. */}
+          <div className="folio-ai-chat__composer-box">
+            <textarea
+              ref={composerRef}
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={onComposerKeyDown}
+              placeholder="Ask, or describe a change…"
+              aria-label="Ask about this note"
+              rows={2}
+              disabled={busy}
+              data-testid="assistant-composer"
+            />
+            <div className="folio-ai-chat__composer-row">
+              <button type="button" className="folio-ai-linkbtn" onClick={onOpenChecks}>
+                Choose what to check
+              </button>
+              <button
+                type="button"
+                className="folio-btn-primary"
+                disabled={busy || !draft.trim()}
+                onClick={() => void send(draft)}
+                data-testid="assistant-send"
+              >
+                {busy ? 'Working…' : 'Send'}
+              </button>
+            </div>
           </div>
         </div>
       </aside>

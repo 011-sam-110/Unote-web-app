@@ -463,7 +463,17 @@ test.describe('AI review (stubbed suggestions)', () => {
 
     const gaps = main.getByRole('button', { name: /find missing content from uploads/i });
     await expect(gaps).toBeDisabled();
-    await expect(gaps).toContainText('Import slides, a photo or a transcript first.');
+
+    // The reason is no longer nested INSIDE the chip - as a second line of italic text it
+    // stretched that one pill to three times the width of its neighbours and broke the row.
+    // It now sits beside the row and is wired to the control with aria-describedby, so it
+    // is still visible text (not a title-only tooltip) and is still announced with the
+    // button. Assert both halves of that contract rather than the old nesting.
+    const describedBy = await gaps.getAttribute('aria-describedby');
+    expect(describedBy).toBeTruthy();
+    const reason = main.locator(`#${describedBy}`);
+    await expect(reason).toBeVisible();
+    await expect(reason).toHaveText('Import slides, a photo or a transcript first.');
   });
 
   /**

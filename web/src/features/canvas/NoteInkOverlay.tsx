@@ -66,15 +66,23 @@ export default function NoteInkOverlay({ noteId, anchorRef, open, onClose }: Not
         ? { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight }
         : scroller.getBoundingClientRect();
     const aRect = anchor.getBoundingClientRect();
+    // The note's toolbar is sticky at the top of this same scroller, so the first band of
+    // the scroll area is chrome rather than note. Starting the ink layer at the scroller's
+    // top put a transparent canvas over every toolbar button: Insert, Outline, Comments and
+    // Ink itself all stopped responding to the mouse, which left no way to turn ink back OFF
+    // except the palette's own close button. Ink begins where the writing does.
+    const bar = scroller instanceof HTMLElement ? scroller.querySelector('.folio-action-bar') : null;
+    const barBottom = bar ? bar.getBoundingClientRect().bottom : sRect.top;
+    const top = Math.max(sRect.top, barBottom);
     setFrame({
       left: sRect.left,
-      top: sRect.top,
+      top,
       width: sRect.width,
-      height: sRect.height,
+      height: Math.max(0, sRect.height - (top - sRect.top)),
       // Offset of the note body's origin within the overlay - this IS the ink
       // viewport translation, and it changes on every scroll tick.
       offsetX: aRect.left - sRect.left,
-      offsetY: aRect.top - sRect.top,
+      offsetY: aRect.top - top,
     });
   }, [anchorRef]);
 

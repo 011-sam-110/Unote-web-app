@@ -1,7 +1,10 @@
+/* Two different jobs on one route. Review is a single flashcard you READ, so it keeps a
+   book measure. Browse is a data table, and holding it to 760px cut the Note column
+   mid-title while a couple of hundred pixels of page sat empty beside it. */
 .sy-page {
-  max-width: 880px;
+  max-width: 760px;
   margin: 0 auto;
-  padding: 32px 24px 64px;
+  padding: 44px clamp(20px, 4vw, 40px) 90px;
   display: flex;
   flex-direction: column;
   gap: 28px;
@@ -15,25 +18,41 @@
   flex-wrap: wrap;
 }
 
+/* "3 cards due" is the page's one fact, so it is the page's title, set in the reading
+   serif like every other page heading in the redesign. */
 .sy-page__header h1 {
   margin: 0;
-  font-size: 26px;
-  font-weight: 700;
+  font-family: var(--font-display);
+  font-size: 36px;
+  font-weight: 500;
+  letter-spacing: -0.015em;
+  line-height: 1.1;
   color: var(--ink);
 }
 
 .sy-page__sub {
-  margin: 2px 0 0;
+  margin: 8px 0 0;
   font-size: 13.5px;
   color: var(--ink-3);
 }
 
+/* The uppercase mono caption above the heading. */
+.sy-page__crumb {
+  font-family: var(--font-mono);
+  font-size: var(--caption-size);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: var(--caption-tracking);
+  color: var(--ink-3);
+  margin-bottom: 8px;
+}
+
 .sy-tabs {
   display: flex;
-  gap: 6px;
+  gap: 4px;
   padding: 4px;
-  background: var(--bg-sidebar);
-  border-radius: var(--radius-lg);
+  background: var(--tint);
+  border-radius: 12px;
 }
 
 /* Notebook filter chips (cram one module) */
@@ -64,7 +83,7 @@
 }
 
 .sy-tab {
-  height: 34px;
+  height: 32px;
   padding: 0 14px;
   border: none;
   border-radius: var(--radius);
@@ -81,9 +100,9 @@
 }
 
 .sy-tab.is-active {
-  background: var(--bg);
+  background: var(--bg-elevated);
   color: var(--ink);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+  box-shadow: var(--shadow-1);
 }
 
 /* Shared buttons / chips ------------------------------------------------ */
@@ -114,10 +133,11 @@
   cursor: not-allowed;
 }
 
+/* Ink, not indigo - the same primary rule as the rest of the app. */
 .sy-btn--primary {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
+  background: var(--solid);
+  border-color: var(--solid);
+  color: var(--solid-ink);
 }
 
 .sy-btn--primary:hover:not(:disabled) {
@@ -225,17 +245,18 @@
 }
 
 .sy-review__counter {
-  font-size: 12.5px;
-  font-weight: 700;
-  color: var(--ink-2);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--ink-3);
   white-space: nowrap;
 }
 
 .sy-review__progress {
   flex: 1;
-  height: 4px;
+  height: 3px;
   border-radius: 999px;
-  background: var(--bg-hover);
+  background: var(--bg-active);
   overflow: hidden;
 }
 
@@ -279,10 +300,10 @@
   align-items: center;
   justify-content: center;
   gap: 16px;
-  padding: 32px 28px;
+  padding: 44px 40px;
   border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
-  background: var(--bg);
+  border-radius: 18px;
+  background: var(--bg-elevated);
   backface-visibility: hidden;
   text-align: center;
   overflow-y: auto;
@@ -292,17 +313,26 @@
   transform: rotateX(180deg);
 }
 
+/* The card front is a question you read, not a label - the serif at 28px is the whole
+   difference between a flashcard and a form field. */
 .sy-review-card__question {
-  font-size: 21px;
-  font-weight: 650;
-  line-height: 1.4;
+  font-family: var(--font-display);
+  font-size: 28px;
+  font-weight: 500;
+  line-height: 1.35;
+  max-width: 26ch;
   color: var(--ink);
 }
 
+/* The echo of the question on the ANSWER face, where the answer is the main event. */
 .sy-review-card__question--small {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--ink-2);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: var(--caption-tracking);
+  max-width: none;
+  color: var(--ink-3);
 }
 
 .sy-review-card__divider {
@@ -312,8 +342,9 @@
 }
 
 .sy-review-card__answer {
-  font-size: 17px;
-  line-height: 1.6;
+  font-family: var(--font-display);
+  font-size: 19px;
+  line-height: 1.65;
   color: var(--ink);
   white-space: pre-wrap;
 }
@@ -335,10 +366,10 @@
   flex-direction: column;
   align-items: center;
   gap: 4px;
-  padding: 12px 8px;
-  border-radius: var(--radius);
+  padding: 13px 8px;
+  border-radius: 12px;
   border: 1px solid var(--line);
-  background: var(--bg);
+  background: var(--bg-elevated);
   cursor: pointer;
   transition: background 140ms ease-out, border-color 140ms ease-out, transform 100ms ease-out;
 }
@@ -354,12 +385,13 @@
 
 .sy-rating-btn__label {
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--ink);
 }
 
 .sy-rating-btn__hint {
-  font-size: 11px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
   color: var(--ink-3);
 }
 
@@ -581,4 +613,51 @@
   .sy-rating-btn {
     padding: 10px 4px;
   }
+}
+
+/* Browse is a table, not a reading column - see the note on .sy-page above. */
+.sy-page[data-tab='browse'] {
+  max-width: 1100px;
+}
+
+/* The Note column is a link to somewhere else, not the row's subject, so it gives way
+   first: it truncates instead of forcing the whole table wider than the page. */
+.sy-browse__table td:nth-child(3) {
+  max-width: 22ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* "Group by note" had NO styling anywhere in the codebase - it rendered as bare text
+   with an icon, unaligned with the buttons either side of it and spilling out of the
+   box the toolbar gave it. It is a toggle, so it is drawn as one. */
+.sy-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  color: var(--ink-2);
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out), border-color var(--dur-fast),
+    color var(--dur-fast);
+}
+
+.sy-toggle-btn:hover {
+  background: var(--bg-hover);
+  color: var(--ink);
+}
+
+/* Paired with aria-pressed in BrowseTab.tsx - the colour is never the only carrier. */
+.sy-toggle-btn.is-active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
 }

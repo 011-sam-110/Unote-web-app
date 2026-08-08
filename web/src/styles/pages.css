@@ -2,11 +2,11 @@
 
 /* --- Dashboard --- */
 .dash {
-  padding: 28px clamp(20px, 4vw, 44px) 64px;
-  max-width: 1320px;
+  padding: 44px clamp(20px, 4vw, 40px) 90px;
+  max-width: 1180px;
   margin: 0 auto;
   display: flex;
-  gap: 32px;
+  gap: 40px;
   align-items: flex-start;
 }
 .dash__main {
@@ -14,59 +14,71 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 32px;
+  gap: 36px;
 }
 .dash__rail {
   width: var(--rail-w);
   flex: 0 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 14px;
   position: sticky;
-  top: 28px;
+  top: 44px;
 }
 
+/* Date above name, not beside it: the caption dates the page, the serif line greets you.
+   Two different jobs, so two different voices rather than one 26px bold run-on. */
 .dash__header {
   display: flex;
-  flex-direction: column;
-  gap: 3px;
+  flex-direction: column-reverse;
+  gap: 8px;
+  align-items: flex-start;
 }
 .dash__greeting {
-  font-size: 26px;
-  font-weight: 700;
-  letter-spacing: -0.01em;
+  font-family: var(--font-display);
+  font-size: 40px;
+  font-weight: 500;
+  line-height: 1.1;
+  letter-spacing: -0.015em;
   color: var(--ink);
 }
 .dash__date {
-  font-size: 13px;
-  color: var(--ink-2);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: var(--caption-tracking);
+  text-transform: uppercase;
+  color: var(--ink-3);
 }
 
 .dash__hero {
   display: block;
   width: 100%;
   text-align: left;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
-  padding: 20px 22px;
-  background: linear-gradient(135deg, var(--accent-soft), var(--bg) 65%);
+  border: 1px solid var(--accent-line);
+  border-radius: 16px;
+  padding: 24px 26px;
+  background: linear-gradient(140deg, var(--accent-wash), var(--bg) 62%);
   transition: border-color var(--dur) var(--ease-out), box-shadow var(--dur) var(--ease-out);
 }
 .dash__hero:hover {
-  border-color: var(--ink-3);
+  border-color: var(--accent);
   box-shadow: var(--shadow-1);
 }
 .dash__hero-label {
-  font-size: 11px;
-  font-weight: 700;
+  font-family: var(--font-mono);
+  font-size: var(--caption-size);
+  font-weight: 500;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: var(--caption-tracking);
   color: var(--accent);
-  margin-bottom: 9px;
+  margin-bottom: 10px;
 }
 .dash__hero-title {
-  font-size: 20px;
-  font-weight: 700;
+  font-family: var(--font-display);
+  font-size: 25px;
+  font-weight: 500;
+  line-height: 1.2;
   color: var(--ink);
   margin-bottom: 6px;
 }
@@ -74,21 +86,22 @@
   font-size: 13.5px;
   color: var(--ink-2);
   line-height: 1.6;
-  max-width: 640px;
-  margin-bottom: 12px;
+  max-width: 60ch;
+  margin-bottom: 14px;
 }
 .dash__hero-meta {
   display: flex;
   align-items: center;
   gap: 10px;
-  font-size: 12px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
   color: var(--ink-3);
 }
 
 .dash__section {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
 }
 .dash__section-head {
   display: flex;
@@ -97,13 +110,16 @@
   gap: 12px;
 }
 .dash__section-title {
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: var(--caption-size);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: var(--caption-tracking);
+  color: var(--ink-3);
 }
 .dash__section-link {
   font-size: 12px;
-  color: var(--ink-2);
+  color: var(--ink-3);
   transition: color var(--dur-fast);
 }
 .dash__section-link:hover {
@@ -112,7 +128,7 @@
 
 .note-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(232px, 1fr));
   gap: 12px;
 }
 .note-strip {
@@ -139,8 +155,8 @@
   text-align: left;
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
-  padding: 14px 16px;
-  background: var(--bg);
+  padding: 16px;
+  background: var(--bg-elevated);
   transition: border-color var(--dur) var(--ease-out), box-shadow var(--dur) var(--ease-out);
 }
 .notebook-col:hover {
@@ -152,43 +168,49 @@
   margin-bottom: 10px;
 }
 .notebook-col__name {
-  font-size: 13px;
-  font-weight: 650;
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 500;
   color: var(--ink);
-  margin-bottom: 3px;
+  margin-bottom: 4px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .notebook-col__meta {
-  font-size: 11.5px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
   color: var(--ink-3);
 }
 
 .rail-card {
   border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
-  padding: 16px;
-  background: var(--bg);
+  border-radius: 16px;
+  padding: 20px;
+  background: var(--bg-elevated);
 }
 .rail-card__title {
-  font-size: 11.5px;
-  font-weight: 700;
+  font-family: var(--font-mono);
+  font-size: var(--caption-size);
+  font-weight: 500;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: var(--caption-tracking);
   color: var(--ink-3);
-  margin-bottom: 12px;
+  margin-bottom: 14px;
 }
+/* The one big number on the page. Set in the reading serif so it reads as a fact about
+   your work rather than a dashboard metric. */
 .rail-card__due {
-  font-size: 30px;
-  font-weight: 700;
+  font-family: var(--font-display);
+  font-size: 44px;
+  font-weight: 500;
   color: var(--ink);
   line-height: 1;
 }
 .rail-card__due-label {
   font-size: 12.5px;
   color: var(--ink-2);
-  margin: 4px 0 14px;
+  margin: 6px 0 16px;
 }
 .rail-card__celebrate {
   font-size: 13px;
@@ -216,8 +238,9 @@
   background: var(--accent-soft);
 }
 .week-grid__label {
+  font-family: var(--font-mono);
   font-size: 9.5px;
-  font-weight: 700;
+  font-weight: 500;
   letter-spacing: 0.03em;
   text-transform: uppercase;
   color: var(--ink-3);
@@ -243,8 +266,9 @@
   background: var(--line);
 }
 .week-grid__count {
+  font-family: var(--font-mono);
   font-size: 10px;
-  font-weight: 650;
+  font-weight: 500;
   color: var(--ink-2);
   min-height: 12px;
   line-height: 1;
@@ -369,15 +393,18 @@
   line-height: 1;
 }
 .recall-card__label {
-  font-size: 10.5px;
-  font-weight: 700;
+  font-family: var(--font-mono);
+  font-size: var(--caption-size);
+  font-weight: 500;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: var(--caption-tracking);
   color: var(--ink-3);
 }
 .recall-card__title {
-  font-size: 13.5px;
-  font-weight: 650;
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 500;
+  line-height: 1.25;
   color: var(--ink);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -386,7 +413,8 @@
   -webkit-box-orient: vertical;
 }
 .recall-card__meta {
-  font-size: 11.5px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
   color: var(--ink-3);
 }
 .recall-card__hint {
@@ -398,10 +426,11 @@
   color: var(--accent);
 }
 .recall-card__quiz-label {
-  font-size: 10.5px;
-  font-weight: 700;
+  font-family: var(--font-mono);
+  font-size: var(--caption-size);
+  font-weight: 500;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: var(--caption-tracking);
   color: var(--ink-3);
 }
 .recall-card__question {
@@ -548,7 +577,7 @@
 
 /* --- Notebook page --- */
 .nb-page {
-  padding: 26px clamp(20px, 4vw, 44px) 64px;
+  padding: 44px clamp(20px, 4vw, 40px) 90px;
   max-width: 1100px;
   margin: 0 auto;
 }
@@ -566,9 +595,14 @@
   flex: 1;
   min-width: 0;
 }
+/* An editable notebook name, set in the same reading serif as every other page title.
+   It stays an input - clicking it renames in place - so the type is what carries the
+   "this is the heading" reading, not a heavier weight. */
 .nb-page__title {
-  font-size: 26px;
-  font-weight: 700;
+  font-family: var(--font-display);
+  font-size: 34px;
+  font-weight: 500;
+  letter-spacing: -0.015em;
   border: none;
   background: transparent;
   color: var(--ink);
@@ -586,9 +620,10 @@
   box-shadow: var(--focus-ring);
 }
 .nb-page__count {
-  font-size: 13px;
-  color: var(--ink-2);
-  margin-top: 3px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--ink-3);
+  margin-top: 8px;
 }
 .nb-page__actions {
   display: flex;
@@ -664,8 +699,25 @@
   .nb-page__actions {
     width: 100%;
   }
+  /* The serif title is 34px on a laptop; at phone width that overran the input and cut
+     "Algorithms (example)" mid-bracket. The input cannot wrap, so the type comes down. */
+  .nb-page__title {
+    font-size: 24px;
+  }
   .note-card--compact .note-card__meta {
     display: none;
+  }
+  /* A compact row is title + snippet + notebook side by side. Below this the title alone
+     wants the width, and the snippet was rendering as a one-character sliver ("C…") that
+     said nothing. The whole row becomes the title, which is the part you navigate by. */
+  .note-card--compact .note-card__snippet {
+    display: none;
+  }
+  .note-card--compact .note-card__title {
+    width: auto;
+    max-width: none;
+    flex: 1 1 auto;
+    min-width: 0;
   }
 
   /* Dashboard phone layout: hard single-column stack, no fixed-width grids, and no

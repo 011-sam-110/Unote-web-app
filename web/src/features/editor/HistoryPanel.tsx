@@ -10,8 +10,13 @@ import Spinner from '../../components/Spinner';
 import Icon, { type IconName } from '../../components/Icon';
 import { useDialogFocus } from '../../components/useDialogFocus';
 import { createFolioExtensions } from './buildExtensions';
+import { useDrawerInset } from './drawerInset';
 import './editor.css';
 import './notePage.css';
+
+/** Matches `.folio-history-panel`'s width in notePage.css - it is also the space the note
+ *  gives up while this drawer is open, so the two have to agree. */
+const WIDTH = 400;
 
 // Vector icons for interactive chrome (Icon.tsx rule) - emoji stays reserved for content.
 const CAUSE_ICON: Record<string, IconName> = { autosave: 'pencil', manual: 'pin', ai: 'sparkles', restore: 'rotate-ccw', import: 'download' };
@@ -107,6 +112,9 @@ export default function HistoryPanel({ noteId, open, onClose, onRestored }: Hist
   // focus must move in, otherwise the Escape handler below never fires (focus is
   // still on the trigger outside the panel) and the drawer is a dead end.
   useDialogFocus(open, panelRef, onClose, { trap: false });
+
+  // Push the note out from under the drawer rather than covering it.
+  useDrawerInset('history', WIDTH, open);
 
   if (!open) return null;
 

@@ -1,28 +1,42 @@
 .ak-page {
-  max-width: 760px;
+  max-width: 720px;
   margin: 0 auto;
-  padding: 32px 24px 80px;
+  padding: 56px clamp(20px, 4vw, 40px) 90px;
   display: flex;
   flex-direction: column;
-  gap: 28px;
+  gap: 26px;
 }
 
 .ak-hero {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 8px;
+}
+
+.ak-hero__crumb {
+  font-family: var(--font-mono);
+  font-size: var(--caption-size);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: var(--caption-tracking);
+  color: var(--ink-3);
 }
 
 .ak-hero h1 {
   margin: 0;
-  font-size: 28px;
-  font-weight: 700;
+  font-family: var(--font-display);
+  font-size: 38px;
+  font-weight: 500;
+  letter-spacing: -0.015em;
+  line-height: 1.1;
   color: var(--ink);
 }
 
 .ak-hero__sub {
   margin: 0;
   font-size: 13.5px;
+  line-height: 1.6;
+  max-width: 58ch;
   color: var(--ink-3);
 }
 
@@ -30,6 +44,9 @@
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  /* The hero's own 8px gap belongs BETWEEN the caption, heading and standfirst, which are
+     one block of text. The scope chips are the next thing on the page, not part of it. */
+  margin-top: 18px;
 }
 
 .ak-chip {
@@ -37,10 +54,10 @@
   align-items: center;
   gap: 6px;
   height: 30px;
-  padding: 0 12px;
+  padding: 0 13px;
   border-radius: 999px;
   border: 1px solid var(--line);
-  background: var(--bg);
+  background: var(--bg-elevated);
   color: var(--ink-2);
   font-size: 12.5px;
   font-weight: 500;
@@ -50,7 +67,7 @@
 }
 
 .ak-chip:hover {
-  background: var(--bg-hover);
+  border-color: var(--ink-3);
 }
 
 .ak-chip.is-active {
@@ -64,16 +81,26 @@
   display: flex;
   align-items: flex-end;
   gap: 10px;
-  padding: 12px;
+  padding: 14px;
   border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
-  background: var(--bg);
-  box-shadow: var(--shadow-pop);
+  border-radius: 16px;
+  background: var(--bg-elevated);
+  /* A soft lift rather than the popover shadow: the composer is the page's centre of
+     gravity, not a layer floating over it. */
+  box-shadow: 0 6px 24px rgba(27, 26, 23, 0.05);
   transition: border-color 140ms ease-out;
 }
 
+/* One ring on the card, not one on the card and another on the bare textarea inside it
+   (base.css gives every :focus-visible element a ring). Same rule as the assistant
+   composer and the search box. */
 .ak-input:focus-within {
   border-color: var(--accent);
+  box-shadow: var(--focus-ring);
+}
+
+.ak-input textarea:focus-visible {
+  box-shadow: none;
 }
 
 .ak-input textarea {
@@ -124,14 +151,16 @@
   cursor: not-allowed;
 }
 
+/* Ink, not indigo - the same primary rule as the rest of the app. */
 .ak-btn--primary {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
+  background: var(--solid);
+  border-color: var(--solid);
+  color: var(--solid-ink);
 }
 
 .ak-btn--primary:hover:not(:disabled) {
-  filter: brightness(1.06);
+  background: var(--solid-hover);
+  border-color: var(--solid-hover);
 }
 
 .ak-link-btn {
@@ -168,22 +197,22 @@
 .ak-bubble--question {
   align-self: flex-end;
   max-width: 80%;
-  padding: 10px 14px;
-  border-radius: var(--radius-lg) var(--radius-lg) 4px var(--radius-lg);
+  padding: 11px 15px;
+  border-radius: 14px 14px 4px 14px;
   background: var(--accent-soft);
   color: var(--ink);
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 500;
   line-height: 1.5;
   white-space: pre-wrap;
 }
 
 .ak-answer {
   align-self: stretch;
-  padding: 16px 18px;
+  padding: 18px 20px;
   border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
-  background: var(--bg);
+  border-radius: 14px;
+  background: var(--bg-elevated);
 }
 
 .ak-answer--loading {
@@ -224,8 +253,12 @@
   font-size: 13.5px;
 }
 
+/* The answer quotes your own notes back at you, so it is set in the same reading serif
+   the notes are - and the question above it stays in the UI face, which is what keeps
+   "what I asked" and "what it said" visually separate without a label. */
 .ak-answer__markdown {
-  font-size: 15px;
+  font-family: var(--font-display);
+  font-size: 17px;
   line-height: 1.7;
   color: var(--ink);
 }
@@ -246,8 +279,8 @@
 }
 
 .ak-answer__markdown code {
-  font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
-  font-size: 0.9em;
+  font-family: var(--font-code);
+  font-size: 0.8em;
   background: var(--bg-hover);
   padding: 1px 5px;
   border-radius: 4px;
@@ -286,7 +319,9 @@
 }
 
 .ak-chip--source {
-  background: var(--bg-sidebar);
+  background: var(--tint);
+  border-color: transparent;
+  font-size: 11.5px;
 }
 
 .ak-answer__footer {
@@ -299,9 +334,10 @@
 
 .ak-model-tag {
   margin-right: auto;
-  font-size: 11px;
-  font-weight: 600;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 400;
   color: var(--ink-3);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.06em;
 }

@@ -1,3 +1,13 @@
+/* Chrome voice. IBM Plex Sans replaces Inter across the app shell: it is the grotesque
+   the redesign is drawn in, and its slightly narrower, more mechanical letterforms are
+   what let the Newsreader headings read as the warm thing on the page. Inter stays
+   installed only as the stack's fallback while the Plex subsets stream in.
+   Weights are listed one file at a time (Plex is not a variable build on fontsource),
+   so the bundle carries exactly the four the UI uses and nothing else. */
+@import '@fontsource/ibm-plex-sans/400.css';
+@import '@fontsource/ibm-plex-sans/500.css';
+@import '@fontsource/ibm-plex-sans/600.css';
+@import '@fontsource/ibm-plex-sans/700.css';
 @import '@fontsource-variable/inter';
 /* Newsreader carries the display voice on the marketing page and on the signed-out auth
    screens that borrow its palette. It replaces Fraunces, whose WONK axis gave the page a
@@ -12,6 +22,13 @@
    most characterful element was a different face for every third visitor. */
 @import '@fontsource/jetbrains-mono/400.css';
 @import '@fontsource/jetbrains-mono/500.css';
+/* Meta voice. Every uppercase caption, count, timestamp and keyboard hint in the app is
+   set in IBM Plex Mono - it is what separates "label about the content" from the content
+   itself without needing a second colour. JetBrains Mono stays for CODE, where its wider
+   letterforms and coding ligatures still earn their place. */
+@import '@fontsource/ibm-plex-mono/400.css';
+@import '@fontsource/ibm-plex-mono/500.css';
+@import '@fontsource/ibm-plex-mono/600.css';
 
 @import './tokens.css';
 @import './base.css';

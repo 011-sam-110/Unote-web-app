@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { api, ApiError } from '../../lib/api';
 import type { StudyStats } from '../../lib/types';
 import { toast } from '../../components/Toast';
@@ -6,12 +7,19 @@ import { useNotebooks } from '../../components/NotebooksContext';
 import GuestGate from '../guest/GuestGate';
 import ReviewTab from './ReviewTab';
 import BrowseTab from './BrowseTab';
+import { studyStatsChanged } from './studyStatsBus';
 import './StudyPage.css';
 
 type Tab = 'review' | 'browse';
 
 export default function StudyPage() {
-  const [tab, setTab] = useState<Tab>('review');
+  /* `?tab=browse` opens straight into Browse. The dashboard's "Browse cards" button
+     (shown when nothing is due) linked to a bare /study and landed on Review, which then
+     had nothing to review - the one state where the button is offered is the one state
+     where its destination is empty. Read once, as the initial value: after that the tabs
+     own the state, so switching tabs does not rewrite the URL. */
+  const [searchParams] = useSearchParams();
+  const [tab, setTab] = useState<Tab>(searchParams.get('tab') === 'browse' ? 'browse' : 'review');
   const [stats, setStats] = useState<StudyStats | null>(null);
   // Cram-one-module filter: scopes the review queue to a single notebook (fix 24).
   const [notebookFilter, setNotebookFilter] = useState<string | undefined>(undefined);
@@ -31,6 +39,9 @@ export default function StudyPage() {
     try {
       const res = await api.studyStats();
       setStats(res);
+      // Tell the sidebar too. Its badge is on a 60-second poll, so without this it can
+      // read "2" while this page says "Nothing due" - see studyStatsBus.
+      studyStatsChanged();
     } catch (err) {
       toast(err instanceof ApiError ? err.message : 'Could not load study stats', 'error');
     }
@@ -41,10 +52,21 @@ export default function StudyPage() {
   }, [refreshStats]);
 
   return (
-    <div className="sy-page">
+    // data-tab drives the page's measure: a reading column for Review, a table-width
+    // one for Browse. See .sy-page in StudyPage.css.
+    <div className="sy-page" data-tab={tab}>
       <header className="sy-page__header">
         <div>
-          <h1>Study</h1>
+          {/* The section name moves up into the caption so the heading can carry the one
+              thing you came here to find out: how much is waiting. */}
+          <div className="sy-page__crumb">Study</div>
+          <h1>
+            {stats
+              ? stats.due > 0
+                ? `${stats.due} ${stats.due === 1 ? 'card' : 'cards'} due`
+                : 'Nothing due'
+              : 'Study'}
+          </h1>
           <p className="sy-page__sub">
             {filterName ? `Reviewing ${filterName} only` : 'Spaced repetition across every notebook'}
           </p>
@@ -57,7 +79,9 @@ export default function StudyPage() {
             className={`sy-tab${tab === 'review' ? ' is-active' : ''}`}
             onClick={() => setTab('review')}
           >
-            Review{stats && stats.due > 0 ? ` · ${stats.due} due` : ''}
+            {/* No "· N due" any more: the heading above now says it, and saying it twice
+                on one line of chrome made the tab look like the more important of the two. */}
+            Review
           </button>
           <button
             type="button"

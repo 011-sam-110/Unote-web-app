@@ -24,6 +24,7 @@ import Skeleton from './Skeleton';
 import AccountMenu from '../features/auth/AccountMenu';
 import GuestAccountRow from '../features/guest/GuestAccountRow';
 import DataControls from '../features/export/DataControls';
+import { onStudyStatsChanged } from '../features/study/studyStatsBus';
 import { useGuest } from '../features/guest/guestMode';
 
 const NOTEBOOK_PALETTE = [
@@ -98,11 +99,17 @@ export default function Sidebar({
   const visibleNotebooks = notebooks.filter((n) => !n.archived);
 
   useEffect(() => {
+    const load = () => api.studyStats().then((s) => setStudyDue(s.due)).catch(() => {});
     api.studyStats().then((s) => setStudyDue(s.due)).catch(() => setStudyDue(null));
-    const t = setInterval(() => {
-      api.studyStats().then((s) => setStudyDue(s.due)).catch(() => {});
-    }, 60_000);
-    return () => clearInterval(t);
+    const t = setInterval(load, 60_000);
+    // The poll handles cards falling due on their own. This handles the user changing
+    // the number themselves - grading, adding or suspending a card - which a 60-second
+    // timer turned into a badge that disagreed with the page the user was looking at.
+    const off = onStudyStatsChanged(load);
+    return () => {
+      clearInterval(t);
+      off();
+    };
   }, []);
 
   useEffect(() => {
@@ -200,7 +207,7 @@ export default function Sidebar({
   return (
     <nav className="sidebar" aria-label="Unote">
       <div className="sidebar__brand">
-        <span className="sidebar__brand-mark" aria-hidden="true">📓</span>
+        <span className="sidebar__brand-mark" aria-hidden="true">U</span>
         <span className="sidebar__brand-name">Unote</span>
         <Tooltip content={<>Collapse sidebar <kbd>⌘\</kbd></>} placement="right">
           <button
@@ -386,13 +393,12 @@ export default function Sidebar({
 
       {guest ? <GuestAccountRow /> : <AccountMenu />}
 
-      {/* Export and Import sit directly under the identity row, where "my stuff" already
-          lives, rather than inside the account dropdown - an export you have to find is
-          an export nobody uses, and a guest needs it most of all. */}
-      <DataControls />
-
+      {/* Every tooltip on this row opens to the RIGHT. The default is above, and above this
+          row is the account identity - so hovering the theme toggle put a tooltip over the
+          name and address of whoever is signed in, and left it there while focus stayed on
+          the button. To the right there is only page. */}
       <div className="sidebar__footer">
-        <Tooltip content={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}>
+        <Tooltip content={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'} placement="right">
           <button type="button" className="sidebar__icon-btn" aria-label="Toggle theme" onClick={toggleTheme}>
             <Icon name={theme === 'dark' ? 'sun' : 'moon'} size={15} />
           </button>
@@ -400,13 +406,18 @@ export default function Sidebar({
         {/* A scanned phone pairs with an ACCOUNT, not with this browser tab, so there is
             nothing for a guest to pair to. */}
         {!guest && (
-          <Tooltip content="Phone capture. Scan to add notes from your phone">
+          <Tooltip content="Phone capture. Scan to add notes from your phone" placement="right">
             <button type="button" className="sidebar__icon-btn" aria-label="Phone capture" onClick={onOpenQr}>
               <Icon name="phone" size={15} />
             </button>
           </Tooltip>
         )}
-        <Tooltip content={<>Command palette <kbd>⌘P</kbd></>}>
+        {/* Export and Import stay on the identity row rather than inside the account
+            dropdown - an export you have to find is an export nobody uses, and a guest
+            needs it most of all. They are icons here, but each still carries a real
+            accessible name and a tooltip, so nothing became a mystery glyph. */}
+        <DataControls />
+        <Tooltip content={<>Command palette <kbd>⌘P</kbd></>} placement="right">
           <button type="button" className="sidebar__icon-btn" aria-label="Command palette" onClick={onOpenCommandPalette}>
             <Icon name="more" size={16} />
           </button>
@@ -415,6 +426,7 @@ export default function Sidebar({
             a settings dialog a guest has no account to save into. */}
         {!guest && (
         <Tooltip
+          placement="right"
           content={
             aiOn
               ? 'Turn off all AI features. Unote becomes a plain notebook'
@@ -455,7 +467,10 @@ export default function Sidebar({
                 never had AI. This is what is left behind - visible, labelled, and a route
                 to the settings dialog that can actually fix it. */}
             {aiHealth.status === 'bad' ? (
-              <Tooltip content={aiUnavailable ? `${aiUnavailable.title}. ${aiUnavailable.detail}` : 'AI unavailable'}>
+              <Tooltip
+                placement="right"
+                content={aiUnavailable ? `${aiUnavailable.title}. ${aiUnavailable.detail}` : 'AI unavailable'}
+              >
                 <button
                   type="button"
                   className="sidebar__ai-alert"
@@ -468,14 +483,20 @@ export default function Sidebar({
               </Tooltip>
             ) : (
               <Tooltip
+                placement="right"
                 content={
                   aiHealth.status === 'ok'
                     ? `AI online${aiHealth.model ? ` · ${aiHealth.model}` : ''}`
                     : 'Checking AI status…'
                 }
               >
-                <span className="sidebar__ai-status">
-                  <span className={`sidebar__ai-dot ${aiHealth.status}`} aria-hidden="true" />
+                {/* The dot now carries a word. It was a colour-only signal (WCAG 1.4.1)
+                    whose only explanation lived in a tooltip no touch user can open. */}
+                <span className="sidebar__ai-status" aria-hidden="true">
+                  <span className={`sidebar__ai-dot ${aiHealth.status}`} />
+                  <span className="sidebar__ai-status-label">
+                    {aiHealth.status === 'ok' ? 'AI on' : 'AI…'}
+                  </span>
                 </span>
               </Tooltip>
             )}

@@ -152,7 +152,11 @@ export default function ContextMenu({
             e.stopPropagation();
             if (hasSubmenu) {
               submenuAnchorRef.current = e.currentTarget;
-              setSubmenuKey((k) => (k === entry.key ? null : entry.key));
+              // Open, never toggle. The pointer is by definition already hovering this
+              // item, so onMouseEnter has just opened the submenu - a toggle here shut
+              // it again on the way in, and "Color" looked like a dead menu item to
+              // anyone who clicked it rather than hovering and sliding right.
+              setSubmenuKey(entry.key);
               return;
             }
             select(entry);

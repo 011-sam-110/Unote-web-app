@@ -177,7 +177,9 @@ export default function ImportWizard({ open, initialSource, notebooks, onClose, 
         <div className="iw-content">
           {stage === 'source' && (
             <div className="iw-source">
-              <p className="iw-lead">Bring an existing pile of notes into Folio. Nothing is added to your notebooks until you review and confirm it.</p>
+              {/* "Unote", not "Folio" - Folio is the repository name and the product is
+                  called Unote in every other string in the app. */}
+              <p className="iw-lead">Bring an existing pile of notes into Unote. Nothing is added to your notebooks until you review and confirm it.</p>
               <div className="iw-grid">
                 {CONNECTORS.map((c) => {
                   const ok = isAvailable(c);

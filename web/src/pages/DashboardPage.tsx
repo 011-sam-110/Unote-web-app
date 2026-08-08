@@ -15,6 +15,7 @@ import { openImportModal } from '../components/importModalBus';
 import { openImportWizard } from '../features/import/importWizardBus';
 import { resolveFilingNotebook } from '../lib/notebookContext';
 import { startTour } from '../features/onboarding/onboardingBus';
+import { useAuth } from '../features/auth/AuthContext';
 
 const SUGGESTED_NOTEBOOKS = [
   { name: 'Algorithms & Data Structures', emoji: '📗' },
@@ -30,6 +31,12 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
   const { notebooks } = useNotebooks();
+  const { user } = useAuth();
+
+  /* "Good afternoon, Sam." - the first name only, and only when there is one. A guest has
+     no display name, and "Good afternoon, design-qa@unote.test." is worse than no name. */
+  const firstName = (user?.displayName ?? '').trim().split(/\s+/)[0];
+  const greetingLine = firstName ? `${greeting()}, ${firstName}.` : greeting();
 
   // Same filing rules the sidebar and Ctrl+N already use, so a note created from the
   // empty state lands where the user would expect rather than in notebooks[0].
@@ -117,7 +124,7 @@ export default function DashboardPage() {
     <div className="dash">
       <div className="dash__main">
         <header className="dash__header">
-          <h1 className="dash__greeting">{greeting()}</h1>
+          <h1 className="dash__greeting">{greetingLine}</h1>
           <div className="dash__date">{longDate()}</div>
         </header>
 
@@ -227,7 +234,9 @@ export default function DashboardPage() {
           ) : (
             <>
               <div className="rail-card__celebrate">You're all caught up. 0 due 🎉</div>
-              <Link to="/study" className="btn btn-secondary" style={{ width: '100%' }}>
+              {/* ?tab=browse - a bare /study lands on Review, and this button is only
+                  offered when there is nothing left to review. */}
+              <Link to="/study?tab=browse" className="btn btn-secondary" style={{ width: '100%' }}>
                 Browse cards
               </Link>
             </>

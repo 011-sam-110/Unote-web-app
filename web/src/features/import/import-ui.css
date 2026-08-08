@@ -30,7 +30,7 @@
 .im-btn--primary {
   background: var(--accent);
   border-color: var(--accent);
-  color: #fff;
+  color: var(--accent-ink);
 }
 
 .im-btn--primary:hover:not(:disabled) {

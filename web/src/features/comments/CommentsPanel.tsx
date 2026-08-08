@@ -20,7 +20,12 @@ import Spinner from '../../components/Spinner';
 import CommentIcon from './CommentIcon';
 import { useDialogFocus } from '../../components/useDialogFocus';
 import { setCommentsListener } from './commentsBus';
+import { useDrawerInset } from '../editor/drawerInset';
 import './comments.css';
+
+/** Matches `.folio-comments-panel`'s width in comments.css - it is also the space the note
+ *  gives up while this drawer is open, so the two have to agree. */
+const WIDTH = 380;
 
 export interface CommentsPanelProps {
   noteId: string;
@@ -171,6 +176,9 @@ export default function CommentsPanel({ noteId, open, onClose, editor, onUnresol
   // focus must move in, otherwise the Escape handler below never fires (focus is
   // still on the trigger outside the panel) and the drawer is a dead end.
   useDialogFocus(open, panelRef, onClose, { trap: false });
+
+  // Push the note out from under the drawer rather than covering it.
+  useDrawerInset('comments', WIDTH, open);
 
   if (!open) return null;
 

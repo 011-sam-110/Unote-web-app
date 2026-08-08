@@ -254,10 +254,16 @@ export const INSERT_ITEMS: InsertItem[] = [
       // The outline panel is a DOM affordance owned by NotePage, so this steers to it
       // (rather than inserting a node). It only mounts on wide viewports.
       const el = document.querySelector('.folio-outline');
-      if (el) {
+      // Mounted is not the same as visible: the rail also stands down when a right-hand
+      // drawer is wide enough to squeeze the note (drawerInset.ts). Flashing an element with
+      // display:none would look like the command had simply done nothing.
+      const visible = el instanceof HTMLElement && el.offsetParent !== null;
+      if (el && visible) {
         el.scrollIntoView({ behavior: 'smooth', block: 'center' });
         el.classList.add('folio-flash');
         window.setTimeout(() => el.classList.remove('folio-flash'), 1200);
+      } else if (el) {
+        toast('Close the side panel to see the outline', 'info');
       } else {
         toast('The outline panel needs a wider window (min 1200px)', 'info');
       }
@@ -274,12 +280,41 @@ function fuzzy(query: string, target: string): boolean {
   return qi === query.length;
 }
 
+/**
+ * How well an item answers `q`, lower being better, or null for no match at all.
+ *
+ * Matching on one flattened haystack made every hit equal, and the menu then showed them in
+ * catalog order - so typing "table" put "3D model" (description: "Embed a ROTATABLE GLB")
+ * at the top with Enter bound to it, and the reader who typed the name of the block they
+ * wanted got an operating-system file dialog instead of a table. Same shape in the "/" menu:
+ * "/h" led with "Text - Plain paragraph", matched through "paragraP-H".
+ *
+ * The ranking says what a reader means by typing: a title they are part-way through spelling
+ * beats a word buried in someone else's description.
+ */
+function rank(q: string, item: InsertItem): number | null {
+  const title = item.title.toLowerCase();
+  if (title === q) return 0;
+  if (title.startsWith(q)) return 1;
+  // A later word of the title: "block math" should be reachable by typing "math".
+  if (title.split(/\s+/).some((w) => w.startsWith(q))) return 2;
+  const keywords = (item.keywords ?? []).map((k) => k.toLowerCase());
+  if (keywords.some((k) => k.startsWith(q))) return 3;
+  if (title.includes(q)) return 4;
+  if (keywords.some((k) => k.includes(q))) return 5;
+  if (item.description.toLowerCase().includes(q)) return 6;
+  // Last resort so acronym-ish typing still finds things ("bq" -> "Blockquote").
+  if (fuzzy(q, title)) return 7;
+  return null;
+}
+
 /** Filter the catalog for a menu query (case-insensitive, title + description + keywords). */
 export function getInsertItems(query: string): InsertItem[] {
   const q = query.trim().toLowerCase();
   if (!q) return INSERT_ITEMS;
-  return INSERT_ITEMS.filter((item) => {
-    const hay = [item.title, item.description, ...(item.keywords ?? [])].join(' ').toLowerCase();
-    return hay.includes(q) || fuzzy(q, item.title.toLowerCase());
-  });
+  return INSERT_ITEMS.map((item) => ({ item, score: rank(q, item) }))
+    .filter((r): r is { item: InsertItem; score: number } => r.score !== null)
+    // Sort is stable, so items that score the same keep their catalog order.
+    .sort((a, b) => a.score - b.score)
+    .map((r) => r.item);
 }

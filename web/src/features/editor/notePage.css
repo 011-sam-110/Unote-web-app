@@ -1,13 +1,21 @@
 /* Unote note page chrome - breadcrumb, action bar, title, outline rail, history drawer,
    AI preview modal, dropdowns. Editor content typography lives in editor.css. */
 
+/* The page fills the whole main column. It used to be capped at 1400px and centred, with
+   the writing column capped again at 760px inside that, which on a 1080p screen left the
+   note as a narrow ribbon with several hundred empty pixels on either side of it. The cap
+   now belongs to the reader: Full width (default) uses the room, Focused width restores a
+   book measure - see `--folio-measure` below and the width toggle in NoteActionBar. */
 .folio-note-page {
   display: flex;
   align-items: flex-start;
   gap: 32px;
   padding: 28px 32px 80px;
-  max-width: 1400px;
-  margin: 0 auto;
+  /* The right-hand drawers (AI, History, Comments) are fixed to the viewport edge, so
+     without this the note is written UNDERNEATH whichever one is open. Every open drawer
+     publishes its live width as --folio-drawer-inset (see drawerInset.ts) and the page
+     gives up exactly that much, including while the AI panel is being drag-resized. */
+  padding-right: calc(32px + var(--folio-drawer-inset, 0px));
 }
 
 .folio-note-main {
@@ -16,8 +24,15 @@
 }
 
 .folio-note-shell {
-  max-width: 760px;
+  max-width: var(--folio-measure, none);
   margin: 0 auto;
+}
+
+/* A line of prose 1500px wide is hard to track back from the end of one line to the start
+   of the next, which is the whole reason the 760px cap existed. It survives as a choice
+   rather than as the only option. */
+.folio-note-page[data-width='focused'] {
+  --folio-measure: 760px;
 }
 
 .folio-note-missing {
@@ -26,13 +41,19 @@
 
 /* ---------- Breadcrumb ---------- */
 
+/* Mono, uppercase, quiet: the trail says WHERE you are, and the title below says what
+   you are looking at. Setting it in the same face and size as the note title made the
+   two compete for the top of the page. */
 .folio-breadcrumb {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 13px;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   color: var(--ink-3);
-  margin-bottom: 14px;
+  margin-bottom: 20px;
   flex-wrap: wrap;
 }
 
@@ -58,23 +79,53 @@
   max-width: 40vw;
 }
 
+/* The notebook's own colour, carried up from the sidebar so the trail is recognisable
+   before you have read the word. */
+.folio-breadcrumb-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  background: var(--accent);
+}
+
+.folio-breadcrumb-sep {
+  color: var(--line);
+}
+
 /* ---------- Action bar ---------- */
 /* Three zones: Write (Insert, AI) | Panels (segmented toggles) | Note actions
    (Share, More, save chip), separated by a collapsible spacer. See NoteActionBar.tsx
    for why the twelve flat controls were grouped this way. */
 
+/* A translucent bar that the note scrolls UNDER, rather than an opaque strip that scrolls
+   with it. The blur is what keeps the boundary legible once prose passes behind it; the
+   hairline is what stops the bar floating when the page is scrolled to the top.
+   The negative margins bleed it past the page's own padding so the rule runs the full
+   width of the column, which is what makes it read as chrome and not as a toolbar
+   sitting inside the note. */
 .folio-action-bar {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   flex-wrap: wrap;
   row-gap: 8px;
-  margin-bottom: 18px;
+  margin: -28px -32px 22px;
+  padding: 10px 32px;
   position: sticky;
   top: 0;
-  background: var(--bg);
-  padding: 8px 0;
+  background: color-mix(in srgb, var(--bg) 92%, transparent);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--line);
   z-index: 5;
+}
+
+/* No backdrop-filter (older Safari/Firefox): fall back to a solid bar rather than a
+   transparent one, or prose would read straight through the controls. */
+@supports not (backdrop-filter: blur(8px)) {
+  .folio-action-bar {
+    background: var(--bg);
+  }
 }
 
 /* A zone keeps its own controls together when the bar wraps, so a narrow window
@@ -120,16 +171,18 @@
 .folio-segmented {
   display: inline-flex;
   align-items: stretch;
+  flex-wrap: wrap;
   border: 1px solid var(--line);
-  border-radius: 7px;
-  background: var(--bg);
+  border-radius: 9px;
+  background: var(--bg-elevated);
+  overflow: hidden;
 }
 
 .folio-seg {
   position: relative; /* anchors the unresolved-comments badge */
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
   border: 0;
   /* The divider is a left border on every button but the first, so it renders as a
      single hairline between neighbours instead of a doubled 2px line. */
@@ -137,8 +190,8 @@
   background: none;
   color: var(--ink-2);
   font-family: inherit;
-  font-size: 13px;
-  padding: 6px 10px;
+  font-size: 12.5px;
+  padding: 6px 11px;
   cursor: pointer;
   white-space: nowrap;
   transition: background 0.12s ease-out, color 0.12s ease-out;
@@ -146,11 +199,6 @@
 
 .folio-seg:first-child {
   border-left: 0;
-  border-radius: 6px 0 0 6px;
-}
-
-.folio-seg:last-child {
-  border-radius: 0 6px 6px 0;
 }
 
 .folio-seg:hover {
@@ -161,6 +209,22 @@
 .folio-seg.on {
   background: var(--accent-soft);
   color: var(--accent);
+  font-weight: 500;
+}
+
+.folio-seg .folio-comments-badge {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--ink-2);
+  background: var(--bg-active);
+  border-radius: 999px;
+  padding: 1px 5px;
+}
+
+.folio-seg.on .folio-comments-badge {
+  color: var(--accent);
+  background: var(--bg-elevated);
 }
 
 /* The badge was an absolutely-positioned corner dot on an icon-only button. Now that
@@ -181,8 +245,8 @@
 .folio-btn-primary,
 .folio-btn-ghost,
 .folio-btn-icon {
-  font-size: 13px;
-  border-radius: 7px;
+  font-size: 12.5px;
+  border-radius: 9px;
   cursor: pointer;
   transition: background 0.12s ease-out, color 0.12s ease-out, border-color 0.12s ease-out;
   white-space: nowrap;
@@ -190,9 +254,9 @@
 
 .folio-btn {
   border: 1px solid var(--line);
-  background: var(--bg);
+  background: var(--bg-elevated);
   color: var(--ink-2);
-  padding: 6px 11px;
+  padding: 6px 12px;
 }
 
 .folio-btn:hover:not(:disabled) {
@@ -200,16 +264,19 @@
   color: var(--ink);
 }
 
+/* Ink, not indigo - see the note on .btn-primary in components.css. Insert is the one
+   filled control in the bar, so it is the one thing allowed to be the darkest. */
 .folio-btn-primary {
-  border: 1px solid var(--accent);
-  background: var(--accent);
-  color: #fff;
-  padding: 6px 13px;
+  border: 1px solid var(--solid);
+  background: var(--solid);
+  color: var(--solid-ink);
+  padding: 7px 13px;
   font-weight: 500;
 }
 
 .folio-btn-primary:hover:not(:disabled) {
-  filter: brightness(1.06);
+  background: var(--solid-hover);
+  border-color: var(--solid-hover);
 }
 
 .folio-btn-ghost {
@@ -364,6 +431,14 @@
   cursor: default;
 }
 
+/* Trailing tick on a menu item that is a setting rather than an action. Pushed to the far
+   edge so the item's label still lines up with the icon column above it. */
+.folio-menu-item__check {
+  margin-left: auto;
+  display: flex;
+  color: var(--accent);
+}
+
 .folio-menu-item__hint {
   font-size: 11px;
   font-style: italic;
@@ -390,12 +465,31 @@
    auto margin here would fight it (and strand the chip when the bar wraps). */
 
 .folio-save-chip {
-  font-size: 12px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
   color: var(--ink-3);
   display: flex;
   align-items: center;
   gap: 6px;
   white-space: nowrap;
+}
+
+/* A saved note says so with a settled green dot; the word alone was easy to miss in a
+   bar this quiet. */
+.folio-save-chip__dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--ok);
+  flex: 0 0 auto;
+}
+.folio-save-saving .folio-save-chip__dot {
+  background: var(--ink-3);
+}
+.folio-save-error .folio-save-chip__dot {
+  background: var(--danger);
 }
 
 .folio-save-saving { color: var(--ink-2); }
@@ -412,18 +506,33 @@
 
 /* ---------- Title ---------- */
 
+/* The reading serif at 46px. A note's title is the first thing you wrote, not a header
+   for a record - the display face is what says so, and it sets up the body below it. */
 .folio-title-input {
   display: block;
   width: 100%;
   border: none;
   outline: none;
   background: none;
-  font-size: 40px;
-  font-weight: 700;
+  font-family: var(--font-display);
+  font-size: 46px;
+  font-weight: 500;
+  line-height: 1.1;
+  letter-spacing: -0.015em;
   color: var(--ink);
-  margin-bottom: 0.3em;
+  margin-bottom: 14px;
   padding: 0;
-  font-family: inherit;
+  /* Auto-grown from JS (see NotePage). `overflow: hidden` stops a scrollbar appearing for
+     the one frame between a keystroke and the re-measure. */
+  resize: none;
+  overflow: hidden;
+  min-height: 1.1em;
+}
+
+@media (max-width: 720px) {
+  .folio-title-input {
+    font-size: 34px;
+  }
 }
 
 .folio-title-input::placeholder {
@@ -433,18 +542,19 @@
 /* ---------- Links sections ---------- */
 
 .folio-links-section {
-  margin-top: 40px;
-  padding-top: 20px;
+  margin-top: 52px;
+  padding-top: 22px;
   border-top: 1px solid var(--line);
 }
 
 .folio-links-section h4 {
-  font-size: 13px;
+  font-family: var(--font-mono);
+  font-size: var(--caption-size);
   text-transform: uppercase;
-  letter-spacing: 0.03em;
+  letter-spacing: var(--caption-tracking);
   color: var(--ink-3);
-  margin: 0 0 12px;
-  font-weight: 600;
+  margin: 0 0 14px;
+  font-weight: 500;
 }
 
 .folio-links-empty {
@@ -454,7 +564,7 @@
 
 .folio-links-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(212px, 1fr));
   gap: 10px;
 }
 
@@ -462,56 +572,83 @@
 
 .folio-outline {
   display: none;
-  width: 220px;
+  width: 180px;
   flex-shrink: 0;
   position: sticky;
-  top: 28px;
-  max-height: calc(100vh - 56px);
+  top: 100px;
+  max-height: calc(100vh - 140px);
   overflow-y: auto;
-  font-size: 13px;
+  font-size: 12.5px;
 }
 
 .folio-outline-label {
-  font-size: 11px;
+  font-family: var(--font-mono);
+  font-size: var(--caption-size);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: var(--caption-tracking);
   color: var(--ink-3);
-  margin-bottom: 8px;
-  font-weight: 600;
+  margin-bottom: 10px;
+  font-weight: 500;
 }
 
+/* A hairline rail the entries hang off, so the list reads as a position in the document
+   rather than as another menu. The active entry replaces its slice of the rail with an
+   accent one - the same "you are here" idiom as the sidebar, at a smaller scale. */
 .folio-outline ul {
   list-style: none;
   margin: 0;
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
+  border-left: 1px solid var(--line);
 }
 
 .folio-outline button {
   border: none;
+  border-left: 2px solid transparent;
+  margin-left: -1px;
   background: none;
   text-align: left;
   color: var(--ink-2);
   cursor: pointer;
-  padding: 4px 8px;
-  border-radius: 6px;
+  padding: 4px 10px;
   width: 100%;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  transition: color 0.12s ease-out, border-color 0.12s ease-out;
 }
 
 .folio-outline button:hover {
-  background: var(--bg-hover);
   color: var(--ink);
 }
 
-@media (min-width: 1200px) {
+.folio-outline button.is-active {
+  color: var(--ink);
+  border-left-color: var(--accent);
+}
+
+/* Wide-window affordance only: below this the note column needs every pixel it has. */
+@media (min-width: 1280px) {
   .folio-outline {
     display: block;
   }
+}
+
+/* ...and the same reasoning applies again when a right-hand drawer is open and wide: the
+   rail and the drawer are both side chrome, the note is what they are about, and it is the
+   note that was ending up with nothing. drawerInset.ts measures whether all three still fit
+   and sets this when they do not. */
+:root[data-drawer-crowds-rail] .folio-outline {
+  display: none;
+}
+
+/* The Find popover is pinned to the same top-right corner the rail hangs from, and was
+   landing on top of its heading. While Find is open the rail starts below it. */
+.folio-note-page[data-find='open'] .folio-outline {
+  top: 190px;
+  max-height: calc(100vh - 230px);
 }
 
 /* ---------- AI preview modal ---------- */
@@ -739,7 +876,8 @@
   bottom: 20px;
   right: 20px;
   background: var(--ink);
-  color: #fff;
+  /* --bg, not #fff: in dark mode --ink is near-white and white-on-white vanished. */
+  color: var(--bg);
   padding: 10px 16px;
   border-radius: 8px;
   font-size: 13px;
@@ -748,7 +886,7 @@
 }
 
 .folio-flashcard-banner a {
-  color: #fff;
+  color: var(--bg);
   font-weight: 600;
   text-decoration: underline;
 }
@@ -956,6 +1094,13 @@
   color: var(--ink-3);
 }
 
+/* As a sibling of the chips it owns the full row width rather than stretching one pill. */
+p.folio-ai-action__hint {
+  flex: 1 0 100%;
+  margin: 2px 0 0;
+  line-height: 1.45;
+}
+
 .folio-ai-panel__checks {
   margin-top: 10px;
   border: none;
@@ -1026,26 +1171,48 @@
    because a panel that scrolls as a whole would carry the composer up off the screen the
    moment the conversation got long. */
 
+/* The panel is the second paper tone, not the page's own. It is a surface BESIDE the note
+   rather than more of it, and one step of warmth is what says so without another border. */
 .folio-ai-chat {
   position: relative;
   overflow: hidden;
-  padding: 18px 0 0;
+  padding: 15px 0 0;
   gap: 0;
+  background: var(--bg-paper);
 }
 
 .folio-ai-chat > .folio-history-head,
 .folio-ai-chat__quick,
 .folio-ai-chat__composer {
-  padding-left: 18px;
-  padding-right: 18px;
+  padding-left: 16px;
+  padding-right: 16px;
   flex: 0 0 auto;
+}
+
+/* A caption, not a heading. The panel is named once, quietly, and everything else in the
+   column is the conversation. */
+.folio-ai-chat > .folio-history-head {
+  margin-bottom: 12px;
+}
+
+.folio-ai-chat > .folio-history-head h3 {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: var(--caption-tracking);
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+
+.folio-ai-chat > .folio-history-head h3 svg {
+  color: var(--accent);
 }
 
 .folio-ai-chat__quick {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  padding-bottom: 12px;
+  padding-bottom: 14px;
   border-bottom: 1px solid var(--line);
 }
 
@@ -1055,9 +1222,26 @@
 .folio-ai-chat__quick .folio-ai-action {
   width: auto;
   flex: 0 1 auto;
-  padding: 5px 10px;
+  padding: 5px 11px;
   border-radius: 999px;
-  font-size: 12.5px;
+  font-size: 12px;
+  color: var(--ink-2);
+  background: var(--bg-elevated);
+}
+
+.folio-ai-chat__quick .folio-ai-action:hover:not(:disabled) {
+  background: var(--bg-elevated);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* Unavailable, not broken: a dashed outline and no fill reads as "not yet", and the
+   reason still rides on the control's own title. */
+.folio-ai-chat__quick .folio-ai-action:disabled {
+  background: transparent;
+  border-style: dashed;
+  color: var(--ink-3);
+  opacity: 1;
 }
 
 .folio-ai-chat__thread {
@@ -1072,19 +1256,24 @@
 .folio-ai-chat__empty {
   margin: auto 0;
   text-align: center;
+  padding: 0 6px;
   color: var(--ink-3);
 }
 
 .folio-ai-chat__empty-title {
-  margin: 0 0 6px;
-  font-size: 13.5px;
-  color: var(--ink-2);
+  margin: 0 0 8px;
+  font-family: var(--font-display);
+  font-size: 19px;
+  font-weight: 500;
+  line-height: 1.4;
+  color: var(--ink);
 }
 
 .folio-ai-chat__empty-hint {
   margin: 0;
-  font-size: 12px;
-  line-height: 1.55;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--ink-3);
 }
 
 .folio-ai-turn[data-role='user'] {
@@ -1185,24 +1374,53 @@
 
 /* ---------- Composer ---------- */
 
+/* Field and controls share ONE bordered card, so the composer reads as a single place you
+   write into rather than a textarea with two buttons loose underneath it. The card, not the
+   textarea, carries the focus ring. */
 .folio-ai-chat__composer {
   border-top: 1px solid var(--line);
-  padding-top: 10px;
-  padding-bottom: 14px;
-  background: var(--bg);
+  padding-top: 12px;
+  padding-bottom: 16px;
+  background: var(--bg-paper);
+}
+
+.folio-ai-chat__composer-box {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--bg-elevated);
+  padding: 10px 12px;
+  transition: border-color var(--dur-fast) var(--ease-out);
+}
+
+/* The CARD carries the focus indicator, not the bare textarea inside it. A 1px border
+   change on its own is too weak to be the only signal, so the card takes the full ring
+   and the textarea's own :focus-visible ring (from base.css) is suppressed - otherwise
+   the two draw one rectangle inside another. */
+.folio-ai-chat__composer-box:focus-within {
+  border-color: var(--accent);
+  box-shadow: var(--focus-ring);
+}
+
+.folio-ai-chat__composer textarea:focus-visible {
+  box-shadow: none;
 }
 
 .folio-ai-chat__composer textarea {
+  display: block;
   width: 100%;
   resize: none;
-  border: 1px solid var(--line);
-  border-radius: 9px;
-  padding: 8px 10px;
+  border: none;
+  outline: none;
+  padding: 0;
   font: inherit;
-  font-size: 13.5px;
+  font-size: 13px;
   line-height: 1.5;
-  background: var(--bg);
+  background: transparent;
   color: var(--ink);
+}
+
+.folio-ai-chat__composer textarea::placeholder {
+  color: var(--ink-3);
 }
 
 .folio-ai-chat__composer textarea:disabled {
@@ -1214,15 +1432,27 @@
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  margin-top: 8px;
+  margin-top: 6px;
+}
+
+.folio-ai-chat__composer-row .folio-btn-primary {
+  padding: 6px 14px;
 }
 
 /* ---------- Responsive ---------- */
 
 @media (max-width: 900px) {
   .folio-note-page {
+    /* Deliberately re-flattens padding-right: a drawer is 92vw here, so reserving its
+       width would leave the note a few pixels wide. On a phone it stays an overlay. */
     padding: 16px 16px 60px;
     gap: 0;
+  }
+  /* The bar's bleed has to match the padding it is bleeding past, or it hangs off the
+     screen and takes a horizontal scrollbar with it. */
+  .folio-action-bar {
+    margin: -16px -16px 18px;
+    padding: 10px 16px;
   }
   .folio-title-input {
     font-size: 30px;
@@ -1247,7 +1477,8 @@
 .folio-find-bar {
   position: fixed;
   top: 74px;
-  right: 32px;
+  /* Clears an open drawer, which is pinned to the same edge and sits at the same layer. */
+  right: calc(32px + var(--folio-drawer-inset, 0px));
   z-index: 70;
   background: var(--bg);
   border: 1px solid var(--line);
@@ -1369,4 +1600,68 @@
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+}
+
+/* ---------- Empty-note starters ----------
+   Shown only while a note has no title and no words (see isEmptyNote in NotePage). The
+   dashed edge is the same "not a thing yet" idiom the auto-tag chips use, so it reads as
+   scaffolding rather than as content the note already has. */
+
+.folio-note-blank {
+  border: 1px dashed var(--line);
+  border-radius: 16px;
+  padding: 34px 30px;
+  background: var(--bg-paper);
+  margin-bottom: 8px;
+}
+
+.folio-note-blank__title {
+  margin: 0 0 6px;
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.folio-note-blank__lead {
+  margin: 0 0 20px;
+  font-size: 13.5px;
+  line-height: 1.65;
+  color: var(--ink-2);
+  max-width: 46ch;
+}
+
+.folio-note-blank__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.folio-note-blank__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 13px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--bg-elevated);
+  color: var(--ink);
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color var(--dur-fast) var(--ease-out), color var(--dur-fast);
+}
+
+.folio-note-blank__btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+@media (max-width: 700px) {
+  .folio-note-blank {
+    padding: 24px 20px;
+  }
+  .folio-note-blank__title {
+    font-size: 20px;
+  }
 }

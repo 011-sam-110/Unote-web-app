@@ -24,11 +24,14 @@ export interface TagEditorProps {
   onChange: (next: string[]) => void;
   /** Open a tag's filtered view (chip body click). */
   onOpenTag: (tag: string) => void;
+  /** Live word count, rendered as "N words · M min" at the right end of the row.
+   *  Omitted (rather than shown as "0 words") while the note is still empty. */
+  wordCount?: number;
 }
 
 const MAX_SUGGESTIONS = 7;
 
-export default function TagEditor({ tags, autoTags, onChange, onOpenTag }: TagEditorProps) {
+export default function TagEditor({ tags, autoTags, onChange, onOpenTag, wordCount = 0 }: TagEditorProps) {
   const [draft, setDraft] = useState('');
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -200,32 +203,44 @@ export default function TagEditor({ tags, autoTags, onChange, onOpenTag }: TagEd
               if (draft.trim()) commit(draft);
             }}
           />
+
+          {/* Inside the input's own <li>, so the popup opens under the caret. Anchored to
+              the row (its previous home) it opened under the CHIPS, a couple of hundred
+              pixels to the left of where the user was typing. */}
+          {open && suggestions.length > 0 && (
+            <div className="folio-tags__menu" role="listbox" aria-label="Tag suggestions">
+              {suggestions.map((s, i) => (
+                <button
+                  key={s.tag}
+                  type="button"
+                  role="option"
+                  aria-selected={i === activeIndex}
+                  className={`folio-tags__option${i === activeIndex ? ' is-active' : ''}`}
+                  // pointerdown, not click: the input's blur would otherwise fire first
+                  // and commit the raw draft before the click ever lands.
+                  onPointerDown={(e) => {
+                    e.preventDefault();
+                    commit(s.tag);
+                    inputRef.current?.focus();
+                  }}
+                  onMouseEnter={() => setActiveIndex(i)}
+                >
+                  <span className="folio-tags__option-name">#{s.tag}</span>
+                  <span className="folio-tags__option-count">{s.count}</span>
+                </button>
+              ))}
+            </div>
+          )}
         </li>
       </ul>
 
-      {open && suggestions.length > 0 && (
-        <div className="folio-tags__menu" role="listbox" aria-label="Tag suggestions">
-          {suggestions.map((s, i) => (
-            <button
-              key={s.tag}
-              type="button"
-              role="option"
-              aria-selected={i === activeIndex}
-              className={`folio-tags__option${i === activeIndex ? ' is-active' : ''}`}
-              // pointerdown, not click: the input's blur would otherwise fire first
-              // and commit the raw draft before the click ever lands.
-              onPointerDown={(e) => {
-                e.preventDefault();
-                commit(s.tag);
-                inputRef.current?.focus();
-              }}
-              onMouseEnter={() => setActiveIndex(i)}
-            >
-              <span className="folio-tags__option-name">#{s.tag}</span>
-              <span className="folio-tags__option-count">{s.count}</span>
-            </button>
-          ))}
-        </div>
+      {/* 200 wpm is the usual silent-reading figure, and the minute is rounded UP so a
+          40-word note reads "1 min" rather than "0 min". */}
+      {wordCount > 0 && (
+        <span className="folio-tags__stats">
+          {wordCount.toLocaleString()} {wordCount === 1 ? 'word' : 'words'} ·{' '}
+          {Math.max(1, Math.ceil(wordCount / 200))} min
+        </span>
       )}
     </div>
   );

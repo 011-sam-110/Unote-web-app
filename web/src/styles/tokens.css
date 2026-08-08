@@ -4,39 +4,55 @@
 
 :root {
   /* ---- contract: light (default) ---- */
-  --bg: #ffffff;
-  --bg-sidebar: #f7f7f5;
-  --bg-hover: #f1f1ef;
-  --bg-active: #eaeae8;
-  --ink: #1f2328;
-  --ink-2: #57606a;
+  /* Warm paper neutrals, not white. The whole surface family is pulled off the grey axis
+     towards paper, so the page reads as something written on rather than a document
+     viewer. Every value below comes from the redesign except --ink-3, see its note. */
+  --bg: #fcfbf9;
+  --bg-sidebar: #f6f4f0;
+  --bg-hover: #f2efe9;
+  --bg-active: #edeae3;
+  --ink: #1b1a17;
+  --ink-2: #57534b;
   /* Meta/secondary text. Tuned against the DARKEST surface it lands on, not just
-     --bg: the old #6b7280 cleared 4.83:1 on white but fell to 4.27 on --bg-hover,
-     4.01 on --bg-active and 4.32 on --accent-soft, so search hints and the
-     dashboard week-grid failed AA. Measured now: bg 5.55, sidebar 5.18,
-     hover 4.91, active 4.61, accent-soft 4.97 - all >= 4.5. */
-  --ink-3: #616974;
-  --line: #e8e8e6;
+     --bg. The redesign draws this tier at #a39c90, which measures 2.63:1 on --bg and
+     2.27:1 on --bg-active - well under AA, and this tier carries real text (timestamps,
+     word counts, notebook counts, search hints), not decoration. Same warm hue,
+     dropped in value until it clears: bg 5.39, sidebar 5.07, hover 4.85, active 4.64,
+     accent-soft 4.91, tint 4.81 - all >= 4.5. */
+  --ink-3: #6f675c;
+  --line: #e9e5dd;
   --accent: #4f46e5;
-  --accent-soft: #eef2ff;
+  --accent-soft: #eef0fe;
   --danger: #d1242f;
   --ok: #1a7f37;
   --warn: #9a6700;
-  --radius: 8px;
-  --radius-lg: 12px;
-  --shadow-pop: 0 8px 30px rgba(0, 0, 0, 0.12);
+  --radius: 9px;
+  --radius-lg: 14px;
+  --shadow-pop: 0 8px 30px rgba(27, 26, 23, 0.13);
 
   /* ---- extensions ---- */
-  --bg-elevated: #ffffff;
+  /* Barely above --bg: on a paper page a popover lifts with a shadow and a border,
+     not with a jump to white, which would read as a hole cut in the paper. */
+  --bg-elevated: #fffefb;
+  /* Second paper tone - the AI panel and any inset "aside" column. */
+  --bg-paper: #f8f6f2;
+  /* Flat chip/token fill. Distinct from --bg-active, which means "selected". */
+  --tint: #f1eee8;
+  --accent-line: #e4e3f8;
+  --accent-wash: #f4f2fc;
   --danger-soft: #fdeceb;
   --ok-soft: #e9f7ee;
   --warn-soft: #fdf6e0;
-  --accent-ink: #ffffff;
+  --accent-ink: #fcfbf9;
   --danger-ink: #ffffff;
-  --scrim: rgba(15, 15, 15, 0.32);
-  --shadow-1: 0 1px 2px rgba(15, 15, 15, 0.06);
-  --shadow-2: 0 4px 16px rgba(15, 15, 15, 0.09);
-  --ring-subtle: rgba(15, 15, 15, 0.08);
+  /* Near-black paper ink, used for the one primary button per screen. */
+  --solid: #1b1a17;
+  --solid-hover: #312f2a;
+  --solid-ink: #fcfbf9;
+  --scrim: rgba(27, 26, 23, 0.32);
+  --shadow-1: 0 1px 2px rgba(27, 26, 23, 0.06);
+  --shadow-2: 0 4px 16px rgba(27, 26, 23, 0.09);
+  --ring-subtle: rgba(27, 26, 23, 0.08);
 
   /* Syntax highlighting. These were previously hard-coded light-theme hexes in
      editor.css and were served unchanged in dark mode, where keywords measured
@@ -50,18 +66,30 @@
   --code-variable: #c0392b;
   --code-type: #8a5d00;
 
-  --sidebar-w: 260px;
+  --sidebar-w: 274px;
   --sidebar-collapsed-w: 0px;
   --topbar-h: 52px;
-  --rail-w: 300px;
+  /* Dashboard's right-hand rail. */
+  --rail-w: 288px;
+  /* The editor's AI drawer, which is a different column with a different job. */
+  --ai-panel-w: 344px;
 
-  --font-ui: 'Inter Variable', 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --font-mono: ui-monospace, 'Cascadia Code', Consolas, 'SFMono-Regular', Menlo, monospace;
+  --font-ui: 'IBM Plex Sans', 'Inter Variable', 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  /* The reading voice: note bodies, page titles, card titles, flashcard fronts. */
+  --font-display: 'Newsreader Variable', Newsreader, Georgia, 'Iowan Old Style', 'Times New Roman', serif;
+  /* Captions, counts, timestamps, shortcuts - anything ABOUT the content. */
+  --font-mono: 'IBM Plex Mono', ui-monospace, 'Cascadia Code', Consolas, 'SFMono-Regular', Menlo, monospace;
+  /* Code specifically, where ligatures and a wider set earn the separate face. */
+  --font-code: 'JetBrains Mono', 'IBM Plex Mono', ui-monospace, Consolas, Menlo, monospace;
 
   --fs-chrome: 13px;
   --fs-chrome-lg: 14px;
   --fs-body: 16px;
   --fs-title: 40px;
+
+  /* The uppercase mono caption that labels every section in the redesign. */
+  --caption-size: 10px;
+  --caption-tracking: 0.11em;
 
   --dur-fast: 120ms;
   --dur: 150ms;
@@ -82,33 +110,43 @@
 
 :root[data-theme='dark'] {
   /* ---- contract: dark ---- */
-  --bg: #191919;
-  --bg-sidebar: #202020;
-  --bg-hover: #252525;
-  --bg-active: #2a2a2a;
-  --ink: #e6e6e4;
-  --ink-2: #a3a39e;
-  /* Same fix as light: #8a8a86 passed on --bg (5.07) but failed on --bg-hover
-     (4.42), --bg-active (4.14) and --accent-soft (4.14). Measured now:
-     bg 5.78, sidebar 5.35, hover 5.03, active 4.71, accent-soft 4.71. */
-  --ink-3: #949490;
-  --line: #303030;
-  --accent: #818cf8;
-  --accent-soft: rgba(129, 140, 248, 0.14);
+  /* The same paper warmth pulled down rather than a neutral grey ramp: a warm light
+     theme that goes cold in the dark reads as two different products. */
+  --bg: #1a1917;
+  --bg-sidebar: #211f1c;
+  --bg-hover: #272521;
+  --bg-active: #2e2b26;
+  --ink: #ede9e1;
+  --ink-2: #a8a196;
+  /* Same rule as light - measured against every surface it lands on, including
+     --accent-soft composited over each of them. Measured: bg 6.68, sidebar 6.25,
+     paper 6.39, hover 5.81, active 5.36, tint 5.66, accent-soft 4.95-5.32. */
+  --ink-3: #a59f93;
+  --line: #34312b;
+  --accent: #9da5fa;
+  --accent-soft: rgba(157, 165, 250, 0.13);
   --danger: #f0605a;
   --ok: #4cbb6c;
   --warn: #d9a441;
-  --radius: 8px;
-  --radius-lg: 12px;
+  --radius: 9px;
+  --radius-lg: 14px;
   --shadow-pop: 0 8px 30px rgba(0, 0, 0, 0.45);
 
   /* ---- extensions ---- */
-  --bg-elevated: #212121;
+  --bg-elevated: #232120;
+  --bg-paper: #1f1d1a;
+  --tint: #2a2721;
+  --accent-line: #3a3950;
+  --accent-wash: rgba(157, 165, 250, 0.07);
   --danger-soft: rgba(240, 96, 90, 0.14);
   --ok-soft: rgba(76, 187, 108, 0.14);
   --warn-soft: rgba(217, 164, 65, 0.14);
   --accent-ink: #14142b;
   --danger-ink: #ffffff;
+  /* The near-black primary button inverts to near-paper in the dark. */
+  --solid: #ede9e1;
+  --solid-hover: #fffdf7;
+  --solid-ink: #1b1a17;
   /* Dark-theme syntax palette. Ratios on --bg #191919: keyword 8.43,
      string 9.77, number 9.45, title 8.34, variable 7.64, type 10.18. */
   --code-keyword: #d7a1e0;

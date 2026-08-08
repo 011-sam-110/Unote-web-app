@@ -2,18 +2,19 @@
    since every value below is a var() already themed in tokens.css. */
 
 .tg-page {
-  padding: 26px clamp(20px, 4vw, 44px) 72px;
-  max-width: 980px;
+  padding: 44px clamp(20px, 4vw, 40px) 90px;
+  max-width: 960px;
   margin: 0 auto;
 }
 
 .tg-page__crumb {
-  font-size: 11px;
-  font-weight: 700;
+  font-family: var(--font-mono);
+  font-size: var(--caption-size);
+  font-weight: 500;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: var(--caption-tracking);
   color: var(--ink-3);
-  margin-bottom: 4px;
+  margin-bottom: 8px;
 }
 
 .tg-page__header {
@@ -22,17 +23,29 @@
   justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
-  margin-bottom: 22px;
+  margin-bottom: 6px;
+}
+
+.tg-page__lead {
+  margin: 0 0 28px;
+  font-size: 13.5px;
+  line-height: 1.6;
+  max-width: 60ch;
+  color: var(--ink-3);
 }
 .tg-page__title {
-  font-size: 26px;
-  font-weight: 700;
+  font-family: var(--font-display);
+  font-size: 36px;
+  font-weight: 500;
+  letter-spacing: -0.015em;
+  line-height: 1.1;
   color: var(--ink);
   margin: 0;
 }
 .tg-page__count {
-  font-size: 13px;
-  color: var(--ink-2);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--ink-3);
 }
 
 /* --- tag cloud (split pill: toggle + search-away link) --- */
@@ -47,7 +60,7 @@
   align-items: stretch;
   border: 1px solid var(--line);
   border-radius: 999px;
-  background: var(--bg);
+  background: var(--bg-elevated);
   overflow: hidden;
   transition: border-color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
 }
@@ -71,21 +84,23 @@
   color: var(--accent);
 }
 .tg-row__name {
+  font-size: 13px;
   font-weight: 600;
   line-height: 1;
 }
 .tg-row__count {
+  font-family: var(--font-mono);
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 500;
   color: var(--ink-3);
-  background: var(--bg-hover);
+  background: var(--tint);
   border-radius: 999px;
-  padding: 2px 7px;
+  padding: 2px 8px;
   line-height: 1.4;
 }
 .tg-row.is-active .tg-row__count {
   color: var(--accent);
-  background: var(--bg);
+  background: var(--bg-elevated);
 }
 
 /* Trailing segments of the split pill: "search notes →" and "manage →". */
@@ -119,11 +134,20 @@
 .tg-active-filters {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   flex-wrap: wrap;
-  margin: 18px 0 4px;
+  margin: 26px 0 4px;
   font-size: 12.5px;
   color: var(--ink-2);
+}
+/* "FILTERED BY" - the same uppercase mono caption that labels every other section. */
+.tg-active-filters__label {
+  font-family: var(--font-mono);
+  font-size: var(--caption-size);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: var(--caption-tracking);
+  color: var(--ink-3);
 }
 .tg-active-filters .chip {
   gap: 6px;
