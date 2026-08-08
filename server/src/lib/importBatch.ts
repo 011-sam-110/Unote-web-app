@@ -160,6 +160,9 @@ interface ItemRow {
   decided_tags: string | null;
   decided_mode: string;
   decided_target_note_id: string | null;
+  group_key: string | null;
+  group_index: number;
+  captured_at: string | null;
   status: string;
   note_id: string | null;
   error: string | null;
@@ -199,6 +202,11 @@ export interface ImportItemDto {
   decidedTags: string[] | null;
   decidedMode: string;
   decidedTargetNoteId: string | null;
+  /** Items sharing a groupKey become ONE note, ordered by groupIndex. Null = its own note. */
+  groupKey: string | null;
+  groupIndex: number;
+  /** When the photo was taken (ISO). Drives grouping, and the "why" line in review. */
+  capturedAt: string | null;
   status: string;
   noteId: string | null;
   error: string | null;
@@ -240,6 +248,9 @@ function itemDto(r: ItemRow): ImportItemDto {
     decidedTags: r.decided_tags != null ? parseJsonArray(r.decided_tags) : null,
     decidedMode: r.decided_mode,
     decidedTargetNoteId: r.decided_target_note_id,
+    groupKey: r.group_key,
+    groupIndex: r.group_index,
+    capturedAt: r.captured_at,
     status: r.status,
     noteId: r.note_id,
     error: r.error,
@@ -412,7 +423,7 @@ export async function stagePhoto(
   uid: string,
   batchId: string,
   file: UploadFile,
-  meta: { sourcePath?: string | null; title?: string | null; ocrText?: string | null },
+  meta: { sourcePath?: string | null; title?: string | null; ocrText?: string | null; capturedAt?: string | null },
 ): Promise<ImportItemDto | null> {
   const b = await ownedBatch(uid, batchId);
   if (!b) return null;
@@ -440,13 +451,106 @@ export async function stagePhoto(
   await db
     .prepare(
       `INSERT INTO import_items
-         (id, batch_id, user_id, attachment_id, source_path, original_name, kind, title, source_text, content_text, word_count, source_tags, status, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, 'photo', ?, ?, ?, ?, '[]', 'ready', ?)`,
+         (id, batch_id, user_id, attachment_id, source_path, original_name, kind, title, source_text, content_text, word_count, source_tags, captured_at, status, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, 'photo', ?, ?, ?, ?, '[]', ?, 'ready', ?)`,
     )
-    .run(id, batchId, uid, attachmentId, meta.sourcePath ?? null, file.originalname.slice(0, 300), title, sourceText, contentText, wordCount(contentText), nowIso());
+    .run(id, batchId, uid, attachmentId, meta.sourcePath ?? null, file.originalname.slice(0, 300), title, sourceText, contentText, wordCount(contentText), isoOrNull(meta.capturedAt), nowIso());
   await syncBatchCount(uid, batchId);
   const row = await getItemRow(uid, batchId, id);
   return row ? itemDto(row) : null;
+}
+
+/** Accept only a real ISO timestamp for captured_at - a camera with an unset clock, or a bogus
+ *  client value, is worse than no signal because grouping would trust it. */
+function isoOrNull(raw: unknown): string | null {
+  if (typeof raw !== 'string' || !raw) return null;
+  const ms = Date.parse(raw);
+  if (!Number.isFinite(ms)) return null;
+  const year = new Date(ms).getUTCFullYear();
+  if (year < 1990 || year > 2100) return null;
+  return new Date(ms).toISOString();
+}
+
+// --- grouping (which staged photos become pages of one note) ---------------------------------
+
+export interface RawGroup {
+  /** Stable key for the group. Items carrying the same key commit into a single note. */
+  key?: unknown;
+  /** Item ids IN PAGE ORDER. Position in this array becomes group_index. */
+  itemIds?: unknown;
+  /** Title for the resulting note; applied to the first page, which commit uses as the note title. */
+  title?: unknown;
+  /** Why the grouper drew this boundary ("28 min gap before") - shown in review, stored so a
+   *  refresh does not lose the explanation. */
+  rationale?: unknown;
+  /** Notebook chosen for the whole group. Written to every page's decision, because commit
+   *  resolves the notebook from the leader and a later re-lead must not change the answer. */
+  notebookId?: unknown;
+}
+
+/**
+ * Replace the grouping for a batch.
+ *
+ * Wholesale rather than incremental: both groupers (capture-time clustering and the single AI
+ * call) produce a complete partition of the batch, and the review screen edits a complete
+ * partition too, so a partial update has no meaning. Any item not named in `groups` is reset to
+ * ungrouped, which is the correct reading of "the new grouping does not mention it".
+ *
+ * Already-committed items are left alone: re-grouping after a partial commit must not move a
+ * page that is already inside a real note.
+ */
+export async function setGroups(
+  uid: string,
+  batchId: string,
+  groups: RawGroup[],
+  grouper: unknown,
+): Promise<{ items: ImportItemDto[]; grouper: string } | null> {
+  const b = await ownedBatch(uid, batchId);
+  if (!b) return null;
+
+  await db
+    .prepare("UPDATE import_items SET group_key = NULL, group_index = 0 WHERE batch_id = ? AND user_id = ? AND status <> 'committed'")
+    .run(batchId, uid);
+
+  const seen = new Set<string>();
+  for (const g of Array.isArray(groups) ? groups : []) {
+    const key = String(g.key ?? newId()).slice(0, 64);
+    const ids = Array.isArray(g.itemIds) ? g.itemIds.map((x) => String(x)) : [];
+    const title = g.title != null && String(g.title).trim() ? String(g.title).trim().slice(0, 200) : null;
+    const rationale = g.rationale != null ? String(g.rationale).slice(0, 200) : null;
+    // Validate the notebook against the caller's OWN notebooks: a group is user input, and an id
+    // from a request body must never be trusted to name a row.
+    let notebookId: string | null = null;
+    if (g.notebookId) {
+      const owned = await db.prepare('SELECT id FROM notebooks WHERE id = ? AND user_id = ?').get<{ id: string }>(String(g.notebookId), uid);
+      notebookId = owned?.id ?? null;
+    }
+    let index = 0;
+    for (const itemId of ids) {
+      if (seen.has(itemId)) continue; // an item can only be a page of one note
+      const item = await getItemRow(uid, batchId, itemId);
+      if (!item || item.status === 'committed') continue;
+      seen.add(itemId);
+      // Only the first page carries the group's title, because commit derives the note title
+      // from the leader. Later pages keep their own titles for the review list.
+      const applyTitle = index === 0 && title ? title : item.title;
+      await db
+        .prepare(
+          `UPDATE import_items SET group_key = ?, group_index = ?, title = ?,
+             rationale = COALESCE(?, rationale),
+             decided_notebook_id = COALESCE(?, decided_notebook_id),
+             decided_notebook_name = CASE WHEN ?::text IS NULL THEN decided_notebook_name ELSE NULL END
+           WHERE id = ? AND user_id = ?`,
+        )
+        .run(key, index, applyTitle, index === 0 ? rationale : null, notebookId, notebookId, itemId, uid);
+      index++;
+    }
+  }
+
+  const name = String(grouper ?? 'capture-time').slice(0, 40);
+  await db.prepare('UPDATE import_batches SET updated_at = ? WHERE id = ? AND user_id = ?').run(nowIso(), batchId, uid);
+  const rows = await db.prepare(`${ITEM_SELECT} WHERE i.batch_id = ? AND i.user_id = ? ORDER BY i.group_key NULLS LAST, i.group_index, i.created_at`).all<ItemRow>(batchId, uid);
+  return { items: rows.map(itemDto), grouper: name };
 }
 
 // --- suggestions (categoriser output persisted) ----------------------------------------------
@@ -612,6 +716,17 @@ async function setNoteTags(uid: string, noteId: string, tags: string[]): Promise
   });
 }
 
+/** Add tags without clearing existing ones - a grouped note collects tags from every page it
+ *  absorbs, and a group split across two commit chunks must not have the first chunk's tags
+ *  wiped by the second. */
+async function addNoteTags(uid: string, noteId: string, tags: string[]): Promise<void> {
+  if (!tags.length) return;
+  const stmt = db.prepare(
+    `INSERT INTO note_tags (note_id, tag) SELECT id, ? FROM notes WHERE id = ? AND user_id = ? ON CONFLICT DO NOTHING`,
+  );
+  for (const tag of tags) await stmt.run(tag, noteId, uid);
+}
+
 /** Create a real note from staged markdown, with NO AI. Mirrors the lecture flow's plain
  *  POST /api/notes path: markdown -> TipTap (wikilinks resolved against the user's notes),
  *  plain-text mirror, links synced, embedded /uploads images filed. */
@@ -689,9 +804,60 @@ export async function commitBatch(uid: string, batchId: string, itemIds: string[
   let skipped = 0;
   let failed = 0;
 
+  /** Resolve the target notebook: an explicitly-chosen existing one (validated), else a
+   *  proposed new one (resolve-or-create by name), else the single "Unsorted" bucket. */
+  async function resolveNotebook(item: ItemRow): Promise<string> {
+    if (item.decided_notebook_id ?? item.suggested_notebook_id) {
+      const chosen = (item.decided_notebook_id ?? item.suggested_notebook_id)!;
+      const owned = await db.prepare('SELECT id FROM notebooks WHERE id = ? AND user_id = ?').get<{ id: string }>(chosen, uid);
+      if (!owned) throw new Error('chosen notebook not found');
+      return owned.id;
+    }
+    const name = (item.decided_notebook_name ?? item.suggested_notebook_name ?? '').trim() || 'Unsorted';
+    const key = name.toLowerCase();
+    let nb = nbCache.get(key);
+    if (!nb) {
+      nb = await findNotebookByName(uid, name);
+      if (!nb) {
+        nb = await createNotebook(uid, name);
+        createdNotebooks.push({ id: nb, name });
+      }
+      nbCache.set(key, nb);
+    }
+    return nb;
+  }
+
+  function itemTags(item: ItemRow): string[] {
+    return normalizeTags(item.decided_tags != null ? parseJsonArray(item.decided_tags) : parseJsonArray(item.suggested_tags));
+  }
+
+  async function fileAttachment(item: ItemRow, noteId: string): Promise<void> {
+    if (!item.attachment_id) return;
+    await db
+      .prepare('UPDATE attachments SET note_id = ? WHERE id = ? AND user_id = ? AND note_id IS NULL')
+      .run(noteId, item.attachment_id, uid);
+  }
+
+  async function markCommitted(item: ItemRow, noteId: string, title: string): Promise<void> {
+    await db
+      .prepare("UPDATE import_items SET status = 'committed', note_id = ?, title = ?, error = NULL WHERE id = ? AND user_id = ?")
+      .run(noteId, title, item.id, uid);
+    const fresh = await getItemRow(uid, batchId, item.id);
+    if (fresh) committedItems.push(itemDto(fresh));
+  }
+
+  // --- partition the requested ids into commit UNITS -------------------------------------------
+  //
+  // A unit is everything that ends up in ONE note: a lone ungrouped item (every document import,
+  // and the original behaviour), or all the requested items sharing a group_key (photos that are
+  // pages of the same handout). Order within the unit is group_index, which is what makes page 2
+  // land after page 1 rather than in upload-completion order.
+  interface Unit { groupKey: string | null; items: ItemRow[] }
+  const units: Unit[] = [];
+  const byGroup = new Map<string, Unit>();
+
   for (const rawId of ids) {
-    const itemId = String(rawId);
-    const item = await getItemRow(uid, batchId, itemId);
+    const item = await getItemRow(uid, batchId, String(rawId));
     if (!item) {
       skipped++;
       continue;
@@ -705,51 +871,86 @@ export async function commitBatch(uid: string, batchId: string, itemIds: string[
       skipped++;
       continue;
     }
-    try {
-      const tags = normalizeTags(item.decided_tags != null ? parseJsonArray(item.decided_tags) : parseJsonArray(item.suggested_tags));
-      const title = deriveTitle(item.title, item.source_text, item.original_name);
-
-      if (item.decided_mode === 'append' && item.decided_target_note_id) {
-        const owned = await db.prepare('SELECT id FROM notes WHERE id = ? AND user_id = ? AND deleted_at IS NULL').get<{ id: string }>(item.decided_target_note_id, uid);
-        if (!owned) throw new Error('merge target not found');
-        await appendNoAi(uid, owned.id, item.source_text);
-        // file the staged photo attachment (if any) against the merge target
-        if (item.attachment_id) await db.prepare('UPDATE attachments SET note_id = ? WHERE id = ? AND user_id = ? AND note_id IS NULL').run(owned.id, item.attachment_id, uid);
-        await db.prepare("UPDATE import_items SET status = 'committed', note_id = ?, title = ?, error = NULL WHERE id = ? AND user_id = ?").run(owned.id, title, itemId, uid);
-      } else {
-        // Resolve the target notebook: an explicitly-chosen existing one (validated), else a
-        // proposed new one (resolve-or-create by name), else the single "Unsorted" bucket.
-        let notebookId: string;
-        if (item.decided_notebook_id ?? item.suggested_notebook_id) {
-          const chosen = (item.decided_notebook_id ?? item.suggested_notebook_id)!;
-          const owned = await db.prepare('SELECT id FROM notebooks WHERE id = ? AND user_id = ?').get<{ id: string }>(chosen, uid);
-          if (!owned) throw new Error('chosen notebook not found');
-          notebookId = owned.id;
-        } else {
-          const name = (item.decided_notebook_name ?? item.suggested_notebook_name ?? '').trim() || 'Unsorted';
-          const key = name.toLowerCase();
-          let nb = nbCache.get(key);
-          if (!nb) {
-            nb = await findNotebookByName(uid, name);
-            if (!nb) {
-              nb = await createNotebook(uid, name);
-              createdNotebooks.push({ id: nb, name });
-            }
-            nbCache.set(key, nb);
-          }
-          notebookId = nb;
-        }
-        const noteId = await createNoteNoAi(uid, notebookId, title, item.source_text);
-        if (tags.length) await setNoteTags(uid, noteId, tags);
-        await db.prepare("UPDATE import_items SET status = 'committed', note_id = ?, title = ?, error = NULL WHERE id = ? AND user_id = ?").run(noteId, title, itemId, uid);
+    if (item.group_key) {
+      let unit = byGroup.get(item.group_key);
+      if (!unit) {
+        unit = { groupKey: item.group_key, items: [] };
+        byGroup.set(item.group_key, unit);
+        units.push(unit);
       }
-      created++;
-      const fresh = await getItemRow(uid, batchId, itemId);
-      if (fresh) committedItems.push(itemDto(fresh));
+      unit.items.push(item);
+    } else {
+      units.push({ groupKey: null, items: [item] });
+    }
+  }
+
+  for (const unit of units) {
+    const pages = unit.items.slice().sort((a, b) => a.group_index - b.group_index || a.created_at.localeCompare(b.created_at));
+    const lead = pages[0];
+    try {
+      // The note this unit's pages belong in. Three ways to find it, in order:
+      let noteId: string | null = null;
+
+      // 1. A sibling from the same group committed in an EARLIER chunk. This is what makes a
+      //    group survive being split across commit slices, or a retry after a dropped connection,
+      //    without producing a second half-note.
+      if (unit.groupKey) {
+        const sibling = await db
+          .prepare(
+            `SELECT note_id FROM import_items
+             WHERE batch_id = ? AND user_id = ? AND group_key = ? AND note_id IS NOT NULL
+             ORDER BY group_index ASC LIMIT 1`,
+          )
+          .get<{ note_id: string }>(batchId, uid, unit.groupKey);
+        if (sibling?.note_id) {
+          const alive = await db
+            .prepare('SELECT id FROM notes WHERE id = ? AND user_id = ? AND deleted_at IS NULL')
+            .get<{ id: string }>(sibling.note_id, uid);
+          if (alive) noteId = alive.id;
+        }
+      }
+
+      // 2. The user chose to merge this unit into a note that already exists.
+      if (!noteId && lead.decided_mode === 'append' && lead.decided_target_note_id) {
+        const owned = await db
+          .prepare('SELECT id FROM notes WHERE id = ? AND user_id = ? AND deleted_at IS NULL')
+          .get<{ id: string }>(lead.decided_target_note_id, uid);
+        if (!owned) throw new Error('merge target not found');
+        noteId = owned.id;
+      }
+
+      // 3. Otherwise the first page creates the note and the rest append to it.
+      let leadConsumed = false;
+      if (!noteId) {
+        const notebookId = await resolveNotebook(lead);
+        const leadTitle = deriveTitle(lead.title, lead.source_text, lead.original_name);
+        noteId = await createNoteNoAi(uid, notebookId, leadTitle, lead.source_text);
+        const tags = itemTags(lead);
+        if (tags.length) await setNoteTags(uid, noteId, tags);
+        await fileAttachment(lead, noteId);
+        await markCommitted(lead, noteId, leadTitle);
+        leadConsumed = true;
+      }
+
+      for (const page of pages) {
+        if (leadConsumed && page.id === lead.id) continue;
+        await appendNoAi(uid, noteId, page.source_text);
+        await addNoteTags(uid, noteId, itemTags(page));
+        await fileAttachment(page, noteId);
+        await markCommitted(page, noteId, deriveTitle(page.title, page.source_text, page.original_name));
+      }
+
+      created++; // one unit filed = one note, which is the number the review screen promised
     } catch (err) {
-      failed++;
       const msg = err instanceof Error ? err.message : 'could not import this item';
-      await db.prepare("UPDATE import_items SET status = 'failed', error = ? WHERE id = ? AND user_id = ?").run(msg, itemId, uid);
+      // A group fails together: half a handout is worse than none, and the user can retry the
+      // whole group after fixing whatever went wrong.
+      for (const page of pages) {
+        const fresh = await getItemRow(uid, batchId, page.id);
+        if (fresh?.status === 'committed') continue; // already filed earlier in this unit
+        failed++;
+        await db.prepare("UPDATE import_items SET status = 'failed', error = ? WHERE id = ? AND user_id = ?").run(msg, page.id, uid);
+      }
     }
   }
 

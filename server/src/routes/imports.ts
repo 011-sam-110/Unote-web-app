@@ -4,9 +4,9 @@ import path from 'node:path';
 import { IS_SERVERLESS } from '../config.js';
 import { db, tx, newId, nowIso } from '../db.js';
 import { userId } from '../auth/middleware.js';
-import { AiError, capForAi } from '../ai/client.js';
+import { AiError, capForAi, extractJson } from '../ai/client.js';
 import { aiQuotaGate, aiCtx, complete, type AiContext } from '../ai/gate.js';
-import { ocrPhotoPrompt, slidesRestructurePrompt, transcriptNotesPrompt, improvePrompt, titlePrompt, cleanTitle } from '../ai/prompts.js';
+import { ocrPhotoPrompt, slidesRestructurePrompt, transcriptNotesPrompt, improvePrompt, titlePrompt, cleanTitle, groupPhotosPrompt, type PhotoForGrouping } from '../ai/prompts.js';
 import { extractFromUpload } from '../lib/extract.js';
 import { extractPptxImages, type SlideImage } from '../lib/slideImages.js';
 import { pagesProvenance, timelineProvenance, serialiseProvenance, type Provenance } from '../lib/provenance.js';
@@ -715,12 +715,12 @@ router.post('/batches/:id/items', handleUpload(bulkUpload.single('file')), async
   const batchId = String(req.params.id);
   try {
     if (req.file) {
-      const body = (req.body ?? {}) as { sourcePath?: string; title?: string; ocrText?: string; kind?: string };
+      const body = (req.body ?? {}) as { sourcePath?: string; title?: string; ocrText?: string; kind?: string; capturedAt?: string };
       const file = { buffer: req.file.buffer, mimetype: req.file.mimetype, originalname: req.file.originalname };
       const ext = path.extname(file.originalname).toLowerCase();
       const isPhoto = body.kind === 'photo' || (IMG_MIME.test(file.mimetype) && !DOC_EXT.has(ext));
       const item = isPhoto
-        ? await bulk.stagePhoto(uid, batchId, file, { sourcePath: body.sourcePath ?? null, title: body.title ?? null, ocrText: body.ocrText ?? null })
+        ? await bulk.stagePhoto(uid, batchId, file, { sourcePath: body.sourcePath ?? null, title: body.title ?? null, ocrText: body.ocrText ?? null, capturedAt: body.capturedAt ?? null })
         : await bulk.stageUploadedFile(uid, batchId, file, { sourcePath: body.sourcePath ?? null, title: body.title ?? null });
       if (!item) return res.status(404).json({ error: 'import not found' });
       return res.status(201).json({ item });
@@ -753,6 +753,96 @@ router.patch('/batches/:id/items/:itemId', async (req, res) => {
     return res.json({ item });
   } catch (err) {
     return res.status(400).json({ error: err instanceof Error ? err.message : 'could not update item' });
+  }
+});
+
+// --- grouping: which staged photos are pages of the same note --------------------------------
+
+/** Format a capture timestamp the way the grouping prompt wants it: a weekday and a clock time,
+ *  which is all the model needs to see "these two are a minute apart, that one is the next day". */
+function takenLabel(iso: string | null): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toUTCString().slice(0, 3) + ' ' + d.toISOString().slice(5, 16).replace('T', ' ');
+}
+
+/**
+ * Save a grouping the client worked out for itself (capture-time clustering, or the user's own
+ * edits in the review screen). No AI, no quota, always available.
+ */
+router.put('/batches/:id/groups', async (req, res) => {
+  const uid = userId(req);
+  const body = (req.body ?? {}) as { groups?: unknown; grouper?: unknown };
+  const groups = Array.isArray(body.groups) ? (body.groups as bulk.RawGroup[]) : [];
+  const result = await bulk.setGroups(uid, String(req.params.id), groups, body.grouper ?? 'capture-time');
+  if (!result) return res.status(404).json({ error: 'import not found' });
+  res.json(result);
+});
+
+/**
+ * Regroup with AI - ONE model call for the whole batch, over OCR text only.
+ *
+ * Cost is why this is shaped the way it is: per-photo vision OCR runs ~2 calls each, so twenty
+ * photos would be 40 of a user's 100 monthly shared-pool calls. Sorting already-extracted text
+ * is one call regardless of batch size, and no image leaves the browser on this path.
+ *
+ * Nothing is destroyed if the model misbehaves: any id it fails to mention simply stays
+ * ungrouped, which means "its own note" - the same outcome as not having asked.
+ */
+router.post('/batches/:id/group-ai', aiQuotaGate, async (req, res) => {
+  const uid = userId(req);
+  const batchId = String(req.params.id);
+  const owned = await bulk.getBatch(uid, batchId);
+  if (!owned) return res.status(404).json({ error: 'import not found' });
+
+  const pending = owned.items.filter((i) => i.status !== 'committed' && i.status !== 'rejected');
+  if (pending.length < 2) {
+    return res.status(400).json({ error: 'AI grouping needs at least two photos to sort' });
+  }
+
+  const manifest: PhotoForGrouping[] = pending.map((i) => ({
+    id: i.id,
+    name: i.originalName,
+    takenAt: takenLabel(i.capturedAt),
+    textHead: i.preview,
+  }));
+
+  try {
+    const { text } = await complete(aiCtx(req), groupPhotosPrompt(manifest), {
+      json: true,
+      maxTokens: 2000,
+      temperature: 0.2,
+    });
+    const parsed = extractJson<{ groups?: Array<{ title?: unknown; reason?: unknown; itemIds?: unknown }> }>(text);
+
+    // Trust nothing about the shape: keep only ids that are really in this batch, drop repeats,
+    // and give anything the model forgot a group of its own so no photo is silently lost.
+    const known = new Set(pending.map((i) => i.id));
+    const used = new Set<string>();
+    const groups: bulk.RawGroup[] = [];
+    for (const g of Array.isArray(parsed.groups) ? parsed.groups : []) {
+      const ids = (Array.isArray(g.itemIds) ? g.itemIds.map((x) => String(x)) : []).filter((id) => {
+        if (!known.has(id) || used.has(id)) return false;
+        used.add(id);
+        return true;
+      });
+      if (!ids.length) continue;
+      groups.push({ key: newId(), itemIds: ids, title: g.title, rationale: g.reason });
+    }
+    for (const item of pending) {
+      if (used.has(item.id)) continue;
+      groups.push({ key: newId(), itemIds: [item.id], title: item.title, rationale: 'not grouped by AI' });
+    }
+
+    const result = await bulk.setGroups(uid, batchId, groups, 'ai');
+    if (!result) return res.status(404).json({ error: 'import not found' });
+    return res.json(result);
+  } catch (err) {
+    if (err instanceof AiError) {
+      return res.status(503).json({ error: 'AI grouping is unavailable right now. Your photos are still here - group them by time instead.' });
+    }
+    return res.status(400).json({ error: err instanceof Error ? err.message : 'could not group these photos' });
   }
 });
 

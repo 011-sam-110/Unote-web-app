@@ -358,3 +358,16 @@
   justify-content: center;
   padding-top: 8px;
 }
+
+/* Says what several photos will actually become, before the user commits to it. Without this
+   the button reads "Import 12 photos" and nothing tells them they get four notes, not one. */
+.im-hint {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--bg-hover);
+  border: 1px solid var(--line);
+  color: var(--ink-2);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
