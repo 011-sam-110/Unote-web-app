@@ -553,3 +553,62 @@ Rules:
     { role: 'user', content: text.trim() || '(empty transcript)' },
   ];
 }
+
+export interface PhotoForGrouping {
+  id: string;
+  /** Original filename - cameras number sequentially, which is real signal. */
+  name: string;
+  /** Local capture time, pre-formatted (e.g. "Sat 14:02"), or null when unknown. */
+  takenAt: string | null;
+  /** Head of the OCR text. Deliberately short: this is a sorting decision, not a reading one. */
+  textHead: string;
+}
+
+/**
+ * Group a pile of phone photos into notes - ONE call for the entire batch.
+ *
+ * This is the reason AI grouping is affordable at all. Vision OCR costs ~2 calls per photo
+ * against a 100/month shared pool, so twenty photos would eat 40% of a user's month. Grouping
+ * over already-extracted OCR TEXT costs one text call whether there are five photos or fifty,
+ * and no image ever reaches the gateway on this path.
+ */
+export function groupPhotosPrompt(photos: PhotoForGrouping[]): ChatMessage[] {
+  const manifest = photos
+    .map((p, i) => {
+      const when = p.takenAt ? `taken ${p.takenAt}` : 'time unknown';
+      const head = p.textHead.replace(/\s+/g, ' ').trim().slice(0, 400) || '(no text found)';
+      return `${i + 1}. id=${p.id} | ${p.name} | ${when}\n   ${head}`;
+    })
+    .join('\n');
+
+  return [
+    {
+      role: 'system',
+      content: `${PERSONA}
+
+You are sorting photos a student took on their phone into notes. Each photo is one page. Your job is to decide which photos are pages of the SAME document, and to name each resulting note.
+
+How to decide:
+- Photos taken within a few minutes of each other are usually pages of one document, photographed in sequence.
+- A large time gap almost always starts a new document.
+- Content continuing across photos (the same topic, a list carrying on, a numbered sequence) means the same document, even if the timestamps are unknown.
+- Sequential filenames support, but never override, the content and timing evidence.
+- A photo of something unrelated is its own single-page group. Never merge photos just to reduce the number of groups.
+
+Rules:
+- EVERY id given to you must appear in exactly one group. Never drop one, never repeat one.
+- Keep the ids within a group in reading order (page 1 first).
+- Title each group from what is actually on the pages - a real heading if you can see one. Never invent a subject that is not evidenced by the text. If a group has no readable text, title it from the filename or use "Untitled photo".
+- Titles are at most 80 characters, plain text, no quotes, no trailing punctuation.
+- "reason" is one short phrase for the student explaining why these pages are together (e.g. "same lecture, shot 2 minutes apart", "list continues across both pages"). At most 90 characters.
+- Do not use em dashes (U+2014) or en dashes (U+2013) anywhere in your output.
+
+Respond with ONLY a JSON object, no prose and no code fence:
+{"groups":[{"title":"...","reason":"...","itemIds":["id1","id2"]}]}`,
+    },
+    {
+      role: 'user',
+      content: `Sort these ${photos.length} photos into notes.\n\n${manifest}`,
+    },
+  ];
+}

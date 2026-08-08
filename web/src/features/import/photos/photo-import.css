@@ -1,0 +1,72 @@
+/* Staging + commit states for the bulk photo import. Same token vocabulary as the wizard;
+   the review screen itself lives in photo-review.css. */
+
+.pi-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 20px 8px;
+  text-align: center;
+  color: var(--ink);
+  font-family: var(--font-ui);
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.pi-state-title { margin: 0; font-size: 15px; font-weight: 650; }
+.pi-state-msg { margin: 0; font-size: 13px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.pi-hint { margin: 0; font-size: 12.5px; color: var(--ink-2); max-width: 42ch; }
+
+.pi-bar {
+  width: min(360px, 100%);
+  height: 6px;
+  border-radius: 999px;
+  background: var(--bg-hover);
+  overflow: hidden;
+}
+.pi-bar-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 999px;
+  transition: width var(--dur) var(--ease-out);
+}
+@media (prefers-reduced-motion: reduce) {
+  .pi-bar-fill { transition: none; }
+}
+
+.pi-files {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  width: min(460px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+  max-height: 220px;
+  overflow-y: auto;
+}
+.pi-file {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-size: 12.5px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  color: var(--ink-2);
+}
+.pi-file-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink);
+}
+.pi-file-state { flex: none; font-size: 11.5px; }
+.pi-file.is-staged { background: var(--ok-soft); }
+.pi-file.is-staged .pi-file-state { color: var(--ok); }
+.pi-file.is-failed { background: var(--danger-soft); }
+.pi-file.is-failed .pi-file-state { color: var(--danger); }

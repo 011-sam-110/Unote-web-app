@@ -109,6 +109,32 @@ interface OcrWorker {
 export interface OcrRunner {
   recognize(file: File | Blob): Promise<string>;
   terminate(): Promise<void>;
+  /** True once the engine itself failed to load, so callers can say so instead of showing
+   *  twenty photos that each mysteriously "found no text". */
+  engineFailed(): boolean;
+}
+
+/**
+ * Same-origin asset paths, served from web/public/tesseract by scripts/vendor-tesseract.mjs.
+ *
+ * tesseract.js defaults these to cdn.jsdelivr.net and loads them with `importScripts()`, which
+ * the production CSP (`script-src 'self' 'wasm-unsafe-eval' 'sha256-...'`) blocks - jsdelivr is
+ * allowed for `connect-src` only. That is why OCR has never produced a character in production.
+ * Absolute URLs off `location.origin`, not root-relative ones, because a root-relative path
+ * inside a worker resolves against the worker's own base URL.
+ */
+function tesseractPaths() {
+  const base = `${window.location.origin}/tesseract`;
+  return {
+    // A classic same-origin worker rather than the default blob: wrapper. `worker-src 'self'`
+    // covers it, and it keeps one fewer CSP inheritance rule in play.
+    workerBlobURL: false,
+    workerPath: `${base}/worker.min.js`,
+    // A directory, so tesseract picks the SIMD core when the device supports it.
+    corePath: `${base}/`,
+    // Resolves to `${base}/eng.traineddata.gz` (gzip is on by default).
+    langPath: base,
+  };
 }
 
 function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
@@ -119,33 +145,50 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
 }
 
 /**
- * A shared OCR runner for one import. The model download + worker spawn are lazy (first photo
- * only) and best-effort: if tesseract.js cannot load - offline, or blocked by the production
- * CSP (its worker fetches from a CDN) - the first failure flips `failed` and every photo just
- * imports without text. That is the locked graceful-degradation contract.
+ * A shared OCR runner for one import. The engine download (~7MB of wasm core + language data)
+ * and worker spawn are lazy - first photo only - and cached by the browser thereafter.
+ *
+ * Two failure modes, deliberately handled differently, because conflating them is what made a
+ * single bad frame silently wipe the text off every other photo in a twenty-photo batch:
+ *
+ *   engine failure   - the worker or its assets would not load. Retrying per photo just costs
+ *                      twenty more timeouts, so it latches and every later call short-circuits.
+ *   recognise failure - THIS image could not be read (corrupt, HEIC the browser cannot decode,
+ *                      timed out). Only that photo loses its text; the batch carries on.
  */
 export function createOcrRunner(): OcrRunner {
   let workerPromise: Promise<OcrWorker> | null = null;
-  let failed = false;
+  let engineDead = false;
   async function getWorker(): Promise<OcrWorker> {
     if (!workerPromise) {
       workerPromise = (async () => {
         const tesseract = await import('tesseract.js');
-        return (await tesseract.createWorker('eng')) as unknown as OcrWorker;
+        const opts = tesseractPaths();
+        return (await tesseract.createWorker('eng', undefined, opts)) as unknown as OcrWorker;
       })();
+      // A rejected load must not be retried by every subsequent photo, but it also must not
+      // become an unhandled rejection when nothing is awaiting it yet.
+      workerPromise.catch(() => { engineDead = true; });
     }
     return workerPromise;
   }
   return {
+    engineFailed: () => engineDead,
     async recognize(file) {
-      if (failed) return '';
+      if (engineDead) return '';
+      let worker: OcrWorker;
       try {
-        const worker = await withTimeout(getWorker(), 60_000);
+        // Generous: this is where the ~7MB download happens, on whatever connection the phone has.
+        worker = await withTimeout(getWorker(), 120_000);
+      } catch {
+        engineDead = true;
+        return '';
+      }
+      try {
         const res = await withTimeout(worker.recognize(file), 45_000);
         return (res.data?.text ?? '').replace(/\s+\n/g, '\n').trim();
       } catch {
-        failed = true; // stop retrying for the rest of this batch
-        return '';
+        return ''; // this frame only - the next photo still gets a go
       }
     },
     async terminate() {
@@ -154,7 +197,7 @@ export function createOcrRunner(): OcrRunner {
         const w = await workerPromise;
         await w.terminate();
       } catch {
-        /* already gone */
+        /* never loaded, or already gone */
       }
     },
   };
