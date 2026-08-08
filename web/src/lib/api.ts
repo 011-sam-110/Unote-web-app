@@ -7,7 +7,7 @@ import type {
   Template, TitleResult, User,
 } from './types';
 import type {
-  ImportBatch, ImportItem, ImportSource, ImportLabelSpace, ImportSuggestionInput, ImportCommitResult,
+  ImportBatch, ImportItem, ImportSource, ImportLabelSpace, ImportSuggestionInput, ImportGroupInput, ImportCommitResult,
 } from './types';
 import { isGuest } from '../features/guest/guestMode';
 import { GuestFeatureError, guestApi, guestBlockedMessage } from '../features/guest/guestApi';
@@ -302,6 +302,12 @@ const serverApi = {
     http<{ categoriser: string; items: ImportItem[] }>(`/api/import/batches/${batchId}/categorise`, json('POST', b)),
   decideImportItem: (batchId: string, itemId: string, b: Partial<{ decidedNotebookId: string | null; decidedNotebookName: string | null; decidedTags: string[]; title: string; status: 'accepted' | 'rejected'; decidedMode: 'new' | 'append'; decidedTargetNoteId: string | null }>) =>
     http<{ item: ImportItem }>(`/api/import/batches/${batchId}/items/${itemId}`, json('PATCH', b)),
+  /** Save a grouping the client worked out (capture-time clustering, or the user's own edits). */
+  setImportGroups: (batchId: string, b: { grouper: string; groups: ImportGroupInput[] }) =>
+    http<{ items: ImportItem[]; grouper: string }>(`/api/import/batches/${batchId}/groups`, json('PUT', b)),
+  /** Regroup with AI: ONE model call for the whole batch, over OCR text only. */
+  groupImportWithAi: (batchId: string) =>
+    http<{ items: ImportItem[]; grouper: string }>(`/api/import/batches/${batchId}/group-ai`, json('POST', {})),
   commitImport: (batchId: string, itemIds: string[]) => http<ImportCommitResult>(`/api/import/batches/${batchId}/commit`, json('POST', { itemIds })),
   discardImportBatch: (batchId: string) => http<{ ok: true }>(`/api/import/batches/${batchId}`, { method: 'DELETE' }),
 };

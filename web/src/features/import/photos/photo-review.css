@@ -1,0 +1,244 @@
+/* Bulk photo review: a contact sheet of every frame, grouped into the notes it will become.
+   Shares the wizard's token vocabulary (--ink / --line / --accent, 8px radii, border-led) so it
+   reads as the same product, and reuses .iw-btn for anything that is just a button.
+   Meaningful text uses --ink / --ink-2 only, never --ink-3. Works down to 390px, where the
+   frames stay a horizontally scrollable strip rather than reflowing into an unreadable grid. */
+
+.pr-root {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+  font-family: var(--font-ui);
+  color: var(--ink);
+}
+
+/* ---- header ---- */
+.pr-bar {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+  flex: none;
+}
+.pr-bar-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.pr-h { margin: 0; font-size: 15px; font-weight: 650; color: var(--ink); }
+.pr-sub { margin: 0; font-size: 12.5px; color: var(--ink-2); }
+.pr-bar-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+
+.pr-seg {
+  display: flex;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.pr-seg-btn {
+  appearance: none;
+  border: 0;
+  background: var(--bg);
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 12.5px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+.pr-seg-btn + .pr-seg-btn { border-left: 1px solid var(--line); }
+.pr-seg-btn:hover:not(:disabled) { background: var(--bg-hover); color: var(--ink); }
+.pr-seg-btn.is-on { background: var(--accent-soft); color: var(--accent-ink); font-weight: 600; }
+.pr-seg-btn:disabled { opacity: .55; cursor: default; }
+
+/* ---- notices ---- */
+.pr-warn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 0;
+  padding: 8px 11px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--warn-soft);
+  color: var(--ink);
+  font-size: 12.5px;
+  flex: none;
+}
+.pr-warn.is-err { background: var(--danger-soft); }
+.pr-warn.is-edit { background: var(--accent-soft); }
+.pr-inline-btn { margin-left: 4px; padding: 3px 10px; font-size: 12px; }
+
+/* ---- groups ---- */
+.pr-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+  min-height: 0;
+  flex: 1;
+  padding-right: 2px;
+}
+
+.pr-group {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  padding: 11px 12px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pr-group-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+.pr-title {
+  flex: 1 1 220px;
+  min-width: 0;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 620;
+  color: var(--ink);
+  background: transparent;
+  border: 1px solid transparent;
+  border-bottom-color: var(--line);
+  border-radius: 4px 4px 0 0;
+  padding: 4px 6px;
+}
+.pr-title:hover { background: var(--bg-hover); }
+.pr-title:focus-visible { outline: none; border-color: var(--accent); background: var(--bg); }
+
+.pr-nb {
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--ink-2);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 4px 8px;
+  max-width: 190px;
+}
+.pr-count { font-size: 12px; color: var(--ink-2); white-space: nowrap; }
+
+.pr-link {
+  appearance: none;
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-size: 12px;
+  color: var(--accent-ink);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.pr-link:hover { color: var(--accent); }
+
+/* The grouper's reasoning, stated plainly. This is the line that makes a wrong guess
+   obvious instead of mysterious, so it is text and not a tooltip. */
+.pr-why {
+  margin: 0;
+  font-size: 12px;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- frames ---- */
+.pr-frames {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.pr-frame {
+  width: 96px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 5px;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+}
+.pr-frame.is-moving { border-color: var(--accent); background: var(--accent-soft); }
+
+.pr-plate {
+  width: 100%;
+  height: 108px;
+  object-fit: cover;
+  border-radius: 4px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  display: block;
+}
+.pr-plate--none {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink-2);
+}
+
+.pr-cap {
+  display: flex;
+  justify-content: space-between;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+.pr-page { font-weight: 640; color: var(--ink); }
+.pr-notext {
+  font-size: 10.5px;
+  color: var(--ink-2);
+  background: var(--warn-soft);
+  border-radius: 3px;
+  padding: 1px 5px;
+  align-self: flex-start;
+}
+.pr-frame-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.pr-frame--drop { width: 96px; }
+.pr-drop {
+  width: 100%;
+  height: 108px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border: 1px dashed var(--accent);
+  border-radius: 4px;
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+  font: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+}
+.pr-drop:hover { background: var(--accent-wash); }
+
+/* ---- footer ---- */
+.pr-foot {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+  flex: none;
+}
+.pr-foot-status { font-size: 12.5px; color: var(--ink-2); }
+.pr-foot-actions { margin-left: auto; display: flex; gap: 8px; }
+
+@media (max-width: 560px) {
+  .pr-bar-actions { margin-left: 0; width: 100%; }
+  .pr-seg { width: 100%; }
+  .pr-seg-btn { flex: 1; }
+  .pr-nb { max-width: none; flex: 1 1 140px; }
+  /* One scrollable strip beats a reflowed grid here: page order is the information, and a
+     wrapped grid at this width loses it. */
+  .pr-frames { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 4px; }
+  .pr-frame, .pr-frame--drop { flex: none; }
+  .pr-foot-actions { margin-left: 0; width: 100%; }
+  .pr-foot-actions .iw-btn { flex: 1; }
+}

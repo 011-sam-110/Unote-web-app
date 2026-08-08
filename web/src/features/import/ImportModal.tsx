@@ -19,6 +19,9 @@ import './ImportModal.css';
 // Lazily loaded: the lecture flow pulls in frame analysis and (via its worker) transformers.js,
 // which no one importing a photo should have to download.
 const LectureImport = lazy(() => import('./lecture/LectureImport'));
+// Also lazy: the bulk photo flow drags in the review screen and (on first photo) the OCR engine.
+// Someone importing a single page should download none of it.
+const PhotoImportFlow = lazy(() => import('./photos/PhotoImportFlow'));
 
 export interface ImportModalProps {
   open: boolean;
@@ -33,7 +36,8 @@ export interface ImportModalProps {
 }
 
 type MergeMode = 'append' | 'improve';
-type Phase = 'pick' | 'running' | 'done' | 'error';
+/** 'bulk' is the multi-photo path: stage every photo, group them, review, then commit. */
+type Phase = 'pick' | 'running' | 'bulk' | 'done' | 'error';
 /** The server-backed kinds, plus the fully client-side lecture-video flow. */
 type TabKey = ImportKind | 'lecture';
 
@@ -125,7 +129,7 @@ export default function ImportModal({ open, onClose, notebookId, noteId, default
   }, [files, kind]);
 
   function handleKindChange(next: TabKey) {
-    if (phase === 'running' || lectureBusy) return;
+    if (phase === 'running' || phase === 'bulk' || lectureBusy) return;
     setKind(next);
     setFiles([]);
     setValidationError(null);
@@ -218,6 +222,18 @@ export default function ImportModal({ open, onClose, notebookId, noteId, default
   function handleSubmit() {
     if (files.length === 0) { setValidationError('Add a file to import'); return; }
     if (!noteId && !selectedNotebookId) { setValidationError('Choose a notebook'); return; }
+
+    // Several photos, and no note to add them to: this is a roll off someone's phone, not the
+    // pages of one handout. Hand it to the bulk flow, which reads the text locally (no AI
+    // quota), works out which photos belong together, and lets the user check before anything
+    // is written. The old behaviour - chaining every photo into ONE note, one slow AI call at a
+    // time - is still exactly right when the modal was opened against a note, so that stays.
+    if (kind === 'photo' && files.length > 1 && !noteId) {
+      setValidationError(null);
+      setPhase('bulk');
+      return;
+    }
+
     chainRef.current = { index: 0, mode: noteId ? mergeMode : 'new', noteId };
     runChain();
   }
@@ -229,13 +245,13 @@ export default function ImportModal({ open, onClose, notebookId, noteId, default
   }
 
   const canSubmit = files.length > 0 && (noteId ? true : !!selectedNotebookId);
-  const runningOnClose = phase === 'running' || lectureBusy ? () => {} : onClose;
+  const runningOnClose = phase === 'running' || phase === 'bulk' || lectureBusy ? () => {} : onClose;
   // A lecture import always produces a NEW note, so it has nothing to offer when the modal was
   // opened to add material to an existing one.
   const showLectureTab = !noteId;
 
   return (
-    <Modal open={open} onClose={runningOnClose} title="Import" width={560}>
+    <Modal open={open} onClose={runningOnClose} title="Import" width={phase === 'bulk' ? 900 : 560}>
       <div className="im-modal">
         <div className="im-modal__kinds" role="tablist" aria-label="Import kind">
           {IMPORT_KINDS.map(k => (
@@ -245,7 +261,7 @@ export default function ImportModal({ open, onClose, notebookId, noteId, default
               role="tab"
               aria-selected={kind === k.key}
               className={`im-tab${kind === k.key ? ' is-active' : ''}`}
-              disabled={phase === 'running'}
+              disabled={phase === 'running' || phase === 'bulk'}
               onClick={() => handleKindChange(k.key)}
             >
               <Icon name={k.iconName} size={14} /> {k.label}
@@ -257,7 +273,7 @@ export default function ImportModal({ open, onClose, notebookId, noteId, default
               role="tab"
               aria-selected={kind === 'lecture'}
               className={`im-tab${kind === 'lecture' ? ' is-active' : ''}`}
-              disabled={phase === 'running' || lectureBusy}
+              disabled={phase === 'running' || phase === 'bulk' || lectureBusy}
               onClick={() => handleKindChange('lecture')}
             >
               <Icon name="camera" size={14} /> Lecture video
@@ -377,26 +393,36 @@ export default function ImportModal({ open, onClose, notebookId, noteId, default
                     + Add page
                   </button>
                 </div>
-              ) : (
-                <div className="im-files">
-                  {files.map((f, i) => (
-                    <div className="im-file-card" key={f.name}>
-                      <span className="im-file-card__icon" aria-hidden="true"><Icon name={kindMeta.iconName} size={18} /></span>
-                      <div className="im-file-card__meta">
-                        <div className="im-file-card__name">{f.name}</div>
-                        <div className="im-file-card__size">{formatBytes(f.size)}</div>
-                      </div>
-                      <button type="button" className="im-icon-btn" aria-label="Remove file" onClick={() => removeFile(i)}>×</button>
+              ) : null
+            )}
+
+            {kind === 'photo' && !noteId && files.length > 1 && (
+              <p className="im-hint" role="status">
+                We&apos;ll sort these into notes by when they were taken, and show you the grouping before anything is saved.
+              </p>
+            )}
+
+            {files.length > 0 && kind !== 'photo' && (
+              <div className="im-files">
+                {files.map((f, i) => (
+                  <div className="im-file-card" key={f.name}>
+                    <span className="im-file-card__icon" aria-hidden="true"><Icon name={kindMeta.iconName} size={18} /></span>
+                    <div className="im-file-card__meta">
+                      <div className="im-file-card__name">{f.name}</div>
+                      <div className="im-file-card__size">{formatBytes(f.size)}</div>
                     </div>
-                  ))}
-                </div>
-              )
+                    <button type="button" className="im-icon-btn" aria-label="Remove file" onClick={() => removeFile(i)}>×</button>
+                  </div>
+                ))}
+              </div>
             )}
 
             <div className="im-footer">
               <button type="button" className="im-btn" onClick={onClose}>Cancel</button>
               <button type="button" className="im-btn im-btn--primary" disabled={!canSubmit} onClick={handleSubmit}>
-                {files.length > 1 ? `Import ${files.length} pages` : 'Import'}
+                {files.length > 1
+                  ? (kind === 'photo' && !noteId ? `Import ${files.length} photos` : `Import ${files.length} pages`)
+                  : 'Import'}
               </button>
             </div>
           </>
@@ -404,6 +430,26 @@ export default function ImportModal({ open, onClose, notebookId, noteId, default
 
         {phase === 'running' && (
           <ImportProgress job={job} pageInfo={pageProgress ?? undefined} />
+        )}
+
+        {phase === 'bulk' && (
+          <Suspense fallback={<div className="im-target__loading">Loading…</div>}>
+            <PhotoImportFlow
+              files={files}
+              notebooks={notebooks}
+              defaultNotebookId={selectedNotebookId || null}
+              onDone={({ created, failed }) => {
+                toast(
+                  failed > 0
+                    ? `Created ${created} note${created === 1 ? '' : 's'}, ${failed} failed`
+                    : `Created ${created} note${created === 1 ? '' : 's'}`,
+                  failed > 0 ? 'error' : 'ok',
+                );
+                onClose();
+              }}
+              onCancel={() => { setPhase('pick'); setFiles([]); }}
+            />
+          </Suspense>
         )}
 
         {phase === 'done' && (

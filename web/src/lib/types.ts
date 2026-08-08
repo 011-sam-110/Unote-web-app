@@ -485,6 +485,11 @@ export interface ImportItem {
   /** new | append */
   decidedMode: string;
   decidedTargetNoteId: string | null;
+  /** Items sharing a groupKey commit into ONE note, ordered by groupIndex. Null = its own note. */
+  groupKey: string | null;
+  groupIndex: number;
+  /** When the photo was taken (ISO), from EXIF or the file timestamp. Null for documents. */
+  capturedAt: string | null;
   /** pending | ready | categorised | accepted | rejected | committed | failed */
   status: string;
   noteId: string | null;
@@ -518,7 +523,20 @@ export interface ImportSuggestionInput {
   rationale?: string;
 }
 
+/** One proposed note, as a list of the photos that become its pages. */
+export interface ImportGroupInput {
+  key: string;
+  /** Item ids IN PAGE ORDER - position becomes groupIndex, so page 2 lands after page 1. */
+  itemIds: string[];
+  title?: string;
+  /** Why these pages are together ("28 min gap before"), shown in review. */
+  rationale?: string;
+  /** Notebook for the resulting note. Applied to every page so the choice survives a refresh. */
+  notebookId?: string | null;
+}
+
 export interface ImportCommitResult {
+  /** Notes filed, NOT photos: a group of twelve pages counts once. */
   created: number;
   skipped: number;
   failed: number;

@@ -83,6 +83,32 @@ Size guard: note content sent to the model is capped at ~24k chars (8k for /titl
 - `GET /api/import/jobs/:id` → `{ id, status: 'queued'|'running'|'done'|'failed', step?: string, noteId?, error?, attachmentId? }` (in-memory job store fine)
 - `POST /api/import/image` multipart `file` → `{ url: '/uploads/...' }`. Plain image upload for embedding in editor.
 
+### Bulk import (routes/imports.ts + lib/importBatch.ts) - staging, grouping, commit
+Nothing here writes into a real notebook until `/commit`. Documents and photos are staged into
+`import_batches` / `import_items`, the proposed sort and grouping are persisted so review survives
+a refresh, and closing the wizard discards the batch. Only `/group-ai` uses a model.
+
+- `POST /api/import/batches` `{ source }` (`files|photos|markdown|...`) → `{ batchId }`
+- `GET /api/import/batches/:id` → `{ batch, items }`
+- `DELETE /api/import/batches/:id` → `{ ok: true }`. Discards staging, including staged attachments.
+- `POST /api/import/batches/:id/items` - JSON `{ items: [...] }` for pre-extracted text, OR multipart
+  `file` for an office doc / photo. Photo fields: `kind=photo`, `ocrText?` (client-side tesseract),
+  `capturedAt?` (ISO, from EXIF), `sourcePath?`, `title?`.
+- `POST /api/import/batches/:id/categorise` `{ categoriser, suggestions }` → `{ categoriser, items }`
+- `PATCH /api/import/batches/:id/items/:itemId` - per-item decision (notebook, tags, title, accept/reject).
+- `PUT /api/import/batches/:id/groups` `{ grouper, groups: [{ key, itemIds[], title?, rationale?, notebookId? }] }`
+  → `{ items, grouper }`. **Grouping = which staged photos become PAGES OF ONE NOTE.** `itemIds` order
+  becomes page order. Wholesale replace: any item not named is reset to ungrouped (its own note), and
+  already-committed items are left alone. No AI, no quota.
+- `POST /api/import/batches/:id/group-ai` → `{ items, grouper: 'ai' }`. Regroups with **ONE** model call
+  for the entire batch, over the OCR text only, no image is sent. AI-gated (`aiQuotaGate`). Ids the
+  model omits become single-photo groups, so no photo is ever lost. 503 when the gateway is down;
+  the staged photos are untouched.
+- `POST /api/import/batches/:id/commit` `{ itemIds }` → `{ created, skipped, failed, createdNotebooks, items, batchStatus }`
+  Resumable and idempotent in slices (≤100 ids). `created` counts **notes, not items**: a group of
+  twelve pages is one note. A group split across chunks appends to the note its committed sibling
+  already made.
+
 ## Study (routes/study.ts, SM-2 lite)
 - `GET /api/study/queue?limit=20&notebookId=` → `{ cards: [{ id, noteId, noteTitle, notebookId?, notebookName?, question, answer, dueAt, reps }] , due, total }` (due = due_at <= now, not suspended). `notebookId` scopes the queue AND the due/total counts to one notebook (cram a single module).
 - `GET /api/study/cards` → `{ cards: [{ id, noteId, noteTitle, notebookId?, notebookName?, question, answer, dueAt, reps, suspended }] }`. ALL cards including suspended and not-yet-due, newest first. (Patch A: the Browse/manage tab needs the whole deck, which `/queue` (due-only) cannot supply.)

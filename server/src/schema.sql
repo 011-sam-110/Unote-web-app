@@ -431,6 +431,19 @@ CREATE TABLE IF NOT EXISTS import_items (
   decided_mode TEXT NOT NULL DEFAULT 'new', -- new | append (merge into an existing note)
   decided_target_note_id TEXT,            -- for append
 
+  -- Grouping: which items become PAGES OF THE SAME NOTE.
+  --
+  -- NULL is the original behaviour and stays the default: one item, one note. A shared group_key
+  -- means "these are pages of one thing" - twelve photos of one handout - and commit files them
+  -- into a single note in group_index order rather than twelve fragments. Photo imports set this
+  -- from capture timestamps (or from one AI call over the OCR text); document imports leave it
+  -- null and are completely unaffected.
+  group_key TEXT,
+  group_index INTEGER NOT NULL DEFAULT 0,
+  -- When the photo was taken (EXIF DateTimeOriginal, else the file timestamp), ISO. Persisted
+  -- rather than kept in the browser so re-grouping and the review screen survive a refresh.
+  captured_at TEXT,
+
   status TEXT NOT NULL DEFAULT 'pending', -- pending | ready | categorised | accepted | rejected | committed | failed
   note_id TEXT,                           -- set once committed
   error TEXT,
@@ -470,3 +483,17 @@ CREATE INDEX IF NOT EXISTS idx_capture_pairings_expiry ON capture_pairings(expir
 -- else - so a scanned code cannot read notes, change the password, or spend AI quota
 -- beyond the import it was scanned for.
 ALTER TABLE sessions ADD COLUMN IF NOT EXISTS scope TEXT NOT NULL DEFAULT 'full';
+
+-- Photo grouping, for databases created before it existed. NULL group_key on every existing row
+-- means they keep the one-item-one-note behaviour they were staged under.
+ALTER TABLE import_items ADD COLUMN IF NOT EXISTS group_key TEXT;
+ALTER TABLE import_items ADD COLUMN IF NOT EXISTS group_index INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE import_items ADD COLUMN IF NOT EXISTS captured_at TEXT;
+
+-- Deliberately AFTER those ALTERs, not next to the CREATE TABLE above.
+--
+-- On an existing database the CREATE TABLE is a no-op, so an index declared beside it would
+-- reference a column that only the ALTER adds - which is precisely how this failed the first
+-- time: "column group_key does not exist", on boot, for every deployment that already had data.
+-- Commit walks a group at a time and looks up already-committed siblings to stay resumable.
+CREATE INDEX IF NOT EXISTS idx_import_items_group ON import_items(batch_id, group_key, group_index);
