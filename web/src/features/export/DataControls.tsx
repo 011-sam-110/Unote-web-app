@@ -33,7 +33,7 @@ export default function DataControls() {
           <Icon name="download" size={15} />
         </button>
       </Tooltip>
-      <Tooltip content="Import. Bring notes in from files or a Unote export" placement="right">
+      <Tooltip content="Import. Phone photos, files, or a Unote export" placement="right">
         <button
           type="button"
           className="data-controls__btn"
