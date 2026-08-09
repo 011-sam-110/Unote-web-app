@@ -45,12 +45,23 @@ export interface ReadmeDoc {
 const GATE = 'needs an account';
 
 /** The generic fallback guestBlockedMessage returns for a method it does not know. Used
- *  to tell "genuinely blocked" apart from "unrecognised method name". */
-const GENERIC_BLOCK = guestBlockedMessage('__unknown__');
+ *  to tell "genuinely blocked" apart from "unrecognised method name".
+ *
+ * Computed lazily rather than at module load: guestStore.ts now imports buildReadme (to
+ * seed the guest workspace), and guestApi.ts imports guestStore.ts, so this module sits in
+ * a cycle with guestApi.ts. Calling guestBlockedMessage() here at the top level reads
+ * guestApi's BLOCKED table before it is guaranteed to have been initialised - safe when
+ * guestStore.ts happens to be the first module in the cycle to load, but a
+ * "Cannot access 'BLOCKED' before initialization" crash when anything else (lib/api.ts,
+ * which imports guestApi.ts directly) loads first. Deferring the call to isGated's first
+ * invocation - which only happens once buildReadme() actually runs, long after every
+ * module in the cycle has finished loading - sidesteps the ordering entirely. */
+let genericBlock: string | undefined;
 
 function isGated(method: string | undefined): boolean {
   if (!method) return false;
-  return guestBlockedMessage(method) !== GENERIC_BLOCK;
+  genericBlock ??= guestBlockedMessage('__unknown__');
+  return guestBlockedMessage(method) !== genericBlock;
 }
 
 /** The trailing cell of a reference row: a gate mark for a guest, empty otherwise. */

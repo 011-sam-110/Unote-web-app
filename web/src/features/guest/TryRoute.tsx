@@ -21,8 +21,10 @@ export default function TryRoute() {
     }
     // startGuest is idempotent: it seeds only an empty store, and reports the most recent
     // note either way, so returning to /try picks up where the visitor left off.
-    const { noteId } = startGuest();
-    setTarget(noteId ? `/note/${noteId}` : '/');
+    // First visit lands on the README; every later visit picks up the last note worked on.
+    const { noteId, readmeId } = startGuest();
+    const target = readmeId ?? noteId;
+    setTarget(target ? `/note/${target}` : '/');
   }, [user]);
 
   if (user) return <Navigate to="/" replace />;

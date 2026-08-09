@@ -8,6 +8,7 @@
 // an async database cannot answer without a loading state in front of the warning. The cost
 // is the ~5MB origin quota, which writeData() reports honestly rather than losing work to.
 import type { Note, NoteLite, Notebook, NotebookLite } from '../../lib/types';
+import { buildReadme } from '../readme/buildReadme';
 
 const DATA_KEY = 'unote:guest:v1';
 
@@ -288,11 +289,27 @@ export function notebookOf(data: GuestData, notebookId: string): GuestNotebook |
 /**
  * Seed the store so "try it" lands on a page someone can type into rather than an empty
  * shell with a "create a notebook first" error waiting behind every control.
+ *
+ * The README goes in FIRST and pinned, so it sits at the top of the sidebar and the
+ * dashboard - and the blank note is created second, so `latestNoteId()` returns the blank
+ * one on every return visit. A guest who has read the guide once should land back on
+ * their own work, not on documentation.
  */
-export function seedGuestWorkspace(): { notebook: GuestNotebook; note: GuestNote } {
+export function seedGuestWorkspace(): { notebook: GuestNotebook; note: GuestNote; readme: GuestNote } {
   const notebook = createNotebook({ name: 'My notes', emoji: '📓', color: '#2563eb' });
+
+  const built = buildReadme({ guest: true });
+  const readme = createNote({
+    notebookId: notebook.id,
+    title: built.title,
+    contentJson: built.contentJson,
+    contentText: built.contentText,
+    tags: built.tags,
+  });
+  updateNote(readme.id, { pinned: true });
+
   const note = createNote({ notebookId: notebook.id });
-  return { notebook, note };
+  return { notebook, note, readme: { ...readme, pinned: true } };
 }
 
 /** The note /try should open: the one most recently worked on. */

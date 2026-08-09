@@ -34,8 +34,8 @@ export function guestModeSupported(): boolean {
 }
 
 /**
- * Enter guest mode, seeding a notebook and one empty note on the first visit so the
- * caller has somewhere to send the person. Returns the note to open.
+ * Enter guest mode, seeding a notebook, the README and one empty note on the first visit
+ * so the caller has somewhere to send the person. Returns the note to open.
  *
  * Idempotent, and that is load-bearing rather than tidiness: the caller is a React effect,
  * which StrictMode runs twice in development. A version that only reported a note id when
@@ -43,23 +43,26 @@ export function guestModeSupported(): boolean {
  * visitor on the dashboard. Reporting the most recent note either way also gives the right
  * answer for someone returning to /try with work already here.
  */
-export function startGuest(): { noteId: string | null } {
+export function startGuest(): { noteId: string | null; readmeId: string | null } {
   try {
     localStorage.setItem(ACTIVE_KEY, '1');
   } catch {
-    return { noteId: null };
+    return { noteId: null, readmeId: null };
   }
   active = true;
+  // Non-null only when this call seeded. A visitor who has been here before keeps their
+  // own landing note, and does not get shown the guide again.
+  let readmeId: string | null = null;
   if (!hasGuestWork()) {
     try {
-      seedGuestWorkspace();
+      readmeId = seedGuestWorkspace().readme.id;
     } catch {
       // Storage filled between the probe and the write. The shell still opens; the
       // dashboard's empty state is a survivable landing.
     }
   }
   emit();
-  return { noteId: latestNoteId() };
+  return { noteId: latestNoteId(), readmeId };
 }
 
 /**
