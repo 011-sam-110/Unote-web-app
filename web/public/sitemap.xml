@@ -1,21 +1,36 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  One URL, honestly.
+  GENERATED FILE - do not hand-edit. Run `npm run sitemap` after changing which pages are
+  public; the route table lives in scripts/build-sitemap.mjs.
 
-  "/" is the only page on this site worth indexing: every other route is either behind a
-  login, a single-use surface (/capture, /join/:token), or an account form that is
-  explicitly noindex. Padding a sitemap with those would be asking Google to index pages
-  we have simultaneously told it to ignore.
+  Every lastmod below is the git committer date of the files that render that page, never the
+  day this file was written. A sitemap that claims everything changed today is a sitemap
+  Google stops trusting.
 
-  This is hand-maintained on purpose while there is one entry. If a /learn section is ever
-  built, generate this file instead - and make lastmod reflect real edit dates, because a
-  sitemap that claims everything changed today is a sitemap Google stops trusting.
+  No changefreq and no priority. Google has said plainly that it ignores both, and priority
+  is meaningless anyway on a site with two indexable pages - it only ever expressed a
+  ranking BETWEEN your own URLs. Emitting them would be decoration pretending to be a signal.
+
+  Not listed, on purpose:
+    /login, /signup, /recover
+      account forms, sent as X-Robots-Tag: noindex from vercel.json
+    /try
+      not a page but an action - loading it starts a guest session, so a crawler that renders JS creates data
+    /capture
+      single-use QR phone-pairing surface, noindex
+    /join/:token
+      unguessable share links, noindex nofollow - listing them defeats the point
+    /notebook/:id, /note/:id, /study, /ask, /search, /tags
+      behind RequireAuth, so a crawler only ever sees the redirect to /login
 -->
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>https://unote-six.vercel.app/</loc>
-    <lastmod>2026-07-22</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>1.0</priority>
+    <lastmod>2026-08-07</lastmod>
+  </url>
+  <url>
+    <!-- lastmod is the repo HEAD date, not this page's: nothing that renders it is committed yet. -->
+    <loc>https://unote-six.vercel.app/download</loc>
+    <lastmod>2026-08-09</lastmod>
   </url>
 </urlset>

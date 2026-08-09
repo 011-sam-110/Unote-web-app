@@ -1,25 +1,54 @@
-# Unote
+# Unote - https://unote-six.vercel.app/
+#
+# Policy: the site is open. Every crawler is welcome, AI crawlers included. The only
+# closed paths are ones where crawling is pointless or actively unwanted.
 #
 # Before this file existed, /robots.txt fell through the SPA catch-all rewrite in
 # vercel.json and returned 200 with the app shell - so crawlers were parsing HTML as a
 # robots file. Same for /sitemap.xml. Both are real static files now, and Vercel serves
 # real files ahead of the rewrite.
+#
+# ONE GROUP, ON PURPOSE. A crawler obeys the single most specific User-agent group that
+# matches it and ignores every other group, this one included. So a named block like
+# "User-agent: GPTBot" + "Allow: /" would grant GPTBot nothing it does not already have -
+# it would strip the Disallow lines below for that one bot and hand it /login, /try and
+# /join/. Named groups only earn their place when a bot needs DIFFERENT rules, and none
+# here does: GPTBot, ClaudeBot, PerplexityBot, CCBot and the rest all match "*" and are
+# allowed by it. Not naming them is the permission. Add paths to the group below and
+# nowhere else. The blank lines inside it are fine - RFC 9309 allows them, and only a
+# User-agent line starts a new group, so do not "tidy" them into separate blocks.
+# (Checked against Python 3.13's urllib.robotparser as well as the RFC grammar: the
+# grouping is identical with and without them.)
+#
+# Google-Extended and Applebot-Extended are absent for the same reason plus one more:
+# they are not crawlers and fetch nothing. They are opt-out tokens Google and Apple
+# consult for AI training and grounding, where silence already means yes. Listing them
+# with "Allow: /" would say nothing new and would create exactly the stray group above.
 
 User-agent: *
+
+# Public and meant to be found: / (landing) and /download (the desktop app page).
 Allow: /
 
-# Account and single-use surfaces. Nothing here is useful in an index, and share links
-# are unguessable by design - listing them would defeat the point. These are also sent
-# as X-Robots-Tag: noindex headers from vercel.json, which is the binding signal;
-# Disallow only asks a crawler not to fetch.
+# Account forms. A sign-in box is not a search result, and indexing one only competes
+# with the landing page for the site's own brand terms.
 Disallow: /login
 Disallow: /signup
 Disallow: /recover
+
+# Single-use surfaces. /capture is a QR pairing handshake that is spent the moment it is
+# used, and share links are unguessable by design - listing them would defeat the point.
 Disallow: /capture
 Disallow: /join/
 
-# AI crawlers are allowed deliberately. They execute no JavaScript, so all they can
-# currently see is this site's static HTML head - which is exactly why that head was
-# given a real description and JSON-LD.
+# /try is not a page, it is an action. Loading it starts a guest session and seeds a
+# first note, then redirects into the app. A crawler that runs no JavaScript just gets
+# the empty SPA shell and does no harm, but Googlebot renders pages, so it would fire
+# that effect and end up inside /note/<id> holding a guest session. Keep it out.
+Disallow: /try
+
+# Disallow only asks a crawler not to fetch. The binding "do not index" signal for all
+# of the above is the X-Robots-Tag header vercel.json sends on the same paths - if you
+# change one list, change the other.
 
 Sitemap: https://unote-six.vercel.app/sitemap.xml
