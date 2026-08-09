@@ -11,6 +11,8 @@ import type {
 } from './types';
 import { isGuest } from '../features/guest/guestMode';
 import { GuestFeatureError, guestApi, guestBlockedMessage } from '../features/guest/guestApi';
+import { noteRequestOutcome } from './sync/connectivity';
+import type { SyncChangesResponse } from './sync/contract';
 
 export class ApiError extends Error {
   status: number;
@@ -34,7 +36,20 @@ export function setUnauthorizedHandler(fn: UnauthorizedHandler | null): void {
 }
 
 async function http<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(path, init);
+  let res: Response;
+  try {
+    res = await fetch(path, init);
+  } catch (err) {
+    // fetch only rejects when the request never reached a server: DNS, TLS, a
+    // refused connection, an aborted transport. THAT is what offline means here.
+    //
+    // An HTTP error response - 400, 404, 500 - proves the opposite: something
+    // answered. Conflating the two is how a validation bug turns into a phantom
+    // offline state that starts queueing every write in the app.
+    noteRequestOutcome(false);
+    throw err;
+  }
+  noteRequestOutcome(true);
   const isJson = res.headers.get('content-type')?.includes('application/json');
   if (!res.ok) {
     // The auth endpoints own their 401s - a wrong password and the signed-out /me
@@ -310,9 +325,31 @@ const serverApi = {
     http<{ items: ImportItem[]; grouper: string }>(`/api/import/batches/${batchId}/group-ai`, json('POST', {})),
   commitImport: (batchId: string, itemIds: string[]) => http<ImportCommitResult>(`/api/import/batches/${batchId}/commit`, json('POST', { itemIds })),
   discardImportBatch: (batchId: string) => http<{ ok: true }>(`/api/import/batches/${batchId}`, { method: 'DELETE' }),
+
+  /**
+   * The delta feed the offline mirror pulls. Not routed through the local store for
+   * the obvious reason: it is the thing that fills the local store.
+   */
+  syncChanges: (q: { since?: string; limit?: number } = {}) => {
+    const p = new URLSearchParams();
+    if (q.since) p.set('since', q.since);
+    if (q.limit) p.set('limit', String(q.limit));
+    const qs = p.toString();
+    return http<SyncChangesResponse>(`/api/sync/changes${qs ? `?${qs}` : ''}`);
+  },
 };
 
 export type Api = typeof serverApi;
+
+/**
+ * The server object with NO local-store routing in front of it.
+ *
+ * Only the sync engine may use this. Everything else must go through `api`, or an
+ * offline write would throw instead of queueing, and an online write would leave
+ * the mirror stale - which is the two-sources-of-truth problem this whole design
+ * exists to remove.
+ */
+export const serverOnlyApi = serverApi;
 
 /**
  * Guest mode is applied here rather than in every page.
