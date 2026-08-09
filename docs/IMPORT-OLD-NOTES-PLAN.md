@@ -500,7 +500,19 @@ Outcome: a student can drop a folder of old notes and get them sorted, reviewed,
 gateway completely offline.
 
 **Phase 2 - richer sources + AI upgrade.**
-- Obsidian and Notion connectors.
+- ~~Obsidian and Notion connectors.~~ **Shipped**, along with Google Docs, which moved up from
+  Phase 3: `web/src/features/import/connectors/sources/`. All three read exported FILES in the
+  browser, so none of them needs a credential or a deployment secret, and `sourcesRegistry()`
+  now advertises them as `setup: 'none'`. Google Docs is the Takeout / "File > Download" path -
+  a Drive OAuth connector can be added beside it later without changing anything downstream.
+  Two things the plan did not anticipate, both in the connectors' own tests:
+  - The **size budget has to be spent after filtering, not before.** Archive entries are read in
+    order, so a vault whose `attachments/` folder sorts first ate the 40MB budget its notes
+    needed. `SourceConnector.keepPath` is applied inside `expandZip` for that reason, and a
+    truncated archive now says so instead of quietly importing half a vault.
+  - **Notion writes page properties as bare `Key: value` lines** under the H1, with no
+    frontmatter fence, so the generic parser cannot see them. `RawDoc.transformText` exists to
+    give one source a hook into extraction without the pipeline learning about connectors.
 - **LLM categoriser** behind the same interface, used when AI is healthy or a personal key is set,
   batched and quota-gated, degrading to heuristic. Review banner states which ran.
 - Optional photo OCR (gateway vision or tesseract.js), off by default for large batches.
@@ -508,7 +520,8 @@ gateway completely offline.
 
 **Phase 3 - offline-smart + connected sources.**
 - In-browser embedding categoriser (transformers.js) replacing TF-IDF similarity.
-- Google Docs via Drive OAuth; Apple Notes via exported files.
+- Google Docs via Drive OAuth (the file-based Google Docs connector shipped in Phase 2 above);
+  Apple Notes via exported files.
 - Re-import de-duplication using `externalId` so importing the same vault twice updates rather than
   duplicates.
 

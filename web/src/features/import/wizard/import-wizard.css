@@ -90,6 +90,19 @@
 
 .iw-err { color: var(--danger); font-size: 12.5px; }
 .iw-err-block { margin-top: 12px; padding: 8px 12px; border: 1px solid var(--danger); background: var(--danger-soft); border-radius: var(--radius); }
+/* Non-fatal: the import continues, but not with everything. Amber rather than red, and it
+   sits alongside .iw-err-block so a run can show both. */
+.iw-warn {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  color: var(--warn);
+  font-size: 12.5px;
+  line-height: 1.45;
+  border-color: var(--warn);
+  background: var(--warn-soft);
+}
+.iw-warn svg { flex: none; margin-top: 2px; }
 .iw-warn { color: var(--warn); font-size: 12.5px; }
 
 :where(.iw-panel) *:focus-visible { outline: none; box-shadow: var(--focus-ring); border-radius: var(--radius); }

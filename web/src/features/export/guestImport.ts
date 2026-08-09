@@ -49,7 +49,8 @@ function titleFrom(path: string, frontmatterTitle: string | undefined, markdown:
 }
 
 export async function importIntoGuestStore(input: File[] | FileList): Promise<GuestImportResult> {
-  const { files, skipped: skippedInArchive } = await expandArchives(Array.from(input));
+  const { files, ignored, truncated } = await expandArchives(Array.from(input));
+  const skippedInArchive = ignored + truncated;
   const usable = files.filter((f) => TEXT_EXT.test(f.name));
   let skipped = skippedInArchive + (files.length - usable.length);
   if (usable.length === 0) {

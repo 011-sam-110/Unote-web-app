@@ -1048,8 +1048,11 @@ export function sourcesRegistry(): ImportSourceDto[] {
     { id: 'files', label: 'Documents', setup: 'none', available: true },
     { id: 'photos', label: 'Photos', setup: 'none', available: true },
     { id: 'markdown', label: 'Markdown / folder', setup: 'none', available: true },
-    { id: 'obsidian', label: 'Obsidian vault', setup: 'coming-soon', available: false },
-    { id: 'notion', label: 'Notion export', setup: 'coming-soon', available: false },
-    { id: 'gdocs', label: 'Google Docs', setup: 'oauth', available: false },
+    // All three read exported files in the browser, so none of them needs a credential or a
+    // deployment secret to work - which is why they are 'none' rather than 'oauth'. A Drive
+    // OAuth connector can be added beside gdocs later without changing this one.
+    { id: 'obsidian', label: 'Obsidian vault', setup: 'none', available: true },
+    { id: 'notion', label: 'Notion export', setup: 'none', available: true },
+    { id: 'gdocs', label: 'Google Docs', setup: 'none', available: true },
   ];
 }

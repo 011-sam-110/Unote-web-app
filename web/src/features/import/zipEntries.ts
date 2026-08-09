@@ -46,9 +46,19 @@ function isNoise(path: string): boolean {
 
 export interface ZipExpansion {
   files: File[];
-  /** Entries dropped for being noise or past the bounds above, so the caller can say so. */
-  skipped: number;
+  /** Entries dropped for being noise, or for not being wanted by this source. */
+  ignored: number;
+  /** Entries dropped because the archive ran past the bounds above. Counted separately
+   *  because it is the one the user needs telling about: it means their import is
+   *  INCOMPLETE, and silently returning a partial vault would look like a successful one. */
+  truncated: number;
 }
+
+/** Which entries this source can use, if it knows. Applied BEFORE the size and count caps,
+ *  so an Obsidian vault's `attachments/` folder cannot eat the budget its notes needed -
+ *  entries are read in archive order, and a filter that ran afterwards would be filtering
+ *  a list the images had already truncated. */
+export type KeepEntry = (path: string) => boolean;
 
 /**
  * Read one archive fully in memory.
@@ -57,7 +67,7 @@ export interface ZipExpansion {
  * tens of megabytes of text, and the sync call has no worker spawn, no CSP surface and no
  * partial-failure states to reason about.
  */
-export async function expandZip(file: File): Promise<ZipExpansion> {
+export async function expandZip(file: File, keep?: KeepEntry): Promise<ZipExpansion> {
   const bytes = new Uint8Array(await file.arrayBuffer());
   let entries: Record<string, Uint8Array>;
   try {
@@ -67,37 +77,40 @@ export async function expandZip(file: File): Promise<ZipExpansion> {
   }
 
   const files: File[] = [];
-  let skipped = 0;
+  let ignored = 0;
+  let truncated = 0;
   let total = 0;
 
   for (const [path, data] of Object.entries(entries)) {
-    if (isNoise(path) || data.length === 0) {
-      skipped++;
+    if (isNoise(path) || data.length === 0 || (keep && !keep(path))) {
+      ignored++;
       continue;
     }
     if (files.length >= MAX_ENTRIES || total + data.length > MAX_TOTAL_BYTES) {
-      skipped++;
+      truncated++;
       continue;
     }
     total += data.length;
     files.push(new File([data as BlobPart], path, { type: mimeFor(path) }));
   }
 
-  return { files, skipped };
+  return { files, ignored, truncated };
 }
 
 /** Replace every archive in a selection with its contents, leaving loose files alone. */
-export async function expandArchives(input: File[]): Promise<ZipExpansion> {
+export async function expandArchives(input: File[], keep?: KeepEntry): Promise<ZipExpansion> {
   const out: File[] = [];
-  let skipped = 0;
+  let ignored = 0;
+  let truncated = 0;
   for (const file of input) {
     if (!isZip(file)) {
       out.push(file);
       continue;
     }
-    const expanded = await expandZip(file);
+    const expanded = await expandZip(file, keep);
     out.push(...expanded.files);
-    skipped += expanded.skipped;
+    ignored += expanded.ignored;
+    truncated += expanded.truncated;
   }
-  return { files: out, skipped };
+  return { files: out, ignored, truncated };
 }

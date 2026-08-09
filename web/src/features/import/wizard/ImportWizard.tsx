@@ -56,6 +56,8 @@ export default function ImportWizard({ open, initialSource, notebooks, onClose, 
   const [photoResult, setPhotoResult] = useState<{ created: number; failed: number } | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** Non-fatal: the import is going ahead, but not with everything the user handed over. */
+  const [notice, setNotice] = useState<string | null>(null);
 
   // Reset on open, honouring an initial source preselect.
   useEffect(() => {
@@ -71,6 +73,7 @@ export default function ImportWizard({ open, initialSource, notebooks, onClose, 
     setPhotoFiles([]);
     setPhotoResult(null);
     setError(null);
+    setNotice(null);
     api.importSources().then(({ sources }) => setAvailability(Object.fromEntries(sources.map((s) => [s.id, s])))).catch(() => {});
   }, [open, initialSource]);
 
@@ -111,7 +114,18 @@ export default function ImportWizard({ open, initialSource, notebooks, onClose, 
     // folder gives - which is what makes export then import a real round trip.
     let files: File[];
     try {
-      files = (await expandArchives(Array.from(fileList))).files;
+      // The connector's own path filter goes in, so the archive's size budget is spent on
+      // the files this source can actually read rather than on a vault's attachments.
+      const expansion = await expandArchives(Array.from(fileList), connector.keepPath);
+      files = expansion.files;
+      // A truncated archive is a partial import, and a partial import that says nothing
+      // looks exactly like a complete one. Ignored entries are not worth a line - dropping
+      // `.obsidian/` config is the connector working, not a loss.
+      setNotice(
+        expansion.truncated > 0
+          ? `This archive is larger than one import can hold, so ${expansion.truncated} file${expansion.truncated === 1 ? ' was' : 's were'} left out. Import what came through, then bring the rest over in a second pass.`
+          : null,
+      );
     } catch (e) {
       setError(msg(e));
       return;
@@ -294,6 +308,11 @@ export default function ImportWizard({ open, initialSource, notebooks, onClose, 
                     </button>
                   </div>
                 </>
+              )}
+              {notice && (
+                <p className="iw-warn iw-err-block" role="status">
+                  <Icon name="alert-circle" size={14} /> {notice}
+                </p>
               )}
               {error && <p className="iw-err iw-err-block">{error}</p>}
             </div>

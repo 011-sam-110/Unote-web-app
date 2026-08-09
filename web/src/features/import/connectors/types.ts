@@ -19,6 +19,17 @@ export interface RawDoc {
   file?: File;
   createdAt?: string;
   updatedAt?: string;
+  /**
+   * Source-specific cleanup of the extracted text, applied by extract.ts once the file has
+   * been read.
+   *
+   * It hangs off the doc rather than the connector because extraction runs per file and
+   * never sees which connector produced it. The case it exists for is Notion, which writes
+   * a page's properties as bare `Key: value` lines under the title with no frontmatter
+   * fence - invisible to the generic parser, and the first thing the user sees in the note
+   * if nothing strips it.
+   */
+  transformText?: (text: string) => { text: string; tags?: string[] };
 }
 
 export type SourceSetup = 'none' | 'oauth' | 'coming-soon';
@@ -33,6 +44,9 @@ export interface SourceConnector {
   accept?: string;
   /** Whether the picker offers "choose a folder" (webkitdirectory). */
   supportsFolder?: boolean;
+  /** Which paths inside a dropped .zip are worth unpacking at all. Used to spend the
+   *  archive's size budget on the files this source actually reads - see zipEntries.ts. */
+  keepPath?: (path: string) => boolean;
   setup: SourceSetup;
   /** Turn picked files into RawDocs. Client-side and synchronous for the Phase-1 file
    *  connectors; extraction happens downstream in the pipeline, not here. */

@@ -1,8 +1,16 @@
-// The Phase-1 connector registry. All three are client-side and file-based; a dropped folder
-// keeps its structure via webkitRelativePath, which becomes the folder signal the categoriser
-// leans on hardest. Adding a source later is: write one connector, push it here.
+// The connector registry. Every source is client-side and file-based: a dropped folder keeps
+// its structure via webkitRelativePath, which becomes the folder signal the categoriser leans
+// on hardest, and a .zip is expanded to the same shape before it gets here (zipEntries.ts).
+// Adding a source is: write one connector, push it here.
+//
+// The three export-format sources (Obsidian, Notion, Google Docs) each need real work on the
+// paths and filenames their tool produces before the pipeline can read them, so they live in
+// ./sources/ with their own tests rather than inline here.
 import type { RawDoc, SourceConnector } from './types';
 import { classify, folderPathOf } from './extract';
+import { ingestVault, keepVaultFile } from './sources/obsidian';
+import { ingestNotion, keepNotionFile } from './sources/notion';
+import { ingestDrive, keepDriveFile } from './sources/gdocs';
 
 function toRawDocs(files: File[], keep: (f: File) => boolean): RawDoc[] {
   const out: RawDoc[] = [];
@@ -51,10 +59,41 @@ const markdown: SourceConnector = {
   ingest: (fs) => toRawDocs(fs, (f) => classify(f) === 'text'),
 };
 
-// Advertised but not yet built - rendered greyed in the grid.
-const obsidian: SourceConnector = { id: 'obsidian', label: 'Obsidian vault', description: 'A vault folder or .zip', icon: 'layers', setup: 'coming-soon', ingest: () => [] };
-const notion: SourceConnector = { id: 'notion', label: 'Notion export', description: 'A .zip export', icon: 'layers', setup: 'coming-soon', ingest: () => [] };
-const gdocs: SourceConnector = { id: 'gdocs', label: 'Google Docs', description: 'Connect Drive', icon: 'link', setup: 'coming-soon', ingest: () => [] };
+const obsidian: SourceConnector = {
+  id: 'obsidian',
+  label: 'Obsidian vault',
+  description: 'A vault folder or .zip - folders become notebooks, [[links]] survive',
+  icon: 'gem',
+  accept: '.md,.markdown,.txt,.zip',
+  supportsFolder: true,
+  keepPath: keepVaultFile,
+  setup: 'none',
+  ingest: ingestVault,
+};
+
+const notion: SourceConnector = {
+  id: 'notion',
+  label: 'Notion export',
+  description: 'The "Markdown & CSV" .zip - page ids stripped, properties become tags',
+  icon: 'blocks',
+  accept: '.zip,.md,.markdown,.html',
+  supportsFolder: true,
+  keepPath: keepNotionFile,
+  setup: 'none',
+  ingest: ingestNotion,
+};
+
+const gdocs: SourceConnector = {
+  id: 'gdocs',
+  label: 'Google Docs',
+  description: 'A Takeout .zip, or documents downloaded as .docx or .html',
+  icon: 'cloud',
+  accept: '.zip,.docx,.html,.htm,.rtf,.odt,.pdf,.txt,.md',
+  supportsFolder: true,
+  keepPath: keepDriveFile,
+  setup: 'none',
+  ingest: ingestDrive,
+};
 
 export const CONNECTORS: SourceConnector[] = [files, photos, markdown, obsidian, notion, gdocs];
 

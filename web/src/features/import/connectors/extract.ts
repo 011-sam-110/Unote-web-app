@@ -3,16 +3,19 @@
 // for photos, the downscaled bytes) crosses the wire.
 //
 //   TXT / MD   -> read in the browser, parse frontmatter + #hashtags for sort signal
+//   HTML       -> converted to markdown in the browser (Google Docs exports as HTML)
 //   PDF        -> pdf.js text layer in the browser; a scanned PDF yields no text (flagged)
 //   DOCX/PPTX  -> uploaded and extracted server-side (no good browser equivalent)
 //   Photos     -> downscaled, then OCR'd best-effort with tesseract.js (lazy, degrades to '')
 import { downscaleImage } from '../downscale';
+import { htmlToMarkdown } from './html';
 import type { RawDoc } from './types';
 
-export type FileClass = 'text' | 'pdf' | 'office' | 'photo' | 'other';
+export type FileClass = 'text' | 'html' | 'pdf' | 'office' | 'photo' | 'other';
 export type StageMode = 'json' | 'upload-file' | 'upload-photo' | 'skip';
 
 const TEXT_EXT = new Set(['md', 'markdown', 'mdx', 'txt', 'text']);
+const HTML_EXT = new Set(['html', 'htm']);
 const OFFICE_EXT = new Set(['docx', 'pptx']);
 const PHOTO_EXT = new Set(['jpg', 'jpeg', 'png', 'webp', 'heic', 'heif', 'gif', 'bmp']);
 
@@ -24,6 +27,7 @@ function ext(name: string): string {
 export function classify(file: File): FileClass {
   const e = ext(file.name);
   if (TEXT_EXT.has(e)) return 'text';
+  if (HTML_EXT.has(e)) return 'html';
   if (e === 'pdf' || file.type === 'application/pdf') return 'pdf';
   if (OFFICE_EXT.has(e)) return 'office';
   if (PHOTO_EXT.has(e) || file.type.startsWith('image/')) return 'photo';
@@ -47,7 +51,9 @@ export function parseSourceTags(md: string): { tags: string[]; title?: string; b
   const tags = new Set<string>();
   let title: string | undefined;
   let body = md;
-  const fm = md.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?/);
+  // The blank lines after the closing fence are consumed too: without that, `body` opens
+  // with a newline and every round-tripped export imports with an empty first line.
+  const fm = md.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?(?:[ \t]*\r?\n)*/);
   if (fm) {
     body = md.slice(fm[0].length);
     const yaml = fm[1];
@@ -55,6 +61,13 @@ export function parseSourceTags(md: string): { tags: string[]; title?: string; b
     if (inline) for (const t of inline[1].split(',')) { const s = t.trim().replace(/['"]/g, ''); if (s) tags.add(s); }
     const block = yaml.match(/^tags:\s*\n((?:[ \t]*-[ \t]*.+\r?\n?)+)/m);
     if (block) for (const line of block[1].split('\n')) { const m = line.match(/-\s*(.+)/); if (m) { const s = m[1].trim().replace(/['"]/g, ''); if (s) tags.add(s); } }
+    // The third form Obsidian accepts and this parser used to ignore: a bare scalar,
+    // `tags: databases, revision` or `tags: databases revision`. Vaults written by hand
+    // use it constantly, and a vault import that silently dropped every tag would be a
+    // poor advert for the connector. `[^\s[]` on the first character keeps this off the
+    // bracketed line above, and off a `tags:` that introduces a block list.
+    const bare = yaml.match(/^tags?:[ \t]+([^\s[][^\n]*)$/m);
+    if (bare) for (const t of bare[1].split(/[,;\s]+/)) { const s = t.trim().replace(/['"]/g, '').replace(/^#/, ''); if (s) tags.add(s); }
     const t = yaml.match(/^title:\s*(.+)$/m);
     if (t) title = t[1].trim().replace(/['"]/g, '');
   }
@@ -227,6 +240,19 @@ export interface ProcessedDoc {
 
 let seq = 0;
 
+/** Run a doc's source-specific text cleanup, if it has one. A transform that throws is
+ *  treated as "no cleanup available" - a Notion property parser tripping over one odd page
+ *  should cost that page its tags, not its import. */
+function applyTransform(doc: RawDoc, text: string): { text: string; tags: string[] } {
+  if (!doc.transformText) return { text, tags: [] };
+  try {
+    const out = doc.transformText(text);
+    return { text: out.text, tags: out.tags ?? [] };
+  } catch {
+    return { text, tags: [] };
+  }
+}
+
 export async function processFile(file: File, doc: RawDoc, ocr: OcrRunner | null): Promise<ProcessedDoc> {
   const localId = `f${++seq}`;
   const sourcePath = doc.sourcePath ?? file.name;
@@ -247,8 +273,34 @@ export async function processFile(file: File, doc: RawDoc, ocr: OcrRunner | null
     switch (fileClass) {
       case 'text': {
         const raw = await file.text();
-        const { tags, title } = parseSourceTags(raw);
-        return { ...base, mode: 'json', text: raw, title: base.title ?? title, sourceTags: dedupe([...base.sourceTags, ...tags]), ok: true };
+        const { tags, title, body } = parseSourceTags(raw);
+        // `body`, not `raw`: the frontmatter has already been turned into tags, and staging
+        // the raw document pastes the `---` block back in as the note's opening lines. The
+        // whole point of parsing it was not to do that.
+        const cleaned = applyTransform(doc, body);
+        return {
+          ...base,
+          mode: 'json',
+          text: cleaned.text,
+          title: base.title ?? title,
+          sourceTags: dedupe([...base.sourceTags, ...tags, ...cleaned.tags]),
+          ok: true,
+        };
+      }
+      case 'html': {
+        const { markdown, title } = htmlToMarkdown(await file.text());
+        const cleaned = applyTransform(doc, markdown);
+        // The connector's title wins where it has one (it read a cleaner path); the
+        // document's own <title> is the fallback, and for a Google Doc it is the real name.
+        return {
+          ...base,
+          mode: 'json',
+          text: cleaned.text,
+          title: base.title ?? title,
+          sourceTags: dedupe([...base.sourceTags, ...cleaned.tags]),
+          note: cleaned.text.trim() ? undefined : 'no text found',
+          ok: true,
+        };
       }
       case 'pdf': {
         const text = await extractPdfText(file);

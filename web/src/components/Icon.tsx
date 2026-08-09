@@ -32,6 +32,9 @@ export type IconName =
   | 'alert-circle'
   | 'info'
   | 'folder-plus'
+  | 'gem'
+  | 'blocks'
+  | 'cloud'
   | 'phone'
   | 'palette'
   | 'camera'
@@ -258,6 +261,25 @@ const paths: Record<IconName, ReactNode> = {
       <line x1="9" y1="13" x2="15" y2="13" />
     </>
   ),
+  // Import-source glyphs. Generic shapes suggesting each tool's own idea of itself - a cut
+  // gem, a grid of blocks, a cloud - rather than reproductions of their logos, which are
+  // trademarks and would sit badly next to a hand-drawn stroke set anyway.
+  gem: (
+    <>
+      <path d="M6 3h12l3 6-9 12-9-12Z" />
+      <path d="M3 9h18" />
+      <path d="M9.5 9 12 21 14.5 9 12 3Z" />
+    </>
+  ),
+  blocks: (
+    <>
+      <rect x="3.5" y="3.5" width="7" height="7" rx="1.5" />
+      <rect x="13.5" y="3.5" width="7" height="7" rx="1.5" />
+      <rect x="3.5" y="13.5" width="7" height="7" rx="1.5" />
+      <rect x="13.5" y="13.5" width="7" height="7" rx="1.5" />
+    </>
+  ),
+  cloud: <path d="M7 19a4.5 4.5 0 0 1-.4-9A6 6 0 0 1 18 9.6 4 4 0 0 1 17.5 19Z" />,
   phone: (
     <>
       <rect x="7" y="2" width="10" height="20" rx="2" />
