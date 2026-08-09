@@ -1,0 +1,37 @@
+appId: com.unote.desktop
+productName: Unote
+copyright: Unote
+
+directories:
+  output: release
+  buildResources: desktop/build
+
+files:
+  - dist-desktop/**/*
+  - desktop/offline.html
+
+# The web app is fetched from the origin at runtime, so no renderer assets ship
+# here. That is what keeps a web deploy reaching the app without a new binary.
+publish:
+  provider: generic
+  url: https://unote-six.vercel.app/desktop
+  channel: latest
+
+win:
+  target: [nsis]
+  artifactName: Unote-Setup-${version}.${ext}
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+
+mac:
+  target: [dmg, zip]   # zip is required for electron-updater on macOS
+  category: public.app-category.productivity
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  artifactName: Unote-${version}-${arch}.${ext}
+
+linux:
+  target: []   # out of scope

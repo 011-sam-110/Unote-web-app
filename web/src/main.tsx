@@ -24,6 +24,7 @@ import JoinPage from './features/share/JoinPage'
 import TryRoute from './features/guest/TryRoute'
 import GuestMigrationHost from './features/guest/GuestMigrationHost'
 import { useGuest } from './features/guest/guestMode'
+import { registerServiceWorker } from './registerSW'
 import './styles/index.css'
 
 // AuthProvider sits inside the router (rather than around RouterProvider) so the auth
@@ -113,6 +114,8 @@ const router = createBrowserRouter([
     ],
   },
 ])
+
+registerServiceWorker()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

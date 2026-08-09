@@ -4,6 +4,8 @@
   "version": "0.1.0",
   "// type": "ESM, so Vercel compiles api/index.ts as an ES module. Without this it defaults to CommonJS and require()ing the ESM server throws ERR_REQUIRE_ESM at runtime, a failure that only appears once deployed.",
   "type": "module",
+  "// main": "Entry for the Electron shell only. electron-builder reads it to find the packaged main process; nothing imports this package.",
+  "main": "dist-desktop/main.js",
   "description": "Unote: a student notebook. Notion x Obsidian x Google Docs, local-first, AI-powered.",
   "workspaces": [
     "server",
@@ -14,12 +16,19 @@
     "build": "npm run build -w web",
     "start": "npm run start -w server",
     "test": "npm run test -w server",
+    "test:web": "vitest run --root web",
     "e2e": "playwright test",
     "e2e:ui": "playwright test --ui",
-    "review-pack": "node scripts/review-pack.mjs"
+    "review-pack": "node scripts/review-pack.mjs",
+    "desktop:compile": "tsc -p desktop/tsconfig.json && node scripts/desktop-postbuild.mjs",
+    "desktop:dev": "npm run desktop:compile && electron dist-desktop/main.js",
+    "desktop:build": "npm run desktop:compile && electron-builder --config electron-builder.yml"
   },
   "devDependencies": {
     "@playwright/test": "^1.61.1",
-    "concurrently": "^9.1.0"
+    "concurrently": "^9.1.0",
+    "electron": "^33.4.11",
+    "electron-builder": "^25.1.8",
+    "electron-updater": "^6.8.9"
   }
 }
