@@ -1444,11 +1444,21 @@ function gateCell(guest: boolean, method: string | undefined): Inline[] {
   return guest && isGated(method) ? [GATE] : [];
 }
 
-/** Which api method an insert block ultimately needs. Only the gated ones appear. */
+/**
+ * Which api method an insert block ultimately needs. Only the gated ones appear.
+ *
+ * All three are `uploadImage`, which is about having somewhere to keep a file rather
+ * than about boards or the import wizard - and that is what a guest actually lacks.
+ * `canvas-snapshot` writes an image into a note (CanvasInsertModal.tsx:71 calls
+ * api.uploadImage; the board is only where the picture came from). `model3d` posts by
+ * raw XHR to /api/import/file, which no api-client method covers - `uploadImportFile`
+ * is a DIFFERENT endpoint (/api/import/batches/:id/items) and naming it here would
+ * describe the block as part of the import wizard, which it is not.
+ */
 const BLOCK_NEEDS: Record<string, string> = {
   image: 'uploadImage',
-  model3d: 'uploadImportFile',
-  'canvas-snapshot': 'createCanvasItem',
+  model3d: 'uploadImage',
+  'canvas-snapshot': 'uploadImage',
 };
 
 function insertRows(guest: boolean, items: InsertItem[]): Inline[][][] {

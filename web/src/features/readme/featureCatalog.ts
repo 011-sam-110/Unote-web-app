@@ -39,7 +39,10 @@ export const FEATURE_SECTIONS: FeatureSection[] = [
     lines: [
       { what: 'Stickies, cards that link to real notes, and arrows between them', needs: 'createCanvasItem' },
       { what: 'Draw with a pen, a highlighter or a finger', needs: 'addInk' },
-      { what: 'Drop a snapshot of a board into any note', needs: 'createCanvasItem' },
+      // uploadImage, not createCanvasItem: this one writes an IMAGE into a note.
+      // CanvasInsertModal.tsx:71 calls api.uploadImage - the board is only the source
+      // of the picture, so the thing a guest actually lacks is somewhere to put the file.
+      { what: 'Drop a snapshot of a board into any note', needs: 'uploadImage' },
     ],
   },
   {
