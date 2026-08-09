@@ -62,7 +62,11 @@ export const FEATURE_SECTIONS: FeatureSection[] = [
     title: 'Ask AI',
     blurb: 'A conversation about the note you are looking at, or about everything you have written.',
     lines: [
-      { what: 'Ask about this note; it can rewrite, summarise or make cards from it', needs: 'aiImprove' },
+      { what: 'Ask about this note, and have it rewrite or summarise what you wrote', needs: 'aiImprove' },
+      // Its own line rather than folded into the one above: aiFlashcards is the only
+      // one of these keys whose refusal message says something specific ("turn a note
+      // into flashcards") instead of the generic "AI runs on the server".
+      { what: 'Turn this note into flashcards in one step', needs: 'aiFlashcards' },
       { what: 'Ask across every note and get answers with the sources listed', needs: 'aiAsk' },
       { what: 'Every change is shown as a diff you approve before it lands', needs: 'aiSuggest' },
     ],
