@@ -94,7 +94,50 @@ export function createFolioExtensions(opts: BuildExtensionsOpts): Extensions {
       notEqual: false, // != stays !=
     }),
     CodeBlockWithView.configure({ lowlight, defaultLanguage: 'plaintext' }),
-    Details.configure({ persist: true, HTMLAttributes: { class: 'folio-details' } }),
+    Details.configure({
+      persist: true,
+      HTMLAttributes: { class: 'folio-details' },
+      /*
+       * The node view's toggle <button> is the only element wired to open a toggle, and
+       * it sits INSIDE the ProseMirror contenteditable. ProseMirror's keydown handler
+       * calls preventDefault() on Enter (Enter means "split the block" to the editor),
+       * which also cancels the browser's implicit activation of a focused button - so
+       * Enter on the toggle did nothing at all. Measured before this: Space toggled,
+       * Enter was swallowed. Handling both keys here and stopping the event before it
+       * reaches the editor makes the control behave like the button it already claims
+       * to be, and adds the `aria-expanded` a disclosure widget is supposed to expose
+       * (the extension's default only rewrites aria-label).
+       *
+       * Mutating the element here is the sanctioned path, not a hack: the node view's
+       * own `ignoreMutation` returns true for anything inside this button precisely so
+       * that `renderToggleButton` can write to it without disturbing ProseMirror.
+       */
+      renderToggleButton: ({ element, isOpen }) => {
+        element.setAttribute('aria-label', isOpen ? 'Collapse toggle' : 'Expand toggle');
+        element.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+        // Re-run on every render of the node view, so bind the listener exactly once.
+        if (element.dataset.folioKeyboard === 'on') return;
+        element.dataset.folioKeyboard = 'on';
+        element.addEventListener('keydown', (event) => {
+          if (event.key !== 'Enter' && event.key !== ' ') return;
+          // preventDefault stops Space activating a SECOND time via the browser's own
+          // keyup handling; stopPropagation keeps the editor from splitting the block
+          // or typing a space into the summary sitting behind the button.
+          event.preventDefault();
+          event.stopPropagation();
+          element.click();
+          // When the editor is editable the extension's click handler ends its chain
+          // with `.focus()`, which pulls DOM focus off this button and onto the
+          // ProseMirror root - a keyboard user would get ONE activation and then find
+          // the next Enter splitting a paragraph somewhere else. That steal happens
+          // inside a requestAnimationFrame (@tiptap/core's `focus` command), so a
+          // synchronous refocus here is silently undone a frame later; queueing ours
+          // behind theirs in the same frame is what actually holds. Harmless when
+          // read-only, where the extension never refocuses at all.
+          requestAnimationFrame(() => element.focus());
+        });
+      },
+    }),
     DetailsSummary,
     DetailsContent,
     Mathematics.configure({

@@ -191,3 +191,38 @@ test('AI grouping splits a single burst that covers two subjects', async ({ page
   await expect(dialog.locator('.pr-group')).not.toHaveCount(1, { timeout: 15_000 });
   await expect(dialog.getByRole('button', { name: /create \d+ notes/i })).toBeVisible();
 });
+
+/**
+ * The sidebar's Import button - the one people actually reach for.
+ *
+ * This test exists because the feature was originally only reachable by opening the notebook
+ * page's Import dropdown, choosing "Photo of notes", and THEN picking more than one file. The
+ * sidebar's Import opened a wizard whose "Photos" tile ran a completely different, older path,
+ * so the obvious door led to the wrong room. Both doors now reach the same engine.
+ */
+test('the sidebar Import button reaches the grouped photo flow', async ({ page, request }) => {
+  test.setTimeout(180_000);
+
+  await apiCreateNotebook(request, uniqueName('E2E Sidebar Photos'));
+  await page.goto('/');
+
+  const photos = await makePhotos(page);
+
+  await page.getByTestId('import-button').click();
+  const wizard = page.getByRole('dialog', { name: /import old notes/i });
+  await expect(wizard).toBeVisible({ timeout: 10_000 });
+
+  // The tile has to say what it does, or the whole discoverability fix is cosmetic.
+  const photoTile = wizard.getByRole('button', { name: /photos/i }).first();
+  await expect(photoTile).toContainText(/grouped into notes/i);
+  await photoTile.click();
+
+  await wizard.locator('input[type="file"]').first().setInputFiles(photos);
+
+  // Straight into the grouped review - no categorise step, no per-photo notebook picking.
+  await expect(wizard.getByText(/4 photos\s*→\s*2 notes/i)).toBeVisible({ timeout: 150_000 });
+  await expect(wizard.locator('.pr-group')).toHaveCount(2);
+
+  await wizard.getByRole('button', { name: /create 2 notes/i }).click();
+  await expect(wizard.getByText(/2 notes imported/i)).toBeVisible({ timeout: 90_000 });
+});

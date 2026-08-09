@@ -18,6 +18,11 @@ export interface PhotoImportFlowProps {
   notebooks: NotebookLite[];
   /** Notebook the surface had already selected; applied to every group as the starting choice. */
   defaultNotebookId?: string | null;
+  /** False imports the photos as pictures only, skipping the ~7MB OCR engine download. */
+  readText?: boolean;
+  /** Fires as soon as the staging batch exists, so a host that owns the dialog can discard it
+   *  if the user closes the whole thing rather than pressing Discard in here. */
+  onBatchCreated?: (batchId: string) => void;
   onDone: (result: { created: number; failed: number }) => void;
   onCancel: () => void;
 }
@@ -29,7 +34,15 @@ function msg(e: unknown): string {
   return e instanceof Error ? e.message : 'Something went wrong';
 }
 
-export default function PhotoImportFlow({ files, notebooks, defaultNotebookId, onDone, onCancel }: PhotoImportFlowProps) {
+export default function PhotoImportFlow({
+  files,
+  notebooks,
+  defaultNotebookId,
+  readText = true,
+  onBatchCreated,
+  onDone,
+  onCancel,
+}: PhotoImportFlowProps) {
   const [phase, setPhase] = useState<Phase>('staging');
   const [batchId, setBatchId] = useState<string | null>(null);
   const [progress, setProgress] = useState<PhotoProgress | null>(null);
@@ -64,12 +77,13 @@ export default function PhotoImportFlow({ files, notebooks, defaultNotebookId, o
       try {
         const { batchId: id } = await api.createImportBatch('photos');
         batchRef.current = id; // recorded before the liveness check, so discard can still clean up
+        onBatchCreated?.(id);
         if (!aliveRef.current) return;
         setBatchId(id);
 
         const result = await ingestPhotos(id, files, (p) => {
           if (aliveRef.current) setProgress(p);
-        });
+        }, { readText });
         if (!aliveRef.current) return;
 
         if (!result.items.length) {
@@ -89,6 +103,8 @@ export default function PhotoImportFlow({ files, notebooks, defaultNotebookId, o
     })();
 
     return stop;
+    // `readText` and `onBatchCreated` are read once, at the start of a run that must not restart.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [files, defaultNotebookId]);
 
   /** Seed each group's notebook from whatever the surface had selected, so the common case
@@ -186,7 +202,7 @@ export default function PhotoImportFlow({ files, notebooks, defaultNotebookId, o
         <p className="pi-state-msg">{done} of {total} done</p>
         {/* The first photo pays for a one-off ~7MB engine download. Saying so beats a spinner
             that looks stuck on a slow connection. */}
-        {done === 0 && <p className="pi-hint">Setting up the text reader - the first photo takes a moment.</p>}
+        {done === 0 && readText && <p className="pi-hint">Setting up the text reader - the first photo takes a moment.</p>}
         <ul className="pi-files">
           {(progress?.files ?? []).map((f) => (
             <li className={`pi-file is-${f.stage}`} key={f.localId}>
@@ -218,7 +234,7 @@ export default function PhotoImportFlow({ files, notebooks, defaultNotebookId, o
       grouper={grouper}
       busy={busy}
       aiError={aiError}
-      ocrAvailable={ocrAvailable}
+      ocrAvailable={!readText || ocrAvailable}
       onRegroup={saveGroups}
       onRegroupByTime={regroupByTime}
       onRegroupWithAi={regroupWithAi}

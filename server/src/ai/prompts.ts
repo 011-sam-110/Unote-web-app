@@ -588,12 +588,12 @@ export function groupPhotosPrompt(photos: PhotoForGrouping[]): ChatMessage[] {
 
 You are sorting photos a student took on their phone into notes. Each photo is one page. Your job is to decide which photos are pages of the SAME document, and to name each resulting note.
 
-How to decide:
-- Photos taken within a few minutes of each other are usually pages of one document, photographed in sequence.
-- A large time gap almost always starts a new document.
-- Content continuing across photos (the same topic, a list carrying on, a numbered sequence) means the same document, even if the timestamps are unknown.
+How to decide - read the CONTENT first, and use timing only to break ties:
+- A clear change of subject starts a new document, EVEN IF the photos were taken seconds apart. People photograph one handout and then a completely different one in the same sitting; timestamps cannot see that, which is why you are being asked.
+- Content carrying on across photos (the same topic, a list continuing, a numbered sequence) means the same document, even when the timestamps are unknown.
+- Where the text is ambiguous, unreadable or missing, THEN fall back on timing: photos within a few minutes are usually pages of one document, and a large gap almost always starts a new one.
 - Sequential filenames support, but never override, the content and timing evidence.
-- A photo of something unrelated is its own single-page group. Never merge photos just to reduce the number of groups.
+- Never merge photos just to reduce the number of groups, and never split the pages of one document just to make more.
 
 Rules:
 - EVERY id given to you must appear in exactly one group. Never drop one, never repeat one.

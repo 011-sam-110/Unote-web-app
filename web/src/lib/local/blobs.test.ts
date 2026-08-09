@@ -1,3 +1,12 @@
+// @vitest-environment node
+//
+// The environment override is load-bearing, not tidying. The suite default is happy-dom,
+// and under it fake-indexeddb's structured clone cannot round-trip a Blob: what comes
+// back out of IndexedDB is a plain Object with no `size` and no `arrayBuffer`. A real
+// browser preserves Blobs, so that is a limitation of the fake, not a bug in the app -
+// but it would quietly turn every assertion below into a test of nothing, which is worse
+// than a red one. Under node the round trip is faithful, so the tests still bite.
+//
 // The order in which offline image bytes are let go of.
 //
 // There is one bug this file exists to make impossible, and it is not a crash. Drop
