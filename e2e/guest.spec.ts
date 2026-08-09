@@ -122,3 +122,102 @@ test('signing up offers to bring the guest notes into the new account', async ({
   // And guest mode is over: the unsaved-work banner is gone.
   await expect(page.getByTestId('guest-banner')).toHaveCount(0);
 });
+
+/**
+ * A guest's first screen is the README, and it must RENDER - not merely exist as JSON.
+ *
+ * Asserting the doc contains a `chem` node proves nothing about whether a molecule
+ * appears. Each assertion below reads something only a working node view produces: the
+ * KaTeX span, the smiles-drawer SVG, an opened toggle's own content becoming visible, a
+ * callout's tone attribute, a table, a task-list checkbox.
+ *
+ * `smiles-drawer` draws into an <svg> here (smilesRenderer.ts uses its `SvgDrawer`, not a
+ * canvas backend) - there is no <canvas> anywhere in this document, so the structure is
+ * read from `.folio-chem-svg` gaining drawn children, not from a canvas element.
+ */
+test('a guest lands on a README that renders its own blocks', async ({ page }) => {
+  await page.goto('/try');
+
+  // The note's identity: NotePage renders the title in its own field above the body
+  // (buildReadme.ts deliberately emits no "README" heading in the body - a second `h1
+  // README` would sit right under the real one), so the title field is what to read.
+  await expect(page.getByLabel('Note title')).toHaveValue('README');
+
+  // Toggles render closed by default. `Details` is `persist: true`, so the content node
+  // already exists in the DOM, but the `hidden` attribute the DetailsContent node view
+  // sets keeps it out of the render tree until opened.
+  const firstToggle = page.locator('.folio-details').first();
+  await expect(firstToggle).toBeVisible();
+  const firstToggleContent = firstToggle.locator('[data-type="detailsContent"]');
+  await expect(firstToggleContent).toBeHidden();
+
+  // Opening it: the toggle's own "expand" <button> (@tiptap/extension-details' node view)
+  // gets NO CSS anywhere in this app - no class, no icon, no text - and the global button
+  // reset (base.css: `button { padding: 0; border: none; }`) collapses an empty button to
+  // a genuine 0x0 box. Measured directly: boundingBox() reports {width:0, height:0}, a
+  // real pointer click times out waiting for it to become actionable, and even a focused
+  // keyboard Enter does nothing. Only `dispatchEvent('click')` - which reaches the
+  // element's real listener without going through hit-testing - opens it. That is a
+  // genuine, pre-existing bug (the `Details.configure(...)` wiring predates this branch,
+  // first landed in 9edb1ec): nobody, on any input device, can currently open a toggle by
+  // interacting with it. Using `.click()` here would either hang the suite or silently
+  // paper over that with a fake "it opens fine" result, so this dispatches the event
+  // directly - proving the toggle's OWN logic and the content behind it are correct,
+  // without pretending the on-screen control is operable today. See the task report for
+  // the full readout; this is unrelated to buildReadme.ts and out of scope to fix here.
+  await firstToggle.locator('button').first().dispatchEvent('click');
+  await expect(firstToggleContent).toBeVisible();
+
+  // Every group's reference table and live demos sit INSIDE that group's toggle
+  // (buildReadme.ts's insertSection), so open the rest too. That is also required for the
+  // "every block is named" check below: `innerText()` (unlike `textContent()`) only reads
+  // what is actually rendered on screen, and a closed toggle's content does not count.
+  const toggles = page.locator('.folio-details');
+  const toggleCount = await toggles.count();
+  for (let i = 1; i < toggleCount; i++) {
+    await toggles.nth(i).locator('button').first().dispatchEvent('click');
+  }
+
+  // Live blocks, each read from what its node view actually emits.
+  await expect(page.locator('.katex').first()).toBeVisible();
+  await expect(page.locator('table').first()).toBeVisible();
+  await expect(page.locator('[data-tone="info"]').first()).toBeVisible();
+  await expect(page.getByRole('checkbox').first()).toBeVisible();
+
+  // The chemistry demo (caffeine) draws asynchronously once the smiles-drawer chunk has
+  // loaded and parsed the SMILES string - give it generous time. Read a bond line rather
+  // than "any child": smiles-drawer always writes a <style> tag into the <svg> first
+  // (SvgWrapper.js), which exists (and is present) whether or not a molecule ever drew,
+  // so checking for children alone would pass on an empty structure.
+  await expect(page.locator('.folio-chem-svg line').first()).toBeVisible({ timeout: 15_000 });
+
+  // Every insert block is named somewhere in the note.
+  const body = await page.getByTestId('note-editor').innerText();
+  for (const name of ['Callout', 'Table', 'Code block', 'Chemistry structure', '3D model']) {
+    expect(body, `README does not mention ${name}`).toContain(name);
+  }
+
+  // The guest build is honest about what it cannot do.
+  expect(body).toContain('needs an account');
+});
+
+test('a guest returning to /try lands on their own work, not the guide', async ({ page }) => {
+  await page.goto('/try');
+  await expect(page.getByLabel('Note title')).toHaveValue('README');
+
+  // The blank note seeded alongside the README (guestStore.ts's seedGuestWorkspace) has no
+  // title, which NoteCard falls back to labelling "Untitled" - rendered as a <button> (the
+  // card's own click target), not a link, so it is found by role=button, not role=link.
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Untitled', exact: true }).click();
+  await page.getByTestId('note-editor').click();
+  await page.keyboard.type('my own note');
+
+  // Let the autosave debounce fire before navigating away: a client-side route change
+  // would leave a pending timer running, but /try is a real navigation and would drop it.
+  await page.waitForTimeout(1200);
+
+  await page.goto('/try');
+  await expect(page.getByLabel('Note title')).not.toHaveValue('README');
+  await expect(page.getByTestId('note-editor')).toContainText('my own note');
+});
