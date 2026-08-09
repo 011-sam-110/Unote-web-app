@@ -103,15 +103,17 @@ describe('routing', () => {
     await expect((api.versions as (id: string) => Promise<unknown>)('n1')).rejects.toThrow(/connection/i);
   });
 
-  it('online with a COLD mirror reads from the server', () => {
-    // On a fresh install an empty mirror and an empty account are indistinguishable.
-    // Serving the mirror here would show a signed-in user zero notes.
+  it('online reads come from the SERVER, warm mirror or not', () => {
+    // This is the boundary that seven e2e specs moved. Serving online reads from the
+    // mirror needs localApi to match the server field for field, and it does not: it
+    // ignores kind: 'canvas' and cannot resolve wikilinks, so boards opened as
+    // documents and backlinks disappeared.
+    //
+    // Online behaviour is therefore identical to before offline support existed,
+    // which is what makes this feature unable to regress the online app.
     expect(api.notes).not.toBe(localApi.notes);
-  });
-
-  it('online with a WARM mirror reads from the mirror', () => {
     setMirrorWarm(true);
-    expect(api.notes).toBe(localApi.notes);
+    expect(api.notes).not.toBe(localApi.notes);
   });
 
   it('online never serves auth from the mirror, whatever the mirror state', () => {
@@ -122,15 +124,22 @@ describe('routing', () => {
     expect(api.login).not.toBe((localApi as Record<string, unknown>).login);
   });
 
-  it('an online write goes through the mirror first, then triggers a push', async () => {
+  it('an online write is NOT served from the mirror', () => {
+    // It goes to the server and then kicks a sync, so the mirror has the change
+    // ready for the next disconnection. The wrapper is neither the local function
+    // nor the bare server function.
     setMirrorWarm(true);
-    const { notebook } = await api.createNotebook({ name: 'Seam test' });
+    expect(api.createNotebook).not.toBe(localApi.createNotebook);
+  });
+
+  it('an offline write IS served from the mirror, and queues', async () => {
+    noteRequestOutcome(false);
+    const { notebook } = await api.createNotebook({ name: 'Offline seam test' });
     expect(notebook.id).toMatch(/^[a-z0-9]{14}$/);
-    // Written locally...
     const { notebooks } = await localApi.notebooks();
-    expect(notebooks.map((n) => n.name)).toContain('Seam test');
-    // ...and a push was kicked off rather than left for the next poll.
-    expect(syncCalls.count).toBe(1);
+    expect(notebooks.map((n) => n.name)).toContain('Offline seam test');
+    // No sync attempt: there is nothing to reach.
+    expect(syncCalls.count).toBe(0);
   });
 
   it('exportUrl is passed through untouched, being synchronous', () => {

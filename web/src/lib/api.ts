@@ -14,7 +14,6 @@ import { GuestFeatureError, guestBlockedMessage } from '../features/guest/guestE
 import { localApi } from './local/localApi';
 import { noteRequestOutcome, isOnline } from './sync/connectivity';
 import { isWrite, isMirroredRead } from './sync/methods';
-import { isMirrorWarmSync } from './sync/mirrorState';
 import { syncNow } from './sync/engine';
 import type { SyncChangesResponse } from './sync/contract';
 
@@ -422,37 +421,45 @@ type AnyFn = (...args: never[]) => Promise<unknown>;
  * sends it. That is also why this does not rethrow a transport error - the write IS
  * saved, locally, and telling the user it failed would be false.
  */
-function writeThrough(local: AnyFn): AnyFn {
+/**
+ * An ONLINE write: straight to the server, then pull the result into the mirror.
+ *
+ * This is deliberately NOT local-first, and the reason is worth recording because
+ * the design originally said the opposite.
+ *
+ * Serving online writes and reads from the mirror requires `localApi` to be
+ * field-for-field equivalent to the server. It is not. It ignores `kind: 'canvas'`,
+ * so a board created online came back as a document and the app rendered the text
+ * editor. It cannot resolve wikilinks, which the server extracts from content_text
+ * into the `links` table on save, so backlinks disappeared. Seven e2e specs caught
+ * exactly that - they pass on the base commit in 58 seconds and failed here.
+ *
+ * The gap is closable field by field, but "the app also feels faster online" was
+ * never the goal; working offline was. So online behaviour is now unchanged from
+ * before this feature existed, and the mirror is kept current by pulling the
+ * server's own record afterwards through the delta feed - the same path a change
+ * from another device takes, and the one the convergence tests already cover.
+ */
+function writeThroughServer(server: AnyFn): AnyFn {
   return (async (...args: never[]) => {
-    const localResult = await local(...args);
-
-    // Kick the sync off, do NOT wait for it. This is the whole point of local-first:
-    // the write is already durable in IndexedDB and queued in the outbox, so making
-    // the caller wait for a network round-trip buys nothing and costs everything.
-    //
-    // An earlier version awaited syncNow() here. syncNow pushes AND then pulls, so
-    // every single write - creating a note, renaming a notebook - blocked on a full
-    // sync cycle before its promise resolved. In the e2e suite that timed out
-    // `page.waitForURL` after creating a board: the note existed, the UI just never
-    // got its result back in time to navigate. In production it would have made the
-    // app feel slower than the website it replaced, which is the exact opposite of
-    // what the mirror is for.
+    const result = await server(...args);
+    // Fire-and-forget: the write has already landed, and blocking the caller on a
+    // sync cycle is what made every create feel slow enough to time out a
+    // page.waitForURL.
     void syncNow().catch(() => {
-      // Still queued, and the connection indicator is what reports it. Swallowing
-      // here is deliberate: the write SUCCEEDED locally, and telling the caller it
-      // failed would be false.
+      // The mirror is briefly behind. The next poll or reconnect fixes it.
     });
-
-    return localResult;
+    return result;
   }) as AnyFn;
 }
 
 /**
  * The seam. Pages are unaware which side answered.
  *
- * Reads come from the mirror whenever it can answer completely, so nothing the user
- * looks at waits on the network - which is also why the desktop app feels faster
- * than the site even when both are online.
+ * Online behaviour is byte-for-byte what it was before this feature existed: the
+ * server answers everything. The mirror serves guest mode and offline mode only.
+ * That boundary is deliberate - see writeThroughServer for the evidence that moved
+ * it - and it means adding offline support cannot regress the online app.
  *
  * The default is refusal rather than fallthrough, unchanged from when this only
  * handled guest mode: a method with no local implementation rejects with a sentence
@@ -484,12 +491,9 @@ export const api: Api = new Proxy(serverApi, {
       return () => Promise.reject(new GuestFeatureError(offlineBlockedMessage(key)));
     }
 
-    // Online.
-    if (hasLocal && isWrite(key)) return writeThrough(local as AnyFn);
-    // Reads only come from the mirror once it holds the account's data. Until the
-    // first pull finishes, an empty mirror is indistinguishable from an empty
-    // account, and serving it would show a signed-in user zero notes.
-    if (hasLocal && isMirroredRead(key) && isMirrorWarmSync()) return local;
+    // Online: the server answers. A write additionally kicks a sync so the mirror
+    // has the change ready for the next time this device loses its connection.
+    if (hasLocal && isWrite(key)) return writeThroughServer(server() as AnyFn);
     return server();
   },
 }) as Api;
