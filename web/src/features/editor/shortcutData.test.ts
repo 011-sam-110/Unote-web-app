@@ -27,4 +27,12 @@ describe('shortcutData', () => {
       for (const r of g.rows) expect(r.label.length).toBeGreaterThan(0);
     }
   });
+
+  it('matches the recorded bindings exactly', () => {
+    // The count test above only proves SHORTCUT_COUNT is derived - if a row were
+    // dropped, both sides of it would shrink together and it would still pass. This
+    // snapshot is what actually catches a row going missing, being reordered, or
+    // being silently relabelled. Adding a binding is still one edit plus `-u`.
+    expect(shortcutGroups('Ctrl', 'Shift')).toMatchSnapshot();
+  });
 });

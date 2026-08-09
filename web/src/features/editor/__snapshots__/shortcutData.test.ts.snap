@@ -1,0 +1,197 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`shortcutData > matches the recorded bindings exactly 1`] = `
+[
+  {
+    "name": "Anywhere",
+    "rows": [
+      {
+        "keys": [
+          "Ctrl",
+          "K",
+        ],
+        "label": "Jump to a note",
+      },
+      {
+        "keys": [
+          "Ctrl",
+          "P",
+        ],
+        "label": "Command palette: run anything",
+      },
+      {
+        "keys": [
+          "Ctrl",
+          "N",
+        ],
+        "label": "New note in the current notebook",
+      },
+      {
+        "keys": [
+          "Ctrl",
+          "Shift",
+          "F",
+        ],
+        "label": "Search your notes",
+      },
+      {
+        "keys": [
+          "Ctrl",
+          "\\",
+        ],
+        "label": "Show or hide the sidebar",
+      },
+      {
+        "keys": [
+          "?",
+        ],
+        "label": "This cheatsheet",
+      },
+      {
+        "keys": [
+          "Esc",
+        ],
+        "label": "Close whatever is open",
+      },
+    ],
+  },
+  {
+    "name": "Writing",
+    "rows": [
+      {
+        "keys": [
+          "/",
+        ],
+        "label": "Slash menu: headings, lists, tables, callouts",
+      },
+      {
+        "keys": [
+          "[",
+          "[",
+        ],
+        "label": "Link another note",
+      },
+      {
+        "keys": [
+          "#",
+          "Space",
+        ],
+        "label": "Heading (and "- " a bullet, "> " a quote)",
+      },
+      {
+        "keys": [
+          "Ctrl",
+          "B",
+        ],
+        "label": "Bold",
+      },
+      {
+        "keys": [
+          "Ctrl",
+          "I",
+        ],
+        "label": "Italic",
+      },
+      {
+        "keys": [
+          "Ctrl",
+          "U",
+        ],
+        "label": "Underline",
+      },
+      {
+        "keys": [
+          "Ctrl",
+          "E",
+        ],
+        "label": "Inline code",
+      },
+      {
+        "keys": [
+          "Ctrl",
+          "Z",
+        ],
+        "label": "Undo",
+      },
+    ],
+  },
+  {
+    "name": "On a note",
+    "rows": [
+      {
+        "keys": [
+          "Ctrl",
+          "S",
+        ],
+        "label": "Save a named version you can restore",
+      },
+      {
+        "keys": [
+          "Ctrl",
+          "F",
+        ],
+        "label": "Find in this note",
+      },
+      {
+        "keys": [
+          "Ctrl",
+          "H",
+        ],
+        "label": "Find and replace",
+      },
+      {
+        "keys": [
+          "Tab",
+        ],
+        "label": "Move between columns",
+      },
+    ],
+  },
+  {
+    "name": "Search page",
+    "rows": [
+      {
+        "keys": [
+          "/",
+        ],
+        "label": "Focus the search box",
+      },
+    ],
+  },
+  {
+    "name": "Reviewing flashcards",
+    "rows": [
+      {
+        "keys": [
+          "Space",
+        ],
+        "label": "Show the answer",
+      },
+      {
+        "keys": [
+          "1",
+        ],
+        "label": "Again",
+      },
+      {
+        "keys": [
+          "2",
+        ],
+        "label": "Hard",
+      },
+      {
+        "keys": [
+          "3",
+        ],
+        "label": "Good",
+      },
+      {
+        "keys": [
+          "4",
+        ],
+        "label": "Easy",
+      },
+    ],
+  },
+]
+`;
