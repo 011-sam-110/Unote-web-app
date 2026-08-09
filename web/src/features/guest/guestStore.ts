@@ -306,15 +306,23 @@ export function seedGuestWorkspace(): { notebook: GuestNotebook; note: GuestNote
     contentText: built.contentText,
     tags: built.tags,
   });
-  updateNote(readme.id, { pinned: true });
+  const pinned = updateNote(readme.id, { pinned: true }) ?? readme;
 
   const note = createNote({ notebookId: notebook.id });
-  return { notebook, note, readme: { ...readme, pinned: true } };
+  return { notebook, note, readme: pinned };
 }
 
-/** The note /try should open: the one most recently worked on. */
+/**
+ * The note /try should open: the one most recently worked on.
+ *
+ * Ties broken toward the LATER array element (`>=`, not `>`). `nowIso()` is
+ * millisecond-resolution and seedGuestWorkspace()'s pin-then-create-blank-note sequence
+ * routinely lands both writes in the same millisecond - measured at roughly half the time.
+ * `createNote` pushes, so later-in-array is later-created, and `>=` lets that element win
+ * a tie instead of the seeded accumulator (notes[0]) keeping it by default.
+ */
 export function latestNoteId(): string | null {
   const notes = readData().notes;
   if (notes.length === 0) return null;
-  return notes.reduce((best, n) => (n.updatedAt > best.updatedAt ? n : best), notes[0]).id;
+  return notes.reduce((best, n) => (n.updatedAt >= best.updatedAt ? n : best), notes[0]).id;
 }

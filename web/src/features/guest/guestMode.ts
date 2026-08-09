@@ -34,6 +34,12 @@ export function guestModeSupported(): boolean {
 }
 
 /**
+ * Non-null only for the page load that actually seeded, and only ever set once per load -
+ * see the `readmeId` half of startGuest()'s idempotence below.
+ */
+let seededReadmeIdThisLoad: string | null = null;
+
+/**
  * Enter guest mode, seeding a notebook, the README and one empty note on the first visit
  * so the caller has somewhere to send the person. Returns the note to open.
  *
@@ -42,6 +48,15 @@ export function guestModeSupported(): boolean {
  * it had just seeded one answered "nothing to open" on the second pass and dropped the
  * visitor on the dashboard. Reporting the most recent note either way also gives the right
  * answer for someone returning to /try with work already here.
+ *
+ * That still is not enough on its own for `readmeId`: by the second StrictMode pass,
+ * `hasGuestWork()` is true (pass one just wrote it), so a naive re-check would see "work
+ * already here" and report `readmeId: null` - overwriting TryRoute's target with
+ * `latestNoteId()` before the person ever saw the README. `seededReadmeIdThisLoad`
+ * remembers what THIS page load seeded, independent of what's now in storage, so a repeat
+ * call within the same load reports the same readmeId again. A genuinely new page load
+ * resets the module (this variable goes back to null), so a real returning visitor - who
+ * seeded nothing this load - still gets `readmeId: null` from the `hasGuestWork()` check.
  */
 export function startGuest(): { noteId: string | null; readmeId: string | null } {
   try {
@@ -50,12 +65,14 @@ export function startGuest(): { noteId: string | null; readmeId: string | null }
     return { noteId: null, readmeId: null };
   }
   active = true;
-  // Non-null only when this call seeded. A visitor who has been here before keeps their
-  // own landing note, and does not get shown the guide again.
-  let readmeId: string | null = null;
-  if (!hasGuestWork()) {
+  // Non-null only when this call - or an earlier one this page load - seeded. A visitor
+  // who has been here before keeps their own landing note, and does not get shown the
+  // guide again.
+  let readmeId: string | null = seededReadmeIdThisLoad;
+  if (readmeId === null && !hasGuestWork()) {
     try {
       readmeId = seedGuestWorkspace().readme.id;
+      seededReadmeIdThisLoad = readmeId;
     } catch {
       // Storage filled between the probe and the write. The shell still opens; the
       // dashboard's empty state is a survivable landing.
