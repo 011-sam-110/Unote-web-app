@@ -73,7 +73,21 @@ export function endGuest(options: { keepWork: boolean }): void {
     // Nothing persisted, nothing to remove.
   }
   active = false;
-  if (!options.keepWork) clearData();
+  if (!options.keepWork) {
+    clearData();
+    // The notes themselves live in IndexedDB now, not in the localStorage blob
+    // clearData() removes. Without this, "discard my trial work" would leave every
+    // row and every queued outbox entry in place - and the next sign-in would push
+    // work the user explicitly deleted straight into their new account.
+    //
+    // The app's discard button (GuestMigrationHost) already clears both, so this is
+    // belt-and-braces for any future caller of endGuest. Deliberately not awaited:
+    // this function is synchronous because api.ts and RequireAuth read the guest flag
+    // during render, and making it async would mean the flag lags a frame behind.
+    void import('../../lib/local/localApi').then((m) => m.clearLocalStore()).catch(() => {
+      // Nothing to clear, or storage unavailable. The flag is already off.
+    });
+  }
   emit();
 }
 

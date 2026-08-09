@@ -13,6 +13,7 @@ import { localDb, readMeta, writeMeta } from '../local/db';
 import { setClockOffset } from '../local/clock';
 import { drainOrder, settle, fail } from '../local/outbox';
 import { noteRequestOutcome, isOnline, subscribeConnectivity } from './connectivity';
+import { setMirrorWarm } from './mirrorState';
 import { serverOnlyApi } from '../api';
 import {
   DEFAULT_SYNC_LIMIT,
@@ -76,10 +77,16 @@ async function applyPage(response: SyncChangesResponse): Promise<number> {
         if (local && String(local.updatedAt) >= incoming.updatedAt) continue;
 
         // Merge onto the local row rather than replacing it: the server's feed
-        // carries the synced columns, while `tags` and any other client-side field
-        // live only here. A blind put would drop them.
+        // carries the synced columns, while client-side fields live only here. A
+        // blind put would drop them.
+        //
+        // `tags` is defaulted explicitly because a server that predates the tags
+        // column in this feed sends notes without one, and the note read paths call
+        // .some()/.map() on it - so the FIRST arrival of any note would throw for
+        // every signed-in user on a fresh install.
         await table.put({
           ...(local ?? {}),
+          ...(tableName === 'notes' ? { tags: (local as { tags?: string[] } | undefined)?.tags ?? [] } : {}),
           ...incoming,
           // The base is what the SERVER just showed us. Setting it from anything
           // else makes the next push claim a version this client never saw, and
@@ -116,6 +123,10 @@ async function pull(): Promise<number> {
   }
 
   await writeMeta(INITIAL_DONE_KEY, '1');
+  // Reads may now be served from the mirror. Set only AFTER a full pull completed:
+  // an empty mirror and an empty account are indistinguishable, so flipping this
+  // early would show a signed-in user zero notes on a fresh install.
+  setMirrorWarm(true);
   return pulled;
 }
 

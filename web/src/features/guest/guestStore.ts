@@ -1,12 +1,24 @@
-// Browser-local storage for guest mode: notebooks and notes that never reach the server.
+// The localStorage store guest mode USED to be written into, kept for two jobs only.
 //
-// localStorage rather than IndexedDB, deliberately. Three reasons, in order of weight:
-// guest mode is a trial that ends at signup, so the store is small and short-lived (plain
-// text notes only, since every upload path needs a server); the whole store has to be
-// readable as one value for migration and export, which a synchronous JSON blob gives for
-// free; and `hasGuestWork()` is read during render to decide whether to warn someone, which
-// an async database cannot answer without a loading state in front of the warning. The cost
-// is the ~5MB origin quota, which writeData() reports honestly rather than losing work to.
+// Notes now live in lib/local (Dexie), which is the same store the offline desktop app
+// syncs - guest mode is that store with sync switched off rather than a system of its own.
+// What is left here:
+//
+//   * `readData()` is the source the one-time import in lib/local/localApi reads. Anyone
+//     who wrote notes before that store existed has them here and nowhere else, so this
+//     has to keep parsing the old blob exactly as it did.
+//   * The synchronous helpers guestMode.ts needs during render - storageAvailable(),
+//     hasGuestWork(), storageUsage(), latestNoteId() - and seedGuestWorkspace(), whose
+//     seed is picked up by that same import on the app's first read.
+//
+// Nothing else should be added to it. New reads and writes belong in localApi, which is
+// the only one of the two that queues anything for the server.
+//
+// The original note stands, because it is why the blob exists at all: localStorage was
+// chosen because guest mode is a trial that ends at signup, so the store was small and
+// short-lived; because migration and export want the whole store as one value; and because
+// hasGuestWork() is read during render, which an async database cannot answer without a
+// loading state in front of the warning.
 import type { Note, NoteLite, Notebook, NotebookLite } from '../../lib/types';
 
 const DATA_KEY = 'unote:guest:v1';

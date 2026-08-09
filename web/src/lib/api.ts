@@ -10,9 +10,39 @@ import type {
   ImportBatch, ImportItem, ImportSource, ImportLabelSpace, ImportSuggestionInput, ImportGroupInput, ImportCommitResult,
 } from './types';
 import { isGuest } from '../features/guest/guestMode';
-import { GuestFeatureError, guestApi, guestBlockedMessage } from '../features/guest/guestApi';
-import { noteRequestOutcome } from './sync/connectivity';
+import { GuestFeatureError, guestBlockedMessage } from '../features/guest/guestErrors';
+import { localApi } from './local/localApi';
+import { noteRequestOutcome, isOnline } from './sync/connectivity';
+import { isWrite, isMirroredRead } from './sync/methods';
+import { isMirrorWarmSync } from './sync/mirrorState';
+import { syncNow } from './sync/engine';
 import type { SyncChangesResponse } from './sync/contract';
+
+/**
+ * Why a method is unavailable with no connection, as opposed to unavailable without
+ * an account. The distinction is worth the second message: "make an account" is
+ * useless advice to somebody who has one and is on a train.
+ */
+function offlineBlockedMessage(method: string): string {
+  const NEEDS_NET: Record<string, string> = {
+    aiImprove: 'AI needs a connection - it runs on the server.',
+    aiSummarize: 'AI needs a connection - it runs on the server.',
+    aiFlashcards: 'AI needs a connection - it runs on the server.',
+    aiAsk: 'AI needs a connection - it runs on the server.',
+    aiChat: 'The assistant needs a connection - it runs on the server.',
+    aiSuggest: 'AI review needs a connection.',
+    import: 'Importing needs a connection - the file is read on the server.',
+    uploadImage: 'Adding an image needs a connection, so the file has somewhere to live.',
+    createShare: 'Sharing needs a connection - a share link has to be served from somewhere.',
+    versions: 'Note history is kept on the server, so it needs a connection.',
+    restore: 'Restoring an old version needs a connection.',
+    comments: 'Comments need a connection.',
+    canvas: 'Boards need a connection for now.',
+    ink: 'Handwriting needs a connection for now.',
+    qr: 'Pairing your phone needs a connection.',
+  };
+  return NEEDS_NET[method] ?? 'That needs a connection. Your notes are still here and still saving.';
+}
 
 export class ApiError extends Error {
   status: number;
@@ -369,13 +399,88 @@ const ALWAYS_SERVER = new Set([
   'sharePeek', 'shareJoin', 'sharedNote', 'updateSharedNote', 'shareEvents', 'sharedInk', 'addSharedInk',
 ]);
 
+/** guest | online | offline. Everything below routes on this. */
+export type ApiMode = 'guest' | 'online' | 'offline';
+
+export function getMode(): ApiMode {
+  if (isGuest()) return 'guest';
+  return isOnline() ? 'online' : 'offline';
+}
+
+type AnyFn = (...args: never[]) => Promise<unknown>;
+
+/**
+ * An online write: local first, then the server, then adopt what the server says.
+ *
+ * Local-first even when connected is the point. A write that went straight to the
+ * server would leave the mirror stale, and the next read - which comes from the
+ * mirror - would show the user their own edit missing. One path for both connection
+ * states is what keeps that impossible.
+ *
+ * The local call has already queued an outbox entry by the time we get here, so a
+ * failure needs no compensation: the entry simply stays queued and the next sync
+ * sends it. That is also why this does not rethrow a transport error - the write IS
+ * saved, locally, and telling the user it failed would be false.
+ */
+function writeThrough(local: AnyFn): AnyFn {
+  return (async (...args: never[]) => {
+    const localResult = await local(...args);
+    try {
+      // Drain immediately so this write reaches the server now rather than at the
+      // next poll. syncNow() pushes before it pulls, which is also what reconciles
+      // the record we just wrote.
+      await syncNow();
+    } catch {
+      // Queued and will retry. Reported through the connection indicator, not here.
+    }
+    return localResult;
+  }) as AnyFn;
+}
+
+/**
+ * The seam. Pages are unaware which side answered.
+ *
+ * Reads come from the mirror whenever it can answer completely, so nothing the user
+ * looks at waits on the network - which is also why the desktop app feels faster
+ * than the site even when both are online.
+ *
+ * The default is refusal rather than fallthrough, unchanged from when this only
+ * handled guest mode: a method with no local implementation rejects with a sentence
+ * instead of calling a server that could only answer 401.
+ */
 export const api: Api = new Proxy(serverApi, {
   get(target, prop, receiver) {
     const key = String(prop);
-    if (!isGuest() || ALWAYS_SERVER.has(key)) return Reflect.get(target, prop, receiver);
-    const local = (guestApi as Record<string, unknown>)[key];
-    if (typeof local === 'function') return local;
-    return () => Promise.reject(new GuestFeatureError(guestBlockedMessage(key)));
+    const server = () => Reflect.get(target, prop, receiver);
+
+    // Auth is how guest mode ends, and a share link belongs to whoever sent it
+    // rather than to the browser opening it. Neither can be answered locally.
+    if (ALWAYS_SERVER.has(key)) return server();
+
+    const local = (localApi as Record<string, unknown>)[key];
+    const hasLocal = typeof local === 'function';
+    const mode = getMode();
+
+    if (mode === 'guest') {
+      // Exactly the previous behaviour: local, or a sentence explaining why not.
+      if (hasLocal) return local;
+      return () => Promise.reject(new GuestFeatureError(guestBlockedMessage(key)));
+    }
+
+    if (mode === 'offline') {
+      if (hasLocal && (isWrite(key) || isMirroredRead(key))) return local;
+      // A stub that answers "no versions" is right for a guest who has none and
+      // wrong for a signed-in user who does - saying so is better than lying.
+      return () => Promise.reject(new GuestFeatureError(offlineBlockedMessage(key)));
+    }
+
+    // Online.
+    if (hasLocal && isWrite(key)) return writeThrough(local as AnyFn);
+    // Reads only come from the mirror once it holds the account's data. Until the
+    // first pull finishes, an empty mirror is indistinguishable from an empty
+    // account, and serving it would show a signed-in user zero notes.
+    if (hasLocal && isMirroredRead(key) && isMirrorWarmSync()) return local;
+    return server();
   },
 }) as Api;
 
