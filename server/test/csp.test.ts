@@ -14,6 +14,26 @@ import { ROOT } from '../src/config.js';
 
 const app = buildApp();
 
+/**
+ * The body of the one bare inline script in an HTML entry, newlines normalised to LF.
+ *
+ * The normalisation is the whole trick. On Windows, core.autocrlf checks the file out with
+ * CRLF, so hashing the working copy verbatim produced a digest that could never match: the
+ * hash that matters is the one the browser computes over the file Vercel builds from, and
+ * Vercel checks out LF. Without this, the test failed on every Windows run regardless of the
+ * file's contents - and a test that always fails locally is a test nobody reads, which is how
+ * a genuine break slips through.
+ *
+ * The regex matches `<script>` with no attributes, so it skips the JSON-LD block and the
+ * module tag in both files and finds only the theme bootstrap.
+ */
+function inlineThemeScript(entry: string): string {
+  const html = fs.readFileSync(path.join(ROOT, 'web', entry), 'utf8').replace(/\r\n/g, '\n');
+  const inline = html.match(/<script>([\s\S]*?)<\/script>/);
+  expect(inline, `web/${entry} no longer has an inline <script> to hash`).not.toBeNull();
+  return inline![1];
+}
+
 describe('Content-Security-Policy', () => {
   it('matches the hash of the inline theme script actually shipped in web/index.html', () => {
     // The whole point of hashing that script is to keep 'unsafe-inline' out of script-src.
@@ -21,17 +41,26 @@ describe('Content-Security-Policy', () => {
     // browser running it and the app renders in the wrong theme until first paint. If this
     // fails, recompute the hash from the script body and update THEME_SCRIPT_HASH (and the
     // copy in vercel.json).
-    // Newlines are normalised to LF before hashing. On Windows, core.autocrlf checks the
-    // file out with CRLF, so hashing the working copy verbatim produced a digest that
-    // could never match: the hash that matters is the one the browser computes over the
-    // file Vercel builds from, and Vercel checks out LF. Without this, the test failed on
-    // every Windows run regardless of the file's contents - and a test that always fails
-    // locally is a test nobody reads, which is how a genuine break slips through.
-    const html = fs.readFileSync(path.join(ROOT, 'web', 'index.html'), 'utf8').replace(/\r\n/g, '\n');
-    const inline = html.match(/<script>([\s\S]*?)<\/script>/);
-    expect(inline, 'web/index.html no longer has an inline <script> to hash').not.toBeNull();
+    const script = inlineThemeScript('index.html');
+    const digest = createHash('sha256').update(script, 'utf8').digest('base64');
+    expect(THEME_SCRIPT_HASH).toBe(`'sha256-${digest}'`);
+  });
 
-    const digest = createHash('sha256').update(inline![1], 'utf8').digest('base64');
+  it('ships that same script byte for byte in web/download.html, so one hash covers both entries', () => {
+    // /download is a second Vite entry with its own head, and it needs the theme bootstrap for
+    // the same reason index.html does - without it, a client-side navigation from /download to
+    // /login paints in the wrong theme.
+    //
+    // It is a COPY, not a shared file: a static head cannot import anything, and the block has
+    // to be inline to run before first paint. Identical bytes are what keeps one pinned hash
+    // covering both, so this asserts identity rather than merely that each file has some
+    // script. A future edit to one and not the other fails here, loudly, instead of shipping a
+    // page the browser silently refuses to theme.
+    const index = inlineThemeScript('index.html');
+    const download = inlineThemeScript('download.html');
+    expect(download, 'the two inline theme scripts have drifted apart').toBe(index);
+
+    const digest = createHash('sha256').update(download, 'utf8').digest('base64');
     expect(THEME_SCRIPT_HASH).toBe(`'sha256-${digest}'`);
   });
 

@@ -1,3 +1,4 @@
+import { resolve } from 'node:path'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
@@ -31,6 +32,15 @@ export default defineConfig({
         maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,
         // SPA deep links resolve to index.html when offline, EXCEPT /api and
         // /uploads which must always hit the network (or fail honestly).
+        //
+        // That includes /download, which has its own HTML entry: once the worker is
+        // installed, a navigation there is answered with index.html from the precache
+        // rather than with download.html. LEAVE IT. React Router reads location.pathname
+        // and renders the same page, so a visitor sees no difference, and the head only
+        // matters to crawlers and link unfurlers - neither of which has a service worker,
+        // so both get the real file. Adding /download to navigateFallbackDenylist to
+        // "fix" it would trade an invisible non-problem for a route that stops working
+        // offline, which is the one thing the worker is here for.
         navigateFallback: '/index.html',
         navigateFallbackDenylist: [/^\/api\//, /^\/uploads\//],
         cleanupOutdatedCaches: true,
@@ -47,6 +57,23 @@ export default defineConfig({
       },
     }),
   ],
+  build: {
+    rollupOptions: {
+      // Two HTML entries, because /download has to exist as a real file with its own head.
+      // vercel.json rewrites every non-API path to /index.html, so a client-only /download
+      // would serve the homepage's title, description, canonical and JSON-LD to every
+      // crawler that runs no JavaScript - which is all the ones this project's static head
+      // was written for. Vite builds multi-page apps natively; a prerender plugin would put
+      // a headless browser in the build to generate one file.
+      //
+      // Naming an entry here REPLACES the default single index.html input, so index.html has
+      // to be listed too. Dropping it produces a build with no homepage.
+      input: {
+        main: resolve(__dirname, 'index.html'),
+        download: resolve(__dirname, 'download.html'),
+      },
+    },
+  },
   server: {
     host: true,
     port: Number(process.env.FOLIO_WEB_PORT ?? 5173),
