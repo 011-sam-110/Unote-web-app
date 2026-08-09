@@ -1,14 +1,21 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  One URL, honestly.
+  Two URLs, honestly.
 
-  "/" is the only page on this site worth indexing: every other route is either behind a
-  login, a single-use surface (/capture, /join/:token), or an account form that is
-  explicitly noindex. Padding a sitemap with those would be asking Google to index pages
-  we have simultaneously told it to ignore.
+  Every other route is either behind a login, a single-use surface (/capture, /join/:token),
+  or an account form that is explicitly noindex. Padding a sitemap with those would be asking
+  Google to index pages we have simultaneously told it to ignore - and /try is excluded for a
+  third reason: it is an action, not a page, and it redirects the moment it loads.
 
-  This is hand-maintained on purpose while there is one entry. If a /learn section is ever
-  built, generate this file instead - and make lastmod reflect real edit dates, because a
+  /sitemap is the human-readable map of the product, at src/features/marketing/SitemapPage.tsx.
+  Note that it is client-rendered like the rest of the app, so a crawler that runs no
+  JavaScript (GPTBot, ClaudeBot, PerplexityBot) sees only the static head in index.html. It is
+  listed because Google does execute JavaScript and the page is genuinely public content, not
+  because it will help a text-only crawler.
+
+  This file is hand-maintained, and web/src/features/marketing/sitemap.test.ts fails if it
+  stops matching the entries marked `indexed` in siteMap.ts - so the page a person reads and
+  the file a crawler reads cannot drift apart. `lastmod` is deliberately NOT generated: a
   sitemap that claims everything changed today is a sitemap Google stops trusting.
 -->
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
@@ -17,5 +24,11 @@
     <lastmod>2026-07-22</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
+  </url>
+  <url>
+    <loc>https://unote-six.vercel.app/sitemap</loc>
+    <lastmod>2026-08-09</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
   </url>
 </urlset>

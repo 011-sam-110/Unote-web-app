@@ -1,0 +1,337 @@
+/* The /sitemap page.
+
+   Loaded alongside marketing.css and scoped under .mkt, so every colour here is the
+   landing page's paper palette rather than the app's light/dark tokens - arriving from
+   the footer should not feel like leaving the site.
+
+   The visual idea is a hand-drawn map: each branch is a card of paper, its entries hang
+   off a single ruled spine, and each one is joined to that spine by a short tick. It is
+   drawn entirely with borders and pseudo-elements - no SVG and no images - so it survives
+   a text zoom, reflows at any width, and costs nothing to load.
+
+   Selector discipline matches marketing.css: every rule is a single .smap-* class, with no
+   element or descendant selectors that could reach the app's shared component CSS. */
+
+.smap {
+  padding-bottom: var(--sp-band);
+}
+
+/* --- header band ------------------------------------------------------------------- */
+
+.smap-head {
+  background: var(--mkt-wash);
+  border-bottom: 1px solid var(--mkt-rule);
+  padding: clamp(96px, 12vw, 150px) var(--sp-gutter) clamp(52px, 7vw, 80px);
+}
+
+.smap-head__inner {
+  max-width: 760px;
+  margin: 0 auto;
+}
+
+.smap-eyebrow {
+  margin: 0 0 14px;
+  font-family: var(--mkt-mono);
+  font-size: var(--t-xs);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--mkt-ink-3);
+}
+
+.smap-title {
+  margin: 0;
+  font-family: var(--mkt-display);
+  font-size: var(--t-h2);
+  font-weight: 500;
+  line-height: 1.1;
+  letter-spacing: -0.015em;
+  color: var(--mkt-ink);
+}
+
+/* The one highlighter mark on the page. Yellow is the recall colour on this site and is
+   not decoration, so it appears once, on the phrase that is the page's whole promise.
+
+   Drawn as a background gradient, the same way .mkt-shot__hl does it, rather than as an
+   absolutely positioned ::after with a negative z-index: a negative z-index escapes behind
+   the nearest stacking context, which on a page whose sections carry their own backgrounds
+   means the mark disappears entirely on some of them. A background cannot do that. */
+.smap-title em {
+  font-style: italic;
+  padding: 0 0.06em;
+  border-radius: 2px;
+  background-image: linear-gradient(var(--mkt-hl), var(--mkt-hl));
+  background-repeat: no-repeat;
+  background-size: 100% 0.36em;
+  background-position: 0 82%;
+}
+
+.smap-lede {
+  margin: 18px 0 0;
+  max-width: 60ch;
+  font-size: var(--t-md);
+  line-height: 1.6;
+  color: var(--mkt-ink-2);
+  hyphens: none;
+}
+
+.smap-head__cta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 18px;
+  margin-top: 30px;
+}
+
+.smap-head__alt {
+  font-size: var(--t-sm);
+  color: var(--mkt-ink-3);
+  text-decoration: none;
+  border-bottom: 1px solid var(--mkt-rule-strong);
+  padding-bottom: 1px;
+}
+
+.smap-head__alt:hover {
+  color: var(--mkt-ink);
+  border-bottom-color: var(--mkt-ink);
+}
+
+/* --- the branches ------------------------------------------------------------------ */
+
+/* Multi-column rather than a two-column grid, because these cards are wildly uneven: "Your
+   desk" carries five nested entries and "Getting in" carries six flat ones, so a grid row
+   sized to the taller of the pair left roughly 500px of blank paper under the shorter one.
+   Columns pack instead of aligning, and `column-fill: balance` evens the two out.
+
+   The cost is reading order - columns run down the left before crossing to the right,
+   rather than left-to-right in pairs. For a map of a site, where each branch is
+   self-contained and numbered, that is the better trade. */
+.smap-branches {
+  columns: 2;
+  column-gap: clamp(20px, 2.6vw, 30px);
+  column-fill: balance;
+  max-width: var(--mkt-max);
+  margin: clamp(40px, 6vw, 68px) auto 0;
+  padding: 0 var(--sp-gutter);
+}
+
+.smap-branch {
+  /* A card split across a column boundary would put a branch's heading at the foot of one
+     column and half its entries at the head of the next. */
+  break-inside: avoid;
+  margin-bottom: clamp(20px, 2.6vw, 30px);
+  background: var(--mkt-paper);
+  border: 1px solid var(--mkt-rule);
+  border-radius: var(--mkt-radius-lg);
+  box-shadow: var(--mkt-shadow-sm);
+  padding: clamp(22px, 2.4vw, 30px);
+}
+
+.smap-branch__head {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--mkt-rule-soft);
+}
+
+.smap-branch__index {
+  flex: none;
+  font-family: var(--mkt-display);
+  font-size: var(--t-xl);
+  line-height: 1;
+  color: var(--mkt-hl-deep);
+}
+
+.smap-branch__title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  font-family: var(--mkt-display);
+  font-size: var(--t-lg);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--mkt-ink);
+}
+
+.smap-branch__blurb {
+  margin: 5px 0 0;
+  font-size: var(--t-sm);
+  line-height: 1.5;
+  color: var(--mkt-ink-3);
+  hyphens: none;
+}
+
+/* --- the spine and its leaves ------------------------------------------------------ */
+
+.smap-leaves {
+  list-style: none;
+  margin: 0;
+  /* The spine. Padding carries the entries clear of it; the ticks below bridge the gap. */
+  padding: 4px 0 0 18px;
+  border-left: 1px solid var(--mkt-rule);
+  margin-left: 12px;
+}
+
+.smap-leaves--nested {
+  margin-top: 8px;
+  margin-left: 4px;
+  padding-left: 16px;
+  /* Dashed, so a nested run reads as "part of the thing above" rather than as a second
+     branch of equal standing. */
+  border-left-style: dashed;
+}
+
+.smap-leaf {
+  position: relative;
+  padding: 9px 0;
+}
+
+.smap-leaf + .smap-leaf {
+  border-top: 1px solid var(--mkt-rule-soft);
+}
+
+.smap-leaf__row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+/* The tick joining an entry to the spine. Positioned from the row rather than the list
+   item so it lands on the first LINE of the entry, not the middle of a wrapped block. */
+.smap-leaf__tick {
+  flex: none;
+  width: 12px;
+  height: 1px;
+  margin-left: -18px;
+  margin-top: 0.62em;
+  background: var(--mkt-rule-strong);
+}
+
+.smap-leaves--nested .smap-leaf__tick {
+  margin-left: -16px;
+  width: 10px;
+}
+
+.smap-leaf__body {
+  min-width: 0;
+}
+
+.smap-leaf__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: var(--t-base);
+  line-height: 1.35;
+  color: var(--mkt-ink);
+}
+
+.smap-leaf__link {
+  color: var(--mkt-accent);
+  font-weight: 500;
+  text-decoration: none;
+  border-bottom: 1px solid var(--mkt-accent-soft);
+}
+
+.smap-leaf__link:hover {
+  border-bottom-color: var(--mkt-accent);
+}
+
+.smap-leaf__name {
+  font-weight: 500;
+}
+
+.smap-leaf__path {
+  font-family: var(--mkt-mono);
+  font-size: var(--t-xs);
+  color: var(--mkt-ink-3);
+  background: var(--mkt-paper-3);
+  border-radius: 4px;
+  padding: 1px 6px;
+}
+
+.smap-leaf__blurb {
+  margin: 3px 0 0;
+  font-size: var(--t-sm);
+  line-height: 1.55;
+  color: var(--mkt-ink-2);
+  hyphens: none;
+}
+
+/* Nested entries are surfaces inside a page rather than pages, so they sit one step
+   quieter than the entry they hang off. */
+.smap-leaf--d1 .smap-leaf__head {
+  font-size: var(--t-sm);
+}
+
+.smap-badge {
+  font-family: var(--mkt-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  border-radius: 999px;
+  padding: 2px 8px;
+  border: 1px solid var(--mkt-rule-strong);
+  color: var(--mkt-ink-3);
+  background: var(--mkt-paper-2);
+}
+
+.smap-badge--link {
+  border-color: var(--mkt-hl-deep);
+  background: var(--mkt-accent-soft);
+  color: var(--mkt-hl-ink);
+}
+
+.smap-foot-note {
+  max-width: var(--mkt-max);
+  margin: clamp(32px, 4vw, 48px) auto 0;
+  padding: 0 var(--sp-gutter);
+  font-size: var(--t-sm);
+  color: var(--mkt-ink-3);
+}
+
+.smap-foot-note a {
+  color: var(--mkt-accent);
+}
+
+@media (max-width: 880px) {
+  .smap-branches {
+    columns: 1;
+  }
+}
+
+@media (max-width: 520px) {
+  .smap-branch__head {
+    gap: 10px;
+  }
+
+  .smap-leaves {
+    padding-left: 14px;
+    margin-left: 6px;
+  }
+
+  .smap-leaf__tick {
+    margin-left: -14px;
+    width: 9px;
+  }
+}
+
+/* Print: a sitemap is the one page on this site somebody might reasonably print, and the
+   card shadows and header band waste ink without carrying any of the structure. */
+@media print {
+  .smap-head {
+    background: none;
+  }
+
+  .smap-branches {
+    columns: 1;
+  }
+
+  .smap-branch {
+    box-shadow: none;
+  }
+}

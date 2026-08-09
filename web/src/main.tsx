@@ -17,6 +17,7 @@ import TagsPage from './pages/TagsPage'
 import { AuthProvider, useAuth } from './features/auth/AuthContext'
 import RequireAuth from './features/auth/RequireAuth'
 import LandingPage from './features/marketing/LandingPage'
+import SitemapPage from './features/marketing/SitemapPage'
 import LoginPage from './features/auth/LoginPage'
 import SignupPage from './features/auth/SignupPage'
 import RecoverPage from './features/auth/RecoverPage'
@@ -79,6 +80,12 @@ const router = createBrowserRouter([
       { path: '/login', element: <LoginPage /> },
       { path: '/signup', element: <SignupPage /> },
       { path: '/recover', element: <RecoverPage /> },
+
+      // Public, and public on purpose even for a signed-in visitor: it is a map of the
+      // product rather than a signed-out pitch, and a link to it sits in the footer of
+      // every marketing page. It stays outside <App> for the same reason the landing page
+      // does - no sidebar, and none of the shell's authenticated fetches.
+      { path: '/sitemap', element: <SitemapPage /> },
 
       // The one-click way in without an account. Public by necessity, and it does its
       // work (start the session, seed a first note) before redirecting into the shell.

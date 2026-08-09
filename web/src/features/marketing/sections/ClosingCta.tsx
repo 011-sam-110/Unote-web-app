@@ -1,4 +1,4 @@
-// Closing ask, then the footer.
+// Closing ask, then the footer (which the sitemap page shares - see MarketingFooter).
 //
 // The four lines under the button are the objections a student actually has at this point
 // - cost, lock-in, who can read their work, and whether they have to hand over an email -
@@ -8,7 +8,7 @@
 // which describes the chore rather than the reward and dropped the price, at the highest-
 // intent moment on the page.
 import { Link } from 'react-router-dom';
-import Wordmark from '../Wordmark';
+import MarketingFooter from './MarketingFooter';
 
 const ASSURANCES = [
   { title: 'Free to use', body: 'No card, no trial clock, and no feature held back behind a plan.' },
@@ -49,28 +49,7 @@ export default function ClosingCta() {
         </div>
       </section>
 
-      <footer className="mkt-foot">
-        <div className="mkt-foot__inner">
-          <div className="mkt-foot__top">
-            <div className="mkt-foot__brand">
-              <Wordmark size={20} />
-              <strong>Unote</strong>
-            </div>
-            <nav className="mkt-foot__links" aria-label="Footer">
-              <a href="#features">Features</a>
-              <a href="#ai">AI</a>
-              <a href="#maker">Who made it</a>
-              <Link to="/login">Log in</Link>
-              <Link to="/signup">Start free</Link>
-            </nav>
-          </div>
-          <div className="mkt-foot__bottom">
-            <span>© 2026 Unote</span>
-            <span>A calmer home for your coursework.</span>
-            <p className="mkt-foot__note">Built by a student, in the open.</p>
-          </div>
-        </div>
-      </footer>
+      <MarketingFooter sectionsOnPage />
     </>
   );
 }
