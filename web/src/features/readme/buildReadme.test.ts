@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { README_TITLE, buildReadme } from './buildReadme';
-import { INSERT_ITEMS, NO_DEMO } from '../editor/insertables';
+import { INSERT_ITEMS, INSERT_SECTIONS, NO_DEMO } from '../editor/insertables';
 import { PALETTE_CATALOG } from '../../components/paletteCatalog';
 import { GLOBAL_COMMANDS } from '../../lib/commands';
 import { shortcutGroups } from '../editor/shortcutData';
@@ -141,5 +141,20 @@ describe('buildReadme', () => {
     // NotePage renders the title in its own field above the body, so the body must not
     // open with it - a reader would see "README" twice.
     expect(account.contentText.startsWith(README_TITLE)).toBe(false);
+  });
+
+  it('counts demonstrated blocks, not the nodes they emit', () => {
+    // This summary once read "6 blocks, 4 of them shown live" for Notation, because it
+    // counted emitted nodes and chemistry returns two (a lead-in paragraph plus the
+    // molecule). Every other group was right only by accident. Checked against the
+    // registry rather than against literals, so it survives a block being added.
+    for (const section of INSERT_SECTIONS) {
+      const items = INSERT_ITEMS.filter((i) => i.section === section);
+      if (items.length === 0) continue;
+      const shown = items.filter((i) => i.example).length;
+      const label = `${items.length} block${items.length === 1 ? '' : 's'}`;
+      const expected = shown > 0 ? `${label}, ${shown} of them shown live` : label;
+      expect(account.contentText, `wrong summary for ${section}`).toContain(expected);
+    }
   });
 });

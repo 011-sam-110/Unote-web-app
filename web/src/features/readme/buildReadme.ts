@@ -108,10 +108,16 @@ function insertSection(guest: boolean): Node[] {
       demos.push(...item.example());
     }
 
+    // Count the BLOCKS that demonstrate themselves, not the nodes they emit. An example
+    // may return several nodes - chemistry returns a lead-in paragraph plus the molecule -
+    // so demos.length reads one too high for Notation and would only be right by accident
+    // everywhere else. A derived number that lies is worse here than no number, because
+    // the whole claim of this note is that its numbers come from the code.
+    const shown = items.filter((i) => i.example).length;
     const count = `${items.length} block${items.length === 1 ? '' : 's'}`;
     out.push(
       h(2, section),
-      toggle(demos.length > 0 ? `${count}, ${demos.length} of them shown live` : count, [
+      toggle(shown > 0 ? `${count}, ${shown} of them shown live` : count, [
         table(['Command', 'Inserts', ''], insertRows(guest, items)),
         ...demos,
       ]),
