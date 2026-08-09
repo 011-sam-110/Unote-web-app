@@ -35,6 +35,10 @@ export interface Command {
    *  optional, so a registrant that omits both falls back to a default glyph. */
   icon?: IconName;
   emoji?: string;
+  /** The api method this command ultimately calls, keyed against BLOCKED in
+   *  features/guest/guestApi.ts, and only present where it needs a server. Same field,
+   *  same meaning as PaletteDoc.needs - the generated README marks both from it. */
+  needs?: string;
   run: (ctx: CommandContext) => void | Promise<void>;
 }
 
@@ -124,8 +128,14 @@ export const SECTION_ORDER = ['Navigate', 'Create', 'Note', 'View', 'Study', 'He
 // ---------------------------------------------------------------------------
 // Built-ins that need no page/route context beyond `navigate` - registered
 // once, the moment this module is first imported (by CommandPalette.tsx).
+//
+// Exported as well as registered, from this one array literal, because the
+// generated README documents EVERY command in the palette and the palette is
+// these plus the context-dependent ones in components/paletteCatalog.ts. A
+// second copy for the README would be a second thing to keep in step; reading
+// the registry back out instead would depend on module import order.
 // ---------------------------------------------------------------------------
-registerCommands([
+export const GLOBAL_COMMANDS: Command[] = [
   {
     id: 'nav-home',
     title: 'Home',
@@ -142,6 +152,7 @@ registerCommands([
     hint: 'Review due flashcards',
     keywords: ['flashcards', 'review', 'srs', 'spaced repetition'],
     icon: 'layers',
+    needs: 'review',
     run: (ctx) => ctx.navigate('/study'),
   },
   {
@@ -151,6 +162,7 @@ registerCommands([
     hint: 'Ask a question across your notes',
     keywords: ['ai', 'question', 'chat'],
     icon: 'sparkles',
+    needs: 'aiAsk',
     run: (ctx) => ctx.navigate('/ask'),
   },
   {
@@ -205,4 +217,6 @@ registerCommands([
     icon: 'info',
     run: () => openShortcuts(),
   },
-]);
+];
+
+registerCommands(GLOBAL_COMMANDS);

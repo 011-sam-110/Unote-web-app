@@ -12,6 +12,16 @@
 export interface Row {
   keys: string[];
   label: string;
+  /**
+   * The api method this binding ultimately calls, keyed against BLOCKED in
+   * features/guest/guestApi.ts, and only present where the key needs a server. The
+   * generated README marks these for a guest - it used to teach six keys that do
+   * nothing without an account, on the same screen as a table saying so.
+   *
+   * ShortcutsSheet.tsx ignores this field: the sheet lists the bindings a build has,
+   * and a guest session still has the key - it is the feature behind it that is gated.
+   */
+  needs?: string;
 }
 
 export interface Group {
@@ -51,7 +61,7 @@ export function shortcutGroups(mod: string, shift: string): Group[] {
     {
       name: 'On a note',
       rows: [
-        { keys: [mod, 'S'], label: 'Save a named version you can restore' },
+        { keys: [mod, 'S'], label: 'Save a named version you can restore', needs: 'snapshot' },
         { keys: [mod, 'F'], label: 'Find in this note' },
         { keys: [mod, 'H'], label: 'Find and replace' },
         { keys: ['Tab'], label: 'Move between columns' },
@@ -64,11 +74,11 @@ export function shortcutGroups(mod: string, shift: string): Group[] {
     {
       name: 'Reviewing flashcards',
       rows: [
-        { keys: ['Space'], label: 'Show the answer' },
-        { keys: ['1'], label: 'Again' },
-        { keys: ['2'], label: 'Hard' },
-        { keys: ['3'], label: 'Good' },
-        { keys: ['4'], label: 'Easy' },
+        { keys: ['Space'], label: 'Show the answer', needs: 'review' },
+        { keys: ['1'], label: 'Again', needs: 'review' },
+        { keys: ['2'], label: 'Hard', needs: 'review' },
+        { keys: ['3'], label: 'Good', needs: 'review' },
+        { keys: ['4'], label: 'Easy', needs: 'review' },
       ],
     },
   ];

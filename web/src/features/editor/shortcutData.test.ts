@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { SHORTCUT_COUNT, shortcutGroups } from './shortcutData';
+import { guestBlockedMessage } from '../guest/guestApi';
 
 describe('shortcutData', () => {
   it('has five groups', () => {
@@ -20,6 +21,18 @@ describe('shortcutData', () => {
     const anywhere = shortcutGroups('⌘', '⇧')[0];
     expect(anywhere.rows[0].keys).toEqual(['⌘', 'K']);
     expect(anywhere.rows[3].keys).toEqual(['⌘', '⇧', 'F']);
+  });
+
+  it('names a real BLOCKED key wherever a binding claims it needs an account', () => {
+    // guestBlockedMessage falls back to a generic sentence for an unknown method, so a
+    // typo in `needs` would silently un-gate a binding the guest README must mark.
+    const generic = guestBlockedMessage('__definitely_not_a_method__');
+    for (const g of shortcutGroups('Ctrl', 'Shift')) {
+      for (const r of g.rows) {
+        if (!r.needs) continue;
+        expect(guestBlockedMessage(r.needs), `${r.label} -> ${r.needs}`).not.toBe(generic);
+      }
+    }
   });
 
   it('never emits an empty label', () => {

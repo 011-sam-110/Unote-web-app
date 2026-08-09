@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { README_TITLE, buildReadme } from './buildReadme';
 import { INSERT_ITEMS, NO_DEMO } from '../editor/insertables';
 import { PALETTE_CATALOG } from '../../components/paletteCatalog';
+import { GLOBAL_COMMANDS } from '../../lib/commands';
 import { shortcutGroups } from '../editor/shortcutData';
 import { FEATURE_SECTIONS } from './featureCatalog';
 
@@ -27,6 +28,13 @@ describe('buildReadme', () => {
   const account = buildReadme({ guest: false });
   const guest = buildReadme({ guest: true });
 
+  /** Every table cell is its own paragraph, so a cell's text is a line of its own.
+   *  Matching whole lines rather than substrings is what makes the short titles
+   *  load-bearing: "Text" appears inside a palette hint, "Table" inside "/Table of
+   *  contents", and "New note" inside "New notebook". */
+  const lines = (doc: { contentText: string }) => new Set(doc.contentText.split('\n'));
+  const accountLines = lines(account);
+
   it('is titled README and tagged', () => {
     expect(account.title).toBe(README_TITLE);
     expect(account.tags).toEqual(['unote', 'guide']);
@@ -42,7 +50,8 @@ describe('buildReadme', () => {
 
   it('documents every insert block', () => {
     for (const item of INSERT_ITEMS) {
-      expect(account.contentText, `missing block: ${item.title}`).toContain(item.title);
+      // The `/Title` form the reference table actually prints.
+      expect(accountLines.has(`/${item.title}`), `missing block: /${item.title}`).toBe(true);
     }
   });
 
@@ -52,9 +61,21 @@ describe('buildReadme', () => {
     }
   });
 
-  it('documents every palette command', () => {
-    for (const cmd of PALETTE_CATALOG) {
-      expect(account.contentText, `missing command: ${cmd.title}`).toContain(cmd.title);
+  it('never leaves a blank cell where a reason belongs', () => {
+    // The reverse direction - every reason reaches the page - is the test above. Without
+    // this one a block with neither an example nor a NO_DEMO entry renders an empty cell,
+    // which looks like a rendering bug and fails nothing.
+    for (const item of INSERT_ITEMS) {
+      if (item.example) continue;
+      expect(NO_DEMO[item.id], `${item.id} would render a blank cell`).toBeTruthy();
+    }
+  });
+
+  it('documents every palette command, both halves of it', () => {
+    // The palette is PALETTE_CATALOG (context commands) plus the globals lib/commands.ts
+    // registers. The note's toggle says "every command", so both have to be in it.
+    for (const cmd of [...PALETTE_CATALOG, ...GLOBAL_COMMANDS]) {
+      expect(accountLines.has(cmd.title), `missing command: ${cmd.title}`).toBe(true);
     }
   });
 
@@ -82,18 +103,30 @@ describe('buildReadme', () => {
     }
   });
 
-  it('never embeds a demo for a block that needs an upload', () => {
-    const types = typesIn(guest.contentJson);
-    expect(types.has('image')).toBe(false);
-    expect(types.has('model3d')).toBe(false);
-    expect(types.has('sketch')).toBe(false);
+  it('never fakes a render for a block it cannot demonstrate', () => {
+    // Neither flavour, not just the guest one: an image node with no uploaded file is a
+    // broken picture in an account's note too.
+    for (const doc of [account, guest]) {
+      const types = typesIn(doc.contentJson);
+      for (const type of ['image', 'model3d', 'sketch']) {
+        expect(types.has(type), `README contains a ${type}`).toBe(false);
+      }
+    }
+    // And the converse of the blank-cell guard: a block that demonstrates itself must not
+    // also carry a reason, or the note prints an excuse next to a live example.
+    for (const item of INSERT_ITEMS) {
+      if (!item.example) continue;
+      expect(NO_DEMO[item.id], `${item.id} demos itself AND gives a reason`).toBeUndefined();
+    }
   });
 
   it('warns the guest build about the three silent differences', () => {
     expect(guest.contentText).toMatch(/backlink/i);
     expect(guest.contentText).toMatch(/this browser/i);
-    // Search operators are account-only; the guest build must not present them as usable.
+    // Search operators are account-only; the guest build must not present them as usable
+    // ANYWHERE, including in the hint the Search page command carries into the table.
     expect(guest.contentText).not.toContain('notebook:algorithms');
+    expect(guest.contentText).not.toContain('notebook:');
     expect(account.contentText).toContain('notebook:algorithms');
   });
 
@@ -104,6 +137,9 @@ describe('buildReadme', () => {
 
   it('produces plain text that matches the document', () => {
     expect(account.contentText.length).toBeGreaterThan(500);
-    expect(account.contentText).toContain('README');
+    expect(account.contentText).toContain('Unote is a place to write, link and revise.');
+    // NotePage renders the title in its own field above the body, so the body must not
+    // open with it - a reader would see "README" twice.
+    expect(account.contentText.startsWith(README_TITLE)).toBe(false);
   });
 });

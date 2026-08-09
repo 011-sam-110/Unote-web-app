@@ -41,7 +41,7 @@ import { sketchInsertables } from './nodes/sketch';
 // `chem` is NOT imported here - the chemistry demo lives in chemInsertable.ts, which
 // declares its own InsertItem and imports from '../../docBuilders'.
 import {
-  blockMath, bullets, callout, code, codeText, columns, divider, h,
+  blockMath, bullets, callout, code, columns,
   inlineMath, ordered, p, quote, table, todo, toggle, type Node,
 } from './docBuilders';
 
@@ -65,13 +65,28 @@ export interface InsertItem {
   example?: () => Node[];
 }
 
-/** Why a block cannot demonstrate itself in a seeded note. Keyed by InsertItem id. */
+/**
+ * Why a block cannot demonstrate itself in a seeded note. Keyed by InsertItem id.
+ *
+ * Two kinds of entry. The first five need something the reader has to supply - a file, a
+ * board, a stroke - or are not a block at all. The last four CAN be built from JSON, and
+ * used to be: they were dropped because the README is written out of these blocks, so a
+ * demo of a heading is a real heading. It landed in the outline panel next to the note's
+ * own sections (outline.ts collects every heading in the document), the h1 demo put a
+ * second top-level title mid-section, and the divider demo was indistinguishable from the
+ * rules the note uses to separate sections - so section 02 appeared to end early. The
+ * document's own structure demonstrates them better than a copy of it could.
+ */
 export const NO_DEMO: Record<string, string> = {
   image: 'needs a file you upload',
   model3d: 'needs a model file you upload',
   'canvas-snapshot': 'needs a board of your own',
   sketch: 'needs strokes you draw',
   toc: 'not a block — it jumps to the outline panel',
+  h1: 'every section title in this note is one',
+  h2: 'the group titles below are these',
+  h3: 'used for the smaller labels in this note',
+  divider: 'the rules between these sections are these',
 };
 
 type Range = { from: number; to: number };
@@ -103,7 +118,6 @@ export const INSERT_ITEMS: InsertItem[] = [
     section: 'Basic',
     keywords: ['title'],
     run: (e, r) => at(e, r).setNode('heading', { level: 1 }).run(),
-    example: () => [h(1, 'Heading 1')],
   },
   {
     id: 'h2',
@@ -112,7 +126,6 @@ export const INSERT_ITEMS: InsertItem[] = [
     icon: 'H2',
     section: 'Basic',
     run: (e, r) => at(e, r).setNode('heading', { level: 2 }).run(),
-    example: () => [h(2, 'Heading 2')],
   },
   {
     id: 'h3',
@@ -121,7 +134,6 @@ export const INSERT_ITEMS: InsertItem[] = [
     icon: 'H3',
     section: 'Basic',
     run: (e, r) => at(e, r).setNode('heading', { level: 3 }).run(),
-    example: () => [h(3, 'Heading 3')],
   },
   {
     id: 'quote',
@@ -141,7 +153,6 @@ export const INSERT_ITEMS: InsertItem[] = [
     section: 'Basic',
     keywords: ['hr', 'line', 'rule', 'separator'],
     run: (e, r) => at(e, r).setHorizontalRule().run(),
-    example: () => [divider()],
   },
 
   // -- Lists ------------------------------------------------------------------
@@ -173,11 +184,13 @@ export const INSERT_ITEMS: InsertItem[] = [
     section: 'Lists',
     keywords: ['task', 'checkbox'],
     run: (e, r) => at(e, r).toggleTaskList().run(),
+    // About the list, not about reading the note: the README already opens with a
+    // checklist, and two ticked "Read this far" lines one screen apart read as a bug.
     example: () => [
       todo([
-        { checked: true, content: ['Read this far'] },
-        { checked: false, content: ['Press ', codeText('/'), ' and insert something'] },
-        { checked: false, content: ['Tick this box — it is real'] },
+        { checked: true, content: ['A ticked box, for the thing that is done'] },
+        { checked: false, content: ['An empty one, for the thing that is not'] },
+        { checked: false, content: ['Tick this box — it is real, and the tick saves with the note'] },
       ]),
     ],
   },

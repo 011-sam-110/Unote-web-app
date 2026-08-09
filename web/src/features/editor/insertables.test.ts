@@ -14,9 +14,16 @@ describe('insertables', () => {
     for (const i of INSERT_ITEMS) expect(INSERT_SECTIONS).toContain(i.section);
   });
 
-  it('exactly the five asset-dependent blocks have no demo', () => {
+  it('only the blocks that cannot honestly demo themselves have no demo', () => {
+    // Five need something the reader supplies (a file, a board, a stroke) or are not a
+    // block at all. The other four are the document's own structure: a heading demo is a
+    // real heading, so it joined the note's outline and, for h1, put a second top-level
+    // title mid-section; a divider demo was indistinguishable from the rules between
+    // sections. NO_DEMO points at the note itself for those.
     const undemonstrated = INSERT_ITEMS.filter((i) => !i.example).map((i) => i.id).sort();
-    expect(undemonstrated).toEqual(['canvas-snapshot', 'image', 'model3d', 'sketch', 'toc']);
+    expect(undemonstrated).toEqual([
+      'canvas-snapshot', 'divider', 'h1', 'h2', 'h3', 'image', 'model3d', 'sketch', 'toc',
+    ]);
   });
 
   it('gives a reason for every block it cannot demonstrate', () => {

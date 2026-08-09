@@ -1,23 +1,33 @@
 // The README note, generated.
 //
-// Reads five sources and emits one TipTap document:
-//   INSERT_ITEMS + INSERT_SECTIONS  (editor/insertables.ts)   - section 02
+// Reads six sources and emits one TipTap document:
+//   INSERT_ITEMS + INSERT_SECTIONS  (editor/insertables.ts)     - section 02
 //   PALETTE_CATALOG                 (components/paletteCatalog) - section 04
-//   shortcutGroups()                (editor/shortcutData.ts)  - section 04
-//   FEATURE_SECTIONS                (./featureCatalog.ts)     - sections 05-09
-//   BLOCKED                         (guest/guestApi.ts)       - every account-only mark
+//   GLOBAL_COMMANDS                 (lib/commands.ts)           - section 04
+//   shortcutGroups()                (editor/shortcutData.ts)    - section 04
+//   FEATURE_SECTIONS                (./featureCatalog.ts)       - sections 05-09
+//   BLOCKED                         (guest/guestApi.ts)         - every account-only mark
 //
 // TipTap JSON rather than Markdown, deliberately: callouts, columns, toggles, chem and
 // math have no Markdown spelling, and this note is built out of the blocks it documents.
 // Markdown remains the export format.
 // Only what this file uses: the demos for math, code and chem come from each block's own
 // `example`, not from here.
+//
+// Heading levels are the document's own structure AND four blocks' demonstration of
+// themselves (see NO_DEMO in insertables.ts): h1 is a section title, h2 a group title
+// inside section 02, h3 a column label. Emitting a heading anywhere else puts a line in
+// the reader's outline panel that is not a part of this note.
+//
+// Note the title is NOT emitted here: NotePage renders it in its own field above the
+// body, so an h1 "README" would be the second one on screen.
 import {
-  bullets, callout, codeText, columns, divider, doc, h,
-  p, quote, table, todo, toggle, toPlainText, type Inline, type Node,
+  boldText, bullets, callout, codeText, columns, divider, doc, h,
+  p, table, todo, toggle, toPlainText, type Inline, type Node,
 } from '../editor/docBuilders';
 import { INSERT_ITEMS, INSERT_SECTIONS, NO_DEMO, type InsertItem } from '../editor/insertables';
 import { PALETTE_CATALOG } from '../../components/paletteCatalog';
+import { GLOBAL_COMMANDS, SECTION_ORDER } from '../../lib/commands';
 import { SHORTCUT_COUNT, shortcutGroups } from '../editor/shortcutData';
 import { FEATURE_SECTIONS } from './featureCatalog';
 import { guestBlockedMessage } from '../guest/guestApi';
@@ -67,9 +77,12 @@ const BLOCK_NEEDS: Record<string, string> = {
 
 function insertRows(guest: boolean, items: InsertItem[]): Inline[][][] {
   return items.map((item) => {
-    const note = item.example ? '' : (NO_DEMO[item.id] ?? '');
-    const gate = gateCell(guest, BLOCK_NEEDS[item.id]);
-    const trailing = gate.length > 0 ? gate : [note];
+    // Both, not one or the other: "needs a file you upload" says what the block wants and
+    // is true in every build, and the gate says who can give it to the block. Replacing
+    // the first with the second lost a guest the more useful half.
+    const reason = item.example ? '' : (NO_DEMO[item.id] ?? '');
+    const gated = gateCell(guest, BLOCK_NEEDS[item.id]).length > 0;
+    const trailing: Inline[] = gated ? [reason ? `${reason} — ${GATE}` : GATE] : [reason];
     // The title verbatim, not lower-cased: it is the block's name as the menu shows it,
     // the string the coverage test looks for, and the slash menu matches case-insensitively.
     return [[codeText(`/${item.title}`)], [item.description], trailing];
@@ -78,7 +91,7 @@ function insertRows(guest: boolean, items: InsertItem[]): Inline[][][] {
 
 function insertSection(guest: boolean): Node[] {
   const out: Node[] = [
-    h(2, '02 · Everything you can insert'),
+    h(1, '02 · Everything you can insert'),
     p('Type ', codeText('/'), ' and the name, or use the ', codeText('+'), ' in the left margin.'),
   ];
 
@@ -86,30 +99,34 @@ function insertSection(guest: boolean): Node[] {
     const items = INSERT_ITEMS.filter((i) => i.section === section);
     if (items.length === 0) continue;
 
-    out.push(
-      toggle(`${section} — ${items.length} block${items.length === 1 ? '' : 's'}`, [
-        table(['Command', 'Inserts', ''], insertRows(guest, items)),
-      ]),
-    );
-
-    // The demos themselves, after the reference table for that group. A block that
-    // needs an upload contributes nothing here - its row already carries the reason.
+    // The demos go INSIDE the group's toggle, under its reference table. A toggle opens
+    // closed, so demos left as siblings after it read as unlabelled fragments belonging
+    // to whichever group the reader last opened.
+    const demos: Node[] = [];
     for (const item of items) {
       if (!item.example) continue;
-      if (guest && isGated(BLOCK_NEEDS[item.id])) continue;
-      out.push(...item.example());
+      demos.push(...item.example());
     }
+
+    const count = `${items.length} block${items.length === 1 ? '' : 's'}`;
+    out.push(
+      h(2, section),
+      toggle(demos.length > 0 ? `${count}, ${demos.length} of them shown live` : count, [
+        table(['Command', 'Inserts', ''], insertRows(guest, items)),
+        ...demos,
+      ]),
+    );
   }
   return out;
 }
 
 function writeSection(): Node[] {
   return [
-    h(2, '01 · Write'),
+    h(1, '01 · Write'),
     p('Markdown works as you type. Start a line with any of these and it becomes the thing:'),
     columns([
       [
-        p('Type this'),
+        h(3, 'Type this'),
         p(codeText('# '), ' ', codeText('## '), ' ', codeText('### ')),
         p(codeText('- '), ' then Tab to nest'),
         p(codeText('1. ')),
@@ -117,7 +134,7 @@ function writeSection(): Node[] {
         p(codeText('```')),
       ],
       [
-        p('Get this'),
+        h(3, 'Get this'),
         p('Headings, three levels'),
         p('A bullet list'),
         p('A numbered list'),
@@ -126,7 +143,8 @@ function writeSection(): Node[] {
       ],
     ]),
     p('That two-column layout is itself a block. Marks are the usual ones: Ctrl+B bold, Ctrl+I italic, Ctrl+U underline, Ctrl+E inline code.'),
-    quote('Use a quote for the sentence from the lecture you want to argue with later.'),
+    // No hand-written quote here: /Quote's own demo in section 02 says the same sentence,
+    // and the reader met it twice within a page.
   ];
 }
 
@@ -135,29 +153,80 @@ function connectSection(guest: boolean): Node[] {
     ? 'Backlinks arrive with an account: without one there is no server to work out what points here.'
     : 'Every note lists its backlinks, so you can find the notes pointing at this one.';
   return [
-    h(2, '03 · Connect'),
+    h(1, '03 · Connect'),
     columns([
-      [p('Link'), p('Type ', codeText('[['), ' and pick a note. It becomes a real link, not text.')],
-      [p('Tag'), p('Write ', codeText('#revision'), ' anywhere in a sentence and the note files itself under it.')],
-      [p('Come back'), p(backlinks)],
+      [h(3, 'Link'), p('Type ', codeText('[['), ' and pick a note. It becomes a real link, not text.')],
+      [h(3, 'Tag'), p('Write ', codeText('#revision'), ' anywhere in a sentence and the note files itself under it.')],
+      [h(3, 'Come back'), p(backlinks)],
     ]),
   ];
 }
 
+/** Title, hint, section and gate for one palette command, whichever half it comes from. */
+interface CommandDoc {
+  id: string;
+  title: string;
+  hint: string;
+  section: string;
+  needs?: string;
+}
+
+/**
+ * Hints reworded for a guest build, by command id.
+ *
+ * Not a gate: the search page opens for a guest and finds notes, so marking it "needs an
+ * account" would be a lie in the other direction. Only the WORDS are wrong - guest search
+ * is substring matching (guestApi.search), and this hint's operator list contradicted the
+ * sentence four lines above it saying operators need an account.
+ */
+const GUEST_HINTS: Record<string, string> = {
+  'nav-search': 'Finds any note containing what you type',
+};
+
+/**
+ * Every command Ctrl+P offers, in the order the palette itself groups them.
+ *
+ * The palette is two halves: the context-dependent ones CommandPalette.tsx assembles
+ * (their words live in paletteCatalog.ts) and the global ones lib/commands.ts registers.
+ * The note claims to list every command, so it reads both and never a count of its own.
+ *
+ * A function, not a module-level const, deliberately: lib/commands.ts will import
+ * ensureReadme -> buildReadme once "Open the guide" exists, and reading GLOBAL_COMMANDS
+ * at this module's top level would then hit it mid-initialisation.
+ */
+function paletteCommands(guest: boolean): CommandDoc[] {
+  const hint = (id: string, own: string | undefined) =>
+    (guest ? GUEST_HINTS[id] : undefined) ?? own ?? '';
+  const merged: CommandDoc[] = [
+    ...PALETTE_CATALOG.map((c) => ({ id: c.id, title: c.title, hint: hint(c.id, c.hint), section: c.section, needs: c.needs })),
+    ...GLOBAL_COMMANDS.map((c) => ({ id: c.id, title: c.title, hint: hint(c.id, c.hint), section: c.section, needs: c.needs })),
+  ];
+  const rank = (s: string) => {
+    const i = SECTION_ORDER.indexOf(s);
+    return i === -1 ? SECTION_ORDER.length : i;
+  };
+  // Stable, so commands keep their catalog order inside a section.
+  return merged.sort((a, b) => rank(a.section) - rank(b.section));
+}
+
 function findSection(guest: boolean): Node[] {
-  const keyCol: Node[] = [p('Keys worth learning')];
+  const keyCol: Node[] = [h(3, 'Keys worth learning')];
   for (const group of shortcutGroups('Ctrl', 'Shift')) {
-    keyCol.push(p(group.name));
+    keyCol.push(p(boldText(group.name)));
     for (const row of group.rows) {
-      keyCol.push(p(codeText(row.keys.join(' + ')), ' — ', row.label));
+      // A guest still HAS the key - it is the feature behind it that needs a server - so
+      // the binding is listed and marked rather than hidden.
+      const gate: Inline[] = guest && isGated(row.needs) ? [' — ', GATE] : [];
+      keyCol.push(p(codeText(row.keys.join(' + ')), ' — ', row.label, ...gate));
     }
   }
 
-  const searchCol: Node[] = [p('Search understands')];
+  const searchCol: Node[] = [h(3, 'Search understands')];
   if (guest) {
     searchCol.push(
       p('Search matches any note containing what you type.'),
-      p('Operators like ', codeText('tag:'), ' and ', codeText('-exclude'), ' ', GATE, '.'),
+      // Spelled out rather than splicing GATE onto a plural subject.
+      p('Operators like ', codeText('tag:'), ' and ', codeText('-exclude'), ' need an account.'),
     );
   } else {
     searchCol.push(
@@ -168,17 +237,18 @@ function findSection(guest: boolean): Node[] {
     );
   }
 
-  const commandRows: Inline[][][] = PALETTE_CATALOG.map((cmd) => [
+  const commands = paletteCommands(guest);
+  const commandRows: Inline[][][] = commands.map((cmd) => [
     [cmd.title],
     [cmd.hint],
     gateCell(guest, cmd.needs),
   ]);
 
   return [
-    h(2, '04 · Find'),
+    h(1, '04 · Find'),
     p('Press ', codeText('Ctrl+P'), ' to run any command, or ', codeText('?'), ` for all ${SHORTCUT_COUNT} bindings.`),
     columns([keyCol, searchCol]),
-    toggle(`Every command in the palette — ${PALETTE_CATALOG.length}`, [
+    toggle(`Every command in the palette — ${commands.length}`, [
       table(['Command', 'Does', ''], commandRows),
     ]),
   ];
@@ -187,7 +257,7 @@ function findSection(guest: boolean): Node[] {
 function featureSections(guest: boolean): Node[] {
   const out: Node[] = [];
   for (const section of FEATURE_SECTIONS) {
-    out.push(h(2, `${section.number} · ${section.title}`), p(section.blurb));
+    out.push(h(1, `${section.number} · ${section.title}`), p(section.blurb));
     out.push(
       bullets(
         section.lines.map((line): Inline[] =>
@@ -243,7 +313,7 @@ export function buildReadme(opts: { guest: boolean }): ReadmeDoc {
     ...closing(guest),
   ];
 
-  const contentJson = doc([h(1, README_TITLE), ...content]);
+  const contentJson = doc(content);
   return {
     title: README_TITLE,
     tags: README_TAGS,
