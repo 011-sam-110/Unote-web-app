@@ -33,12 +33,19 @@ function inlines(children: Inline[]): Node[] {
  * Both matter: ProseMirror rejects `content: []` on a node whose schema expects
  * `inline*`, and a text node with `text: ''` throws on load. Callers pass '' freely -
  * buildReadme's table cells are empty whenever a block has nothing to flag - so the
- * filter belongs here rather than at every call site.
+ * filter belongs here rather than at every call site. The same hazard applies to an
+ * explicitly-built empty text node (e.g. `codeText('')` or `text('')`), not just a raw
+ * `''` argument, so both forms are dropped.
  */
 export function p(...children: Inline[]): Node {
-  const content = inlines(children.filter((c) => c !== ''));
+  const content = inlines(children.filter((c) => !isEmpty(c)));
   if (content.length === 0) return { type: 'paragraph' };
   return { type: 'paragraph', content };
+}
+
+function isEmpty(c: Inline): boolean {
+  if (c === '') return true;
+  return typeof c === 'object' && c.type === 'text' && c.text === '';
 }
 
 export function h(level: 1 | 2 | 3, content: string): Node {
@@ -162,7 +169,7 @@ function walk(node: Node, out: string[]): void {
     append(out, node.text as string);
     return;
   }
-  if (type === 'inlineMath' || type === 'blockMath') {
+  if (type === 'inlineMath') {
     append(out, ((node.attrs as Record<string, unknown>)?.latex as string) ?? '');
     return;
   }
@@ -171,8 +178,15 @@ function walk(node: Node, out: string[]): void {
     append(out, `[[${(node.attrs as Record<string, unknown>)?.title as string}]]`);
     return;
   }
+  // blockMath and chem are block-level nodes - siblings of paragraph/heading, not
+  // inline children - so they start a new line rather than appending onto whatever
+  // block came before them, same as any other block-level branch below.
+  if (type === 'blockMath') {
+    out.push(((node.attrs as Record<string, unknown>)?.latex as string) ?? '');
+    return;
+  }
   if (type === 'chem') {
-    append(out, ((node.attrs as Record<string, unknown>)?.name as string) ?? '');
+    out.push(((node.attrs as Record<string, unknown>)?.name as string) ?? '');
     return;
   }
   const children = node.content as Node[] | undefined;

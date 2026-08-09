@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  blockMath, bullets, callout, chem, code, codeText, columns, divider, doc,
-  h, inlineMath, p, quote, table, toggle, todo, toPlainText,
+  blockMath, boldText, bullets, callout, chem, code, codeText, columns, divider, doc,
+  h, inlineMath, ordered, p, quote, table, text, toggle, todo, toPlainText,
 } from './docBuilders';
 
 describe('docBuilders', () => {
@@ -29,6 +29,14 @@ describe('docBuilders', () => {
       type: 'paragraph',
       content: [{ type: 'text', text: 'a' }, { type: 'text', text: 'b' }],
     });
+  });
+
+  it('drops an explicitly-built empty text node, not just raw empty strings', () => {
+    // p(codeText('')) and p(text('')) each build { type: 'text', text: '' } directly,
+    // which is just as invalid as the raw '' case above - later tasks call codeText()
+    // on values that could be empty, so the guard has to catch both forms.
+    expect(p(codeText(''))).toEqual({ type: 'paragraph' });
+    expect(p(text(''))).toEqual({ type: 'paragraph' });
   });
 
   it('builds a heading', () => {
@@ -110,11 +118,54 @@ describe('docBuilders', () => {
     expect(divider()).toEqual({ type: 'horizontalRule' });
   });
 
+  it('builds an ordered list (with its start attr), bold text, and a bare text node', () => {
+    // ordered() differs from bullets() only by attrs: { start: 1 } - assert it explicitly
+    // rather than via toMatchObject so a dropped attrs block would actually fail this.
+    expect(ordered([['one'], ['two']])).toEqual({
+      type: 'orderedList',
+      attrs: { start: 1 },
+      content: [
+        { type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'one' }] }] },
+        { type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'two' }] }] },
+      ],
+    });
+    expect(boldText('strong')).toEqual({ type: 'text', text: 'strong', marks: [{ type: 'bold' }] });
+    expect(text('plain')).toEqual({ type: 'text', text: 'plain' });
+  });
+
   it('flattens a document to plain text for the search index', () => {
     const d = doc([h(1, 'Title'), p('body ', codeText('/x')), table(['H'], [[['cell']]])]);
     const flat = toPlainText(d);
     expect(flat).toContain('Title');
     expect(flat).toContain('body /x');
     expect(flat).toContain('cell');
+  });
+
+  describe('toPlainText block boundaries', () => {
+    // blockMath and chem are block-level nodes - siblings of paragraph/heading, not
+    // inline children - so their text must start a new line, never fuse onto whatever
+    // block preceded them.
+
+    it('does not fuse a block math node onto the preceding paragraph', () => {
+      const d = doc([p('Given O(n),'), blockMath('T(n) = O(n log n)'), p('the sort is optimal.')]);
+      expect(toPlainText(d)).toBe('Given O(n),\nT(n) = O(n log n)\nthe sort is optimal.');
+    });
+
+    it('does not fuse consecutive chem nodes onto each other', () => {
+      const d = doc([chem('C', 'Methane'), chem('O', 'Water')]);
+      expect(toPlainText(d)).toBe('Methane\nWater');
+    });
+
+    it('does not fuse a block math node onto a preceding heading', () => {
+      const d = doc([h(1, 'Title'), blockMath('x=1')]);
+      expect(toPlainText(d)).toBe('Title\nx=1');
+    });
+
+    it('keeps the block boundary for chem and blockMath nested inside a callout', () => {
+      // callout is a block container that is not doc - verify the fix holds in a
+      // parent context other than the top-level document.
+      const d = doc([callout('🧪', 'info', [chem('C', 'Methane'), blockMath('x=1')])]);
+      expect(toPlainText(d)).toBe('Methane\nx=1');
+    });
   });
 });
