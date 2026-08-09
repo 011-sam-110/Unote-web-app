@@ -121,6 +121,36 @@ wrong head - users will be fine either way, because React Router renders the rig
 regardless. Poll gently: hammering the production URL trips a Vercel bot challenge that
 blocks exactly this kind of check.
 
+## 6b. Launch the packaged app. Every time. Before announcing anything.
+
+```bash
+npm run desktop:build -- --publish never --win
+./release/win-unpacked/Unote.exe
+```
+
+**v0.1.0 shipped completely broken and every automated check was green.** It compiled,
+packaged, published, downloaded and installed, then died on first launch with
+`ERR_MODULE_NOT_FOUND: Cannot find package 'electron-updater'`. The cause: that package was
+a `devDependency`, and electron-builder bundles `dependencies` into the asar and leaves
+`devDependencies` out entirely. Nothing before the launch can see that - the module resolves
+perfectly in the repo, where dev and prod dependencies sit in the same `node_modules`.
+
+Note the contrast that makes this easy to get wrong: `electron` IS correctly a
+devDependency, because the packaged app is the Electron runtime and never resolves it from
+`node_modules`. So "it's an electron thing, it goes in devDependencies" is right for one and
+wrong for the other. **Anything the main process imports at runtime is a production
+dependency.**
+
+Two ways to check without a full install:
+
+```bash
+npx asar list release/win-unpacked/resources/app.asar | grep node_modules
+```
+
+and then actually run the exe. The asar listing uses backslashes, so grep for
+`node_modules\` or normalise the separators - a forward-slash grep silently finds nothing
+and reads exactly like a missing module.
+
 ## 7. Afterwards
 
 - Install on a real Windows machine, sign in, cut the network, confirm notes still open.

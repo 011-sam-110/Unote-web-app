@@ -1,7 +1,7 @@
 {
   "name": "unote",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.1",
   "// type": "ESM, so Vercel compiles api/index.ts as an ES module. Without this it defaults to CommonJS and require()ing the ESM server throws ERR_REQUIRE_ESM at runtime, a failure that only appears once deployed.",
   "type": "module",
   "// main": "Entry for the Electron shell only. electron-builder reads it to find the packaged main process; nothing imports this package.",
@@ -25,11 +25,14 @@
     "desktop:dev": "npm run desktop:compile && electron dist-desktop/main.js",
     "desktop:build": "npm run desktop:compile && electron-builder --config electron-builder.yml"
   },
+  "// dependencies": "electron-updater is imported by the packaged main process AT RUNTIME, so it has to be a production dependency: electron-builder bundles `dependencies` into the asar and leaves `devDependencies` out entirely. As a devDependency it built green, published green, installed fine, and then died on first launch with ERR_MODULE_NOT_FOUND - the only place that failure can appear is a real install, which is why v0.1.0 shipped broken. Note the contrast with `electron` below: that one is correctly a devDependency, because the packaged app IS the Electron runtime and never resolves it from node_modules.",
+  "dependencies": {
+    "electron-updater": "^6.8.9"
+  },
   "devDependencies": {
     "@playwright/test": "^1.61.1",
     "concurrently": "^9.1.0",
     "electron": "^33.4.11",
-    "electron-builder": "^25.1.8",
-    "electron-updater": "^6.8.9"
+    "electron-builder": "^25.1.8"
   }
 }
