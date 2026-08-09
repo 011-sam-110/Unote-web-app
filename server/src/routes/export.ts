@@ -41,7 +41,7 @@ const ROWS_SQL = `
   SELECT n.id, n.title, n.kind, n.content_json, n.created_at, n.updated_at,
          nb.name AS notebook_name, nb.position AS notebook_position
   FROM notes n
-  JOIN notebooks nb ON nb.id = n.notebook_id
+  JOIN notebooks nb ON nb.id = n.notebook_id AND nb.deleted_at IS NULL
   WHERE n.user_id = ? AND n.deleted_at IS NULL
   ORDER BY nb.position ASC, n.updated_at DESC
 `;
@@ -132,7 +132,7 @@ router.get('/summary', async (req, res) => {
     .prepare(
       `SELECT
          (SELECT COUNT(*) FROM notes WHERE user_id = ? AND deleted_at IS NULL) AS notes,
-         (SELECT COUNT(*) FROM notebooks WHERE user_id = ?) AS notebooks`,
+         (SELECT COUNT(*) FROM notebooks WHERE user_id = ? AND deleted_at IS NULL) AS notebooks`,
     )
     .get<{ notes: number | string; notebooks: number | string }>(uid, uid);
   const notes = Number(counts?.notes ?? 0);

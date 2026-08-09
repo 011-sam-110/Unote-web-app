@@ -520,7 +520,9 @@ router.post('/', aiQuotaGate, handleUpload(upload.single('file')), async (req, r
   if (notebookId) {
     // Ownership: without `user_id = ?` an import could file a note into another user's notebook
     // (and the 400-vs-success difference would leak which notebook ids exist).
-    const nb = await db.prepare('SELECT id FROM notebooks WHERE id = ? AND user_id = ?').get(notebookId, uid);
+    // `deleted_at IS NULL` too: notebooks are tombstoned rather than hard-deleted, and an
+    // import into a trashed notebook would land somewhere no list can show.
+    const nb = await db.prepare('SELECT id FROM notebooks WHERE id = ? AND user_id = ? AND deleted_at IS NULL').get(notebookId, uid);
     if (!nb) return fail(400, 'unknown notebookId');
   }
   let targetNote: NoteRow | undefined;

@@ -1,6 +1,8 @@
 import { Router } from 'express';
-import { db, tx, newId, nowIso } from '../db.js';
+import { db, tx, nowIso } from '../db.js';
 import { userId } from '../auth/middleware.js';
+import { resolveId } from '../lib/clientId.js';
+import { clampEditTime, resolve, demoteToVersion } from '../lib/conflict.js';
 import { noteLite, noteFull, wordCountOf, type NoteRow } from '../lib/serialize.js';
 import { syncLinksForNote, renameWikilinksToTitle, resyncNotesReferencingTitle } from '../lib/links.js';
 import { tiptapToMarkdown, type TTNode } from '../lib/export.js';
@@ -199,8 +201,11 @@ router.post('/', async (req, res) => {
   }
   // Owner-scoped: another user's notebook must read as unknown rather than accept the
   // note, otherwise any caller could file notes into an account they cannot see.
+  // `deleted_at IS NULL` too: notebooks are tombstoned rather than hard-deleted now, so
+  // without it a trashed notebook would still accept new notes - which would then be
+  // filed somewhere the sidebar cannot show.
   const notebook = await db
-    .prepare('SELECT id FROM notebooks WHERE id = ? AND user_id = ?')
+    .prepare('SELECT id FROM notebooks WHERE id = ? AND user_id = ? AND deleted_at IS NULL')
     .get<{ id: string }>(b.notebookId, uid);
   if (!notebook) {
     res.status(400).json({ error: 'unknown notebookId' });
@@ -217,19 +222,43 @@ router.post('/', async (req, res) => {
   // kind would make NotePage render neither the editor nor the board.
   const kind = b.kind === 'canvas' ? 'canvas' : 'doc';
 
-  const id = newId();
+  // A note created offline keeps the id the client gave it. Re-minting here would
+  // break every wikilink and backlink aimed at it: links resolve by title, but the id
+  // stored in `links` does not survive the change.
+  const id = resolveId(b.id);
   const now = nowIso();
   const title = b.title !== undefined ? String(b.title) : '';
   const contentJsonObj = b.contentJson !== undefined ? b.contentJson : { type: 'doc', content: [{ type: 'paragraph' }] };
   const contentJson = JSON.stringify(contentJsonObj);
   const contentText = b.contentText !== undefined ? String(b.contentText) : b.contentJson !== undefined ? plainTextFromDoc(contentJsonObj) : '';
 
+  // A collision means this client already created the record and is retrying a push
+  // whose response it never saw. Report it so the outbox can treat it as success
+  // rather than retrying forever - and so it is never a 500 from a PK violation.
+  // Deliberately not owner-scoped: ids are unique across the whole table, so an id
+  // already held by another account is taken too. The response says only that, which
+  // is why it cannot be used to read anything about the row that holds it.
+  const clash = await db.prepare('SELECT id FROM notes WHERE id = ?').get<{ id: string }>(id);
+  if (clash) {
+    res.status(409).json({ error: 'id already exists', id });
+    return;
+  }
+
+  // pinned/archived are accepted on create, not forced to 0.
+  //
+  // An offline client's outbox coalesces "create this note" and "pin it" into ONE
+  // create - that is what stops a long offline session queueing thousands of
+  // writes - so whatever this INSERT ignores is silently lost on first sync. The
+  // note arrived; the pin did not, and nothing reported it.
+  const pinned = b.pinned === true ? 1 : 0;
+  const archived = b.archived === true ? 1 : 0;
+
   await db
     .prepare(
       `INSERT INTO notes (id, user_id, notebook_id, title, content_json, content_text, kind, pinned, archived, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
-    .run(id, uid, b.notebookId, title, contentJson, contentText, kind, now, now);
+    .run(id, uid, b.notebookId, title, contentJson, contentText, kind, pinned, archived, now, now);
 
   if (b.tags !== undefined) await setTags(uid, id, b.tags);
   if (contentText) await syncLinksForNote(uid, id, contentText);
@@ -283,9 +312,10 @@ router.patch('/:id', async (req, res) => {
 
   const b = req.body ?? {};
   if (b.notebookId !== undefined) {
-    // Moving a note into a notebook the caller does not own would hand it to them.
+    // Moving a note into a notebook the caller does not own would hand it to them, and
+    // moving one into a tombstoned notebook would hide it from every list.
     const notebook = await db
-      .prepare('SELECT id FROM notebooks WHERE id = ? AND user_id = ?')
+      .prepare('SELECT id FROM notebooks WHERE id = ? AND user_id = ? AND deleted_at IS NULL')
       .get<{ id: string }>(b.notebookId, uid);
     if (!notebook) {
       res.status(400).json({ error: 'unknown notebookId' });
@@ -296,11 +326,6 @@ router.patch('/:id', async (req, res) => {
   if (contentJsonError) {
     res.status(400).json({ error: contentJsonError });
     return;
-  }
-
-  const contentChanging = b.title !== undefined || b.contentJson !== undefined || b.contentText !== undefined;
-  if (contentChanging && (await shouldAutosaveSnapshot(uid, row.id))) {
-    await insertVersion(uid, row.id, row.title, row.content_json, 'autosave');
   }
 
   const newTitle = b.title !== undefined ? String(b.title) : row.title;
@@ -314,6 +339,48 @@ router.patch('/:id', async (req, res) => {
   const newPinned = b.pinned !== undefined ? (b.pinned ? 1 : 0) : row.pinned;
   const newArchived = b.archived !== undefined ? (b.archived ? 1 : 0) : row.archived;
   const newNotebookId = b.notebookId !== undefined ? b.notebookId : row.notebook_id;
+
+  // Conflict adjudication, for a write that arrived from an offline client.
+  //
+  // `baseUpdatedAt` absent means "no opinion, do not check", which is every write the
+  // website itself makes - so this whole block is a no-op on the existing path and no
+  // existing caller sees any difference.
+  const editedAt = clampEditTime(
+    typeof b.clientUpdatedAt === 'string' ? b.clientUpdatedAt : undefined,
+    row.created_at,
+    nowIso(),
+  );
+  const decision = resolve({
+    currentUpdatedAt: row.updated_at,
+    baseUpdatedAt: typeof b.baseUpdatedAt === 'string' ? b.baseUpdatedAt : null,
+    clientUpdatedAt: editedAt,
+  });
+
+  let versionId: number | undefined;
+  if (decision.conflicted) {
+    // Whichever side loses is preserved before anything is overwritten. Doing this
+    // BEFORE the update is what makes the guarantee true if the update then fails.
+    // `row.id` came from the owner-scoped lookup at the top of the handler, so these
+    // history rows are provably the caller's.
+    versionId =
+      decision.winner === 'client'
+        ? await demoteToVersion(row.id, row.title, row.content_json)
+        : await demoteToVersion(row.id, newTitle, newContentJson);
+  }
+
+  if (decision.winner === 'server') {
+    // The client's edit lost. Hand back the server's record so the client can apply it
+    // and stop retrying; its own copy is safe in history, above.
+    res.json({ note: await noteFull(row), conflicted: true, versionId });
+    return;
+  }
+
+  const contentChanging = b.title !== undefined || b.contentJson !== undefined || b.contentText !== undefined;
+  // A conflict already filed the outgoing body as a version, so the autosave would be
+  // a second snapshot of identical content.
+  if (contentChanging && versionId === undefined && (await shouldAutosaveSnapshot(uid, row.id))) {
+    await insertVersion(uid, row.id, row.title, row.content_json, 'autosave');
+  }
 
   await db
     .prepare(
@@ -346,7 +413,7 @@ router.patch('/:id', async (req, res) => {
     uid,
   );
 
-  res.json({ note: await noteFull(updated) });
+  res.json({ note: await noteFull(updated), conflicted: decision.conflicted, versionId });
 });
 
 // Soft-delete: move to trash. Version history survives; a boot-time sweep hard-purges
@@ -358,7 +425,15 @@ router.delete('/:id', async (req, res) => {
     res.status(404).json({ error: 'note not found' });
     return;
   }
-  await db.prepare('UPDATE notes SET deleted_at = ? WHERE id = ? AND user_id = ?').run(nowIso(), row.id, uid);
+  // updated_at moves with deleted_at, and that is not cosmetic. GET /api/sync/changes
+  // serves rows ordered by (updated_at, id) and clients pull with a cursor, so a
+  // tombstone whose updated_at stayed put is invisible to any client already synced
+  // past it: the delete never arrives, and that client re-uploads the note from its
+  // outbox - resurrecting it. Same reasoning in the undelete below.
+  const deletedAt = nowIso();
+  await db
+    .prepare('UPDATE notes SET deleted_at = ?, updated_at = ? WHERE id = ? AND user_id = ?')
+    .run(deletedAt, deletedAt, row.id, uid);
   // Drop outgoing links so a trashed note stops appearing as a backlink elsewhere.
   // `row.id` came from the owner-scoped lookup above, so these link rows are provably
   // the caller's; `links` has no user_id column of its own to filter on.
@@ -378,7 +453,12 @@ router.post('/:id/undelete', async (req, res) => {
     res.json({ note: await noteFull(row) }); // already live - no-op
     return;
   }
-  await db.prepare('UPDATE notes SET deleted_at = NULL WHERE id = ? AND user_id = ?').run(row.id, uid);
+  // Clearing the tombstone is itself a change a client must see, so updated_at advances
+  // here too - otherwise the restore is invisible to anyone past the old cursor and the
+  // note stays deleted on every other device.
+  await db
+    .prepare('UPDATE notes SET deleted_at = NULL, updated_at = ? WHERE id = ? AND user_id = ?')
+    .run(nowIso(), row.id, uid);
   // Rebuild this note's outgoing links and any incoming links from live notes.
   await syncLinksForNote(uid, row.id, row.content_text);
   await resyncNotesReferencingTitle(uid, row.title, row.id);

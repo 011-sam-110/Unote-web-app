@@ -196,8 +196,10 @@ router.get('/', async (req, res) => {
       if (parsed.notebook) {
         // nb.user_id is redundant with n.user_id (a note lives in its owner's notebook)
         // but is asserted anyway so a name match can never straddle two accounts.
+        // nb.deleted_at IS NULL: a trashed notebook's name must not be a live search
+        // filter, now that notebooks are tombstoned rather than hard-deleted.
         joins.push(
-          "JOIN notebooks nb ON nb.id = n.notebook_id AND nb.user_id = ? AND lower(nb.name) LIKE lower(?) ESCAPE '\\'",
+          "JOIN notebooks nb ON nb.id = n.notebook_id AND nb.user_id = ? AND nb.deleted_at IS NULL AND lower(nb.name) LIKE lower(?) ESCAPE '\\'",
         );
         joinParams.push(uid, `${escapeLike(parsed.notebook)}%`);
       }
@@ -266,7 +268,7 @@ router.get('/', async (req, res) => {
         tailParams.push(term);
       });
       if (parsed.notebook) {
-        join += " JOIN notebooks nb ON nb.id = n.notebook_id AND nb.user_id = ? AND lower(nb.name) LIKE lower(?) ESCAPE '\\'";
+        join += " JOIN notebooks nb ON nb.id = n.notebook_id AND nb.user_id = ? AND nb.deleted_at IS NULL AND lower(nb.name) LIKE lower(?) ESCAPE '\\'";
         params.push(uid, `${escapeLike(parsed.notebook)}%`);
       }
 

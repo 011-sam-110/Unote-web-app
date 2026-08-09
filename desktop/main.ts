@@ -112,7 +112,18 @@ if (!app.requestSingleInstanceLock()) {
       autoUpdater.on('error', () => {
         // A failed update check must never interrupt note-taking.
       });
-      void autoUpdater.checkForUpdatesAndNotify();
+      // The 'error' handler above is NOT enough on its own: checkForUpdatesAndNotify
+      // returns a promise that rejects separately, so `void` alone produced a real
+      // UnhandledPromiseRejectionWarning in the packaged app the first time it ran -
+      // the feed at /desktop/latest.yml does not exist yet, Vercel answered with HTML,
+      // and the YAML parser threw.
+      //
+      // That matters beyond tidiness: an unhandled rejection in the main process is
+      // exactly the kind of thing a future Electron version turns into a hard crash,
+      // and it would crash on startup, before the window is usable.
+      autoUpdater.checkForUpdatesAndNotify().catch(() => {
+        // No update feed published yet, or unreachable. Neither is the user's problem.
+      });
     }
   });
 
