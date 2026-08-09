@@ -68,9 +68,9 @@ jobs:
       #
       # Both jobs run --publish always against the same draft release. That is safe
       # rather than a race: whichever job loses, electron-publish recognises GitHub's
-      # 422 already_exists and re-fetches the release the other job created. A human
-      # publishes the draft once both platforms have landed, so the website never
-      # links to a half-populated release.
+      # 422 already_exists and re-fetches the release the other job created. The draft
+      # is what stops the website ever linking to a half-populated release; the publish
+      # job below is what turns it into a real one, once BOTH platforms have landed.
       #
       # Deliberately no CSC_* variables here. Both builds are unsigned for now - a
       # Windows certificate is around £200/yr and an Apple Developer account $99/yr -
@@ -85,3 +85,44 @@ jobs:
           # built-in token also keeps releases off any personal gh credentials, which
           # is just as well - the local ones have been 401ing since they expired.
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Turn the draft into a real release, exactly once, only if BOTH platforms built.
+  #
+  # This exists because the draft has to be published by something, and the obvious
+  # something - a person running `gh release edit --draft=false` - is not available:
+  # the local gh token expired on 2026-08-07, and an unpublished draft is invisible to
+  # /releases/latest/download/..., which is precisely the URL the download page uses.
+  # So every button on that page would 404 while the assets sat there, built and
+  # unreachable.
+  #
+  # `needs: build` is the guard the draft was protecting: this job cannot start until
+  # both matrix legs have succeeded, so a release never goes public with one platform
+  # missing. fail-fast is off, so if macOS fails, Windows still uploads its assets to
+  # the draft - and this job correctly does NOT run, leaving a draft to inspect rather
+  # than a half-populated public release.
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      # Refuse to publish a release that is missing an update feed. Without latest.yml
+      # the installers work but auto-update silently never fires, which is the kind of
+      # broken that is only discovered months later when nobody has the new version.
+      - name: Publish the release, if the feeds are there
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          assets=$(gh release view "$TAG" --repo "$REPO" --json assets --jq '.assets[].name')
+          echo "$assets"
+          for required in Unote-Setup.exe latest.yml latest-mac.yml; do
+            if ! grep -qx "$required" <<<"$assets"; then
+              echo "::error::$required missing from $TAG - refusing to publish"
+              exit 1
+            fi
+          done
+          gh release edit "$TAG" --repo "$REPO" --draft=false
+          echo "published $TAG"

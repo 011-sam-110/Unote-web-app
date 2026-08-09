@@ -63,10 +63,19 @@ Expect these assets:
 
 If `latest.yml` is missing, the updater will not work and there is no point publishing.
 
-## 4. Publish the draft
+## 4. Publishing is automatic
 
-Do this only once **both** platforms have uploaded, or the website will link at a
-half-populated release.
+A third job, `publish`, does it. It `needs: build`, so it cannot run until **both**
+platforms have succeeded - the guard the draft existed to provide. It then refuses to
+publish unless `Unote-Setup.exe`, `latest.yml` and `latest-mac.yml` are all attached,
+because installers without an update feed work once and then never update again, and
+that is only discovered months later.
+
+If one platform fails, `publish` does not run and you are left with a draft to inspect
+rather than a half-populated public release. Fix the failing job, re-run it, and the
+publish job follows.
+
+To publish a stuck draft by hand you need a working `gh` login:
 
 ```bash
 gh release edit v0.1.0 --draft=false
