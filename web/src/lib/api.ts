@@ -425,14 +425,24 @@ type AnyFn = (...args: never[]) => Promise<unknown>;
 function writeThrough(local: AnyFn): AnyFn {
   return (async (...args: never[]) => {
     const localResult = await local(...args);
-    try {
-      // Drain immediately so this write reaches the server now rather than at the
-      // next poll. syncNow() pushes before it pulls, which is also what reconciles
-      // the record we just wrote.
-      await syncNow();
-    } catch {
-      // Queued and will retry. Reported through the connection indicator, not here.
-    }
+
+    // Kick the sync off, do NOT wait for it. This is the whole point of local-first:
+    // the write is already durable in IndexedDB and queued in the outbox, so making
+    // the caller wait for a network round-trip buys nothing and costs everything.
+    //
+    // An earlier version awaited syncNow() here. syncNow pushes AND then pulls, so
+    // every single write - creating a note, renaming a notebook - blocked on a full
+    // sync cycle before its promise resolved. In the e2e suite that timed out
+    // `page.waitForURL` after creating a board: the note existed, the UI just never
+    // got its result back in time to navigate. In production it would have made the
+    // app feel slower than the website it replaced, which is the exact opposite of
+    // what the mirror is for.
+    void syncNow().catch(() => {
+      // Still queued, and the connection indicator is what reports it. Swallowing
+      // here is deliberate: the write SUCCEEDED locally, and telling the caller it
+      // failed would be false.
+    });
+
     return localResult;
   }) as AnyFn;
 }
