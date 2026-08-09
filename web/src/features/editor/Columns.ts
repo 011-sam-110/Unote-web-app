@@ -1,11 +1,18 @@
 // Side-by-side layout: a `columnList` node holding 2-4 `column` nodes, each a normal
 // block container. JSON contract (shared with templates-nb's Cornell template, see
 // docs/ITER2-PLAN.md): `{ type: 'columnList', content: [{ type: 'column',
-// attrs: { width: null }, content: [blocks…] }] }`. Rendered as a responsive CSS grid
-// (editor.css) that collapses to a stacked layout under 640px. Column-boundary dragging
-// (resizing individual widths) is intentionally NOT implemented - the spec calls it
-// optional and it's the flakiest part of this pattern to get right; `width` is carried
-// in the schema for a future pass but unused today (all columns render equal-width).
+// attrs: { width: null }, content: [blocks…] }] }`. Rendered as a responsive flex row
+// (editor.css) that collapses to a stacked layout under 640px.
+//
+// `width` (a percentage, 5-95, or null for "share the space equally") is honoured: it is
+// what makes an unequal split possible at all, and an unequal split is the whole point of
+// the Cornell template, whose narrow cue column is a third of the page by definition. It
+// is set from JSON only - column-boundary DRAGGING is still intentionally not implemented,
+// being the flakiest part of this pattern to get right.
+//
+// `divider` on the list draws a hairline down each boundary. Off by default, because most
+// column layouts (a row of images, two blocks of prose) read better without one; on for
+// the ruled paper the Cornell method actually describes.
 import { Node, mergeAttributes } from '@tiptap/core';
 import { Selection, type EditorState } from '@tiptap/pm/state';
 import type { Editor } from '@tiptap/core';
@@ -98,6 +105,19 @@ function handleColumnTab(editor: Editor, dir: 1 | -1): boolean {
   return true;
 }
 
+/**
+ * A column width is a percentage of the row, or null for "share what's left equally".
+ *
+ * Clamped rather than rejected: a stored 0 or 120 is a bug somewhere upstream, but the
+ * reader of a note is not the person who can fix it, and a column that renders at 0% is
+ * a column whose content has silently vanished.
+ */
+export function normaliseWidth(value: unknown): number | null {
+  const n = typeof value === 'string' ? Number.parseFloat(value) : typeof value === 'number' ? value : NaN;
+  if (!Number.isFinite(n)) return null;
+  return Math.min(95, Math.max(5, Math.round(n)));
+}
+
 export const Column = Node.create<ColumnsOptions>({
   name: 'column',
   content: 'block+',
@@ -111,8 +131,11 @@ export const Column = Node.create<ColumnsOptions>({
     return {
       width: {
         default: null,
-        parseHTML: (el) => el.getAttribute('data-width'),
-        renderHTML: (attrs) => (attrs.width ? { 'data-width': attrs.width as string } : {}),
+        parseHTML: (el) => normaliseWidth(el.getAttribute('data-width')),
+        // Only `data-width` here. The percentage reaches CSS through a custom property in
+        // renderHTML below, which needs the whole style string in one place - emitting it
+        // from the attribute too would produce two competing `style` attributes.
+        renderHTML: (attrs) => (attrs.width == null ? {} : { 'data-width': String(attrs.width) }),
       },
     };
   },
@@ -121,8 +144,17 @@ export const Column = Node.create<ColumnsOptions>({
     return [{ tag: 'div[data-type="column"]' }];
   },
 
-  renderHTML({ HTMLAttributes }) {
-    return ['div', mergeAttributes(this.options.HTMLAttributes, HTMLAttributes, { 'data-type': 'column', class: 'folio-column' }), 0];
+  renderHTML({ node, HTMLAttributes }) {
+    const width = normaliseWidth(node.attrs.width);
+    return [
+      'div',
+      mergeAttributes(this.options.HTMLAttributes, HTMLAttributes, {
+        'data-type': 'column',
+        class: 'folio-column',
+        ...(width == null ? {} : { style: `--folio-col-w:${width}` }),
+      }),
+      0,
+    ];
   },
 
   addKeyboardShortcuts() {
@@ -143,6 +175,16 @@ export const ColumnList = Node.create<ColumnsOptions>({
 
   addOptions() {
     return { HTMLAttributes: {} };
+  },
+
+  addAttributes() {
+    return {
+      divider: {
+        default: false,
+        parseHTML: (el) => el.getAttribute('data-divider') === 'true',
+        renderHTML: (attrs) => (attrs.divider ? { 'data-divider': 'true' } : {}),
+      },
+    };
   },
 
   parseHTML() {
@@ -168,6 +210,7 @@ export const ColumnList = Node.create<ColumnsOptions>({
 export function buildColumnsContent(count: 2 | 3 | 4): Record<string, unknown> {
   return {
     type: 'columnList',
+    attrs: { divider: false },
     content: Array.from({ length: count }, () => ({
       type: 'column',
       attrs: { width: null },

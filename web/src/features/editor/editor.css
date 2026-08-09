@@ -118,6 +118,71 @@
   margin: 1.6em 0;
 }
 
+/* Side-by-side columns (see Columns.ts).
+ *
+ * Flex, not grid, because the track sizes are declared by the CHILDREN: a column carries
+ * its own `--folio-col-w` percentage and a grid parent cannot read that. Columns without
+ * one share whatever is left (`flex: 1 1 0`), so a two-column row with a single 30% cue
+ * column gives the notes column the other 70% without either side hard-coding the pair.
+ *
+ * `min-width: 0` on the column is load-bearing: a flex item's default min-width is
+ * auto, so one long unbroken token (a URL, a code identifier) would otherwise push the
+ * column wider than its share and blow the note's own width out sideways. */
+.folio-prosemirror .folio-columns {
+  display: flex;
+  align-items: stretch;
+  gap: 1.25rem;
+}
+
+.folio-prosemirror .folio-column {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.folio-prosemirror .folio-column[data-width] {
+  flex: 0 1 auto;
+  width: calc(var(--folio-col-w, 50) * 1%);
+}
+
+/* A column's first block sits flush with its neighbour's, so the two sides start on the
+ * same line - a heading's usual top margin would stagger them. */
+.folio-prosemirror .folio-column > :first-child {
+  margin-top: 0;
+}
+
+/* Ruled boundaries, opt-in per row (`divider: true`). Drawn as a left border on every
+ * column after the first, offset by half the gap so the rule sits centred in the gutter
+ * rather than hugging the right-hand column's text. */
+.folio-prosemirror .folio-columns[data-divider='true'] > .folio-column + .folio-column {
+  border-left: 1px solid var(--line);
+  padding-left: 1.25rem;
+  margin-left: -0.625rem;
+}
+
+/* Under 640px there is no room for a genuine side-by-side read, so the row stacks. The
+ * per-column width becomes meaningless once stacked and is explicitly dropped, otherwise
+ * a 30% cue column would render as a 30%-wide sliver on a phone. */
+@media (max-width: 640px) {
+  .folio-prosemirror .folio-columns {
+    flex-direction: column;
+    gap: 0.85rem;
+  }
+
+  .folio-prosemirror .folio-column,
+  .folio-prosemirror .folio-column[data-width] {
+    width: auto;
+    flex: 0 0 auto;
+  }
+
+  .folio-prosemirror .folio-columns[data-divider='true'] > .folio-column + .folio-column {
+    border-left: none;
+    border-top: 1px solid var(--line);
+    padding-left: 0;
+    padding-top: 0.85rem;
+    margin-left: 0;
+  }
+}
+
 .folio-prosemirror a.folio-link {
   color: var(--accent);
   text-decoration: underline;
