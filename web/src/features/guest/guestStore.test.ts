@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearData, latestNoteId, readData, seedGuestWorkspace } from './guestStore';
 
 describe('seedGuestWorkspace', () => {
@@ -21,13 +21,32 @@ describe('seedGuestWorkspace', () => {
   });
 
   it('returns the stored (pinned, re-stamped) README row, not a hand-forged copy', () => {
-    const { readme } = seedGuestWorkspace();
-    const stored = readData().notes.find((n) => n.id === readme.id);
     // updateNote() re-stamps updatedAt on pin, so a forged `{ ...readme, pinned: true }`
     // (built from the PRE-pin row) would disagree with storage on updatedAt even though
     // `.pinned` matched. Comparing the whole row catches that; comparing only `.pinned`
-    // would not.
-    expect(readme).toEqual(stored);
+    // would not - but ONLY when the pin's nowIso() call actually lands in a later
+    // millisecond than the create's, which the real clock does just ~22/40 of the time
+    // (see task-7-report.md). Freezing the clock (as the tie-break test below does,
+    // deliberately, for the opposite reason) would make every nowIso() call return the
+    // SAME instant, which would pass even on a build that forges the copy - so instead
+    // this stubs `Date` to hand out a strictly increasing millisecond on every `new
+    // Date()`, guaranteeing the pin (the third call: notebook, then the readme's create,
+    // then the pin) always lands after the create it's compared against.
+    let tick = 0;
+    const base = Date.now();
+    class TickingDate extends Date {
+      constructor() {
+        super(base + tick++);
+      }
+    }
+    vi.stubGlobal('Date', TickingDate);
+    try {
+      const { readme } = seedGuestWorkspace();
+      const stored = readData().notes.find((n) => n.id === readme.id);
+      expect(readme).toEqual(stored);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it('leaves a blank note to type into, and latestNoteId() lands a return visitor on it', () => {
@@ -41,11 +60,22 @@ describe('seedGuestWorkspace', () => {
     // This also doubles as the regression test for the tie-break bug: nowIso() is
     // millisecond-resolution, and seedGuestWorkspace's pin-then-create-blank-note writes
     // routinely land in the same millisecond, so this only reliably passes with
-    // `latestNoteId()`'s `>=` tie-break (see that function's own comment). See the
-    // deliberate-break proof in task-7-report.md for the measured failure rate under `>`.
-    const { note } = seedGuestWorkspace();
-    expect(latestNoteId()).toBe(note.id);
-    expect(readData().notes.find((n) => n.id === note.id)?.title).toBe('');
+    // `latestNoteId()`'s `>=` tie-break (see that function's own comment). Left on the
+    // real clock this depended on the pin and the blank note landing in the same
+    // millisecond by chance - which only happened ~48% of the time, so a revert of `>=`
+    // to `>` only failed here about half the time. A frozen fake clock forces every
+    // nowIso() call in this test to return the exact same instant, so the tie fires
+    // every run. See the deliberate-break proof in task-7-report.md for the measured
+    // failure rate under `>`, on both the real clock and this frozen one.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'));
+    try {
+      const { note } = seedGuestWorkspace();
+      expect(latestNoteId()).toBe(note.id);
+      expect(readData().notes.find((n) => n.id === note.id)?.title).toBe('');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('seeds the guest build of the README, not the account build', () => {

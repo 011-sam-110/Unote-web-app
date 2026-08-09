@@ -65,11 +65,14 @@ export function startGuest(): { noteId: string | null; readmeId: string | null }
     return { noteId: null, readmeId: null };
   }
   active = true;
-  // Non-null only when this call - or an earlier one this page load - seeded. A visitor
-  // who has been here before keeps their own landing note, and does not get shown the
-  // guide again.
-  let readmeId: string | null = seededReadmeIdThisLoad;
-  if (readmeId === null && !hasGuestWork()) {
+  // Storage stays the authority on "is there work" - the memo only ever answers "did I
+  // seed it THIS load". Gating the `!hasGuestWork()` check behind a non-null memo (as a
+  // prior version did) let a store cleared mid-load - endGuest -> startGuest, or
+  // clearData -> startGuest, both reachable with no page reload - skip re-seeding AND
+  // report the stale id from before the clear, pointing the caller at a note that no
+  // longer exists over an empty workspace.
+  let readmeId: string | null = null;
+  if (!hasGuestWork()) {
     try {
       readmeId = seedGuestWorkspace().readme.id;
       seededReadmeIdThisLoad = readmeId;
@@ -77,6 +80,12 @@ export function startGuest(): { noteId: string | null; readmeId: string | null }
       // Storage filled between the probe and the write. The shell still opens; the
       // dashboard's empty state is a survivable landing.
     }
+  } else {
+    // Work already here. Either a returning visitor (memo is null, correctly reports
+    // null below) or this load's own earlier seed being replayed on a StrictMode second
+    // pass (memo holds what THIS load wrote, reported again so the caller's target
+    // doesn't flip to `latestNoteId()` mid-mount).
+    readmeId = seededReadmeIdThisLoad;
   }
   emit();
   return { noteId: latestNoteId(), readmeId };
@@ -94,6 +103,12 @@ export function endGuest(options: { keepWork: boolean }): void {
   }
   active = false;
   if (!options.keepWork) clearData();
+  // Belt-and-braces: storage (not this memo) is what the `!hasGuestWork()` check above
+  // now gates on, so this isn't load-bearing for the bug above. But a stale memo
+  // surviving past the work it described into a later seed is exactly the class of bug
+  // this file just had, so leaving it unset on the one call that actually ends this
+  // load's guest session is not a chance worth taking a second time.
+  seededReadmeIdThisLoad = null;
   emit();
 }
 
