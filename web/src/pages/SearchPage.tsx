@@ -2,7 +2,7 @@
 // and the destination for every "search notes →" link on the Tags page).
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { api } from '../lib/api';
+import { api, getMode } from '../lib/api';
 import type { SearchResult } from '../lib/types';
 import { errorMessage, parseSnippetHtml, plural, relativeTime } from '../lib/format';
 import Icon from '../components/Icon';
@@ -55,6 +55,7 @@ export default function SearchPage() {
   const [error, setError] = useState<string | null>(null);
   const [durationMs, setDurationMs] = useState<number | null>(null);
   const [searchedFor, setSearchedFor] = useState<string | null>(null);
+  const [answeredLocally, setAnsweredLocally] = useState(false);
 
   const inputRef = useRef<HTMLInputElement | null>(null);
   const lastPushedRef = useRef(initialQ);
@@ -70,11 +71,16 @@ export default function SearchPage() {
       setLoading(false);
       setDurationMs(null);
       setSearchedFor(null);
+      setAnsweredLocally(false);
       return;
     }
     setLoading(true);
     setError(null);
     const start = performance.now();
+    // Which index is about to answer, read at the same instant the api Proxy resolves
+    // the method. Kept per request rather than read at render, so a reconnect between
+    // typing and results cannot relabel a search that has already happened.
+    const local = getMode() !== 'online';
     api
       .searchFull(trimmed, 50)
       .then((res) => {
@@ -82,6 +88,7 @@ export default function SearchPage() {
         setResults(res.results);
         setDurationMs(performance.now() - start);
         setSearchedFor(trimmed);
+        setAnsweredLocally(local);
       })
       .catch((e) => {
         if (reqIdRef.current !== myReq) return;
@@ -256,6 +263,17 @@ export default function SearchPage() {
             {plural(sortedResults.length, 'result')}
             {durationMs !== null && searchedFor === trimmedQuery ? ` in ${Math.max(1, Math.round(durationMs))}ms` : ''}
           </span>
+          {/* Said out loud because the ranking genuinely differs: the index on this
+              device scores with BM25, the server with ts_rank, so the same query can
+              come back in a different order. Every operator still works - only the
+              order moves - and an unexplained reshuffle is what makes people think
+              search is broken. */}
+          {answeredLocally && searchedFor === trimmedQuery && (
+            <span className="sr-meta-row__local" data-testid="search-offline-badge">
+              <Icon name="archive" size={11} />
+              Offline search. Ranked on this device, so the order can differ.
+            </span>
+          )}
           <label className="sr-sort">
             <span>Sort</span>
             <select className="select-input" value={sort} onChange={(e) => setSort(e.target.value as Sort)}>

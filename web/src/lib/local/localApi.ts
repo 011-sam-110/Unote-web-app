@@ -29,15 +29,19 @@
 // payload wholesale, so a partial payload would turn "create then rename" into a create
 // with no notebookId - which the server answers 400 to, forever.
 import type {
-  DashboardData, Flashcard, Note, NoteLite, Notebook, NotebookLite, SearchResult, StudyStats, TitleResult,
+  CanvasEdge, CanvasItem, CanvasItemData, CanvasItemKind,
+  DashboardData, Flashcard, InkStroke, Note, NoteLite, Notebook, NotebookLite, SearchResult, StudyStats, TitleResult,
 } from '../types';
-import { hasLocalData, localDb, readMeta } from './db';
+import { hasLocalData, localDb } from './db';
 import { correctedNow } from './clock';
 import { enqueue } from './outbox';
 import { newLocalId } from './records';
-import type { LocalFlashcard, LocalNote, LocalNotebook } from './records';
+import type { LocalCanvasEdge, LocalCanvasItem, LocalFlashcard, LocalInk, LocalNote, LocalNotebook } from './records';
+import { stashBlob } from './blobs';
 import { sm2Step, type Rating } from './sm2';
+import { searchLocal } from './search/query';
 import { GuestFeatureError } from '../../features/guest/guestErrors';
+import { isGuest } from '../../features/guest/guestMode';
 import { readData } from '../../features/guest/guestStore';
 import type { GuestData } from '../../features/guest/guestStore';
 
@@ -152,6 +156,56 @@ function toCardDto(c: LocalFlashcard, note: LocalNote | undefined, nb: LocalNote
   };
 }
 
+// --- canvas + ink <-> DTO ---------------------------------------------------------
+// `data` and `stroke` are stored as the JSON TEXT the server's own columns hold, so
+// both directions parse. Anything unparseable degrades to an empty payload rather than
+// throwing: one malformed row must not take a whole board's read down with it. This is
+// NOT parseDoc - that falls back to an empty TipTap document, which is the right shape
+// for a note body and nonsense for a sticky.
+
+function parseBlob(json: string): Record<string, unknown> {
+  try {
+    const parsed: unknown = JSON.parse(json);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {};
+  } catch {
+    return {};
+  }
+}
+
+const CANVAS_ITEM_KINDS: CanvasItemKind[] = ['sticky', 'text', 'image', 'shape', 'link'];
+
+function toCanvasItemDto(it: LocalCanvasItem): CanvasItem {
+  return {
+    id: it.id,
+    kind: (CANVAS_ITEM_KINDS as string[]).includes(it.kind) ? (it.kind as CanvasItemKind) : 'sticky',
+    x: it.x,
+    y: it.y,
+    width: it.width,
+    height: it.height,
+    rotation: it.rotation,
+    z: it.z,
+    data: parseBlob(it.data) as CanvasItemData,
+    createdAt: it.createdAt,
+    updatedAt: it.updatedAt,
+  };
+}
+
+/** The DTO calls the endpoints `from`/`to`; the columns are from_item_id/to_item_id. */
+function toCanvasEdgeDto(e: LocalCanvasEdge): CanvasEdge {
+  return { id: e.id, from: e.fromItemId, to: e.toItemId, label: e.label, style: e.style };
+}
+
+function toInkStrokeDto(s: LocalInk): InkStroke {
+  const body = parseBlob(s.stroke) as Partial<InkStroke>;
+  return {
+    id: s.id,
+    points: Array.isArray(body.points) ? body.points : [],
+    color: typeof body.color === 'string' ? body.color : '#1f2328',
+    width: Number.isFinite(body.width) ? (body.width as number) : 3,
+    tool: body.tool === 'highlighter' ? 'highlighter' : 'pen',
+  };
+}
+
 // --- reads ----------------------------------------------------------------------
 
 /**
@@ -197,31 +251,37 @@ function sortedByUpdated(notes: LocalNote[]): LocalNote[] {
   return notes.slice().sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1));
 }
 
-// --- search helpers -------------------------------------------------------------
-
-/** Strip anything the snippet renderer would treat as markup - it only ever expects
- *  plain text plus the <mark> spans this adds itself. */
-function plain(s: string): string {
-  return s.replace(/[<>]/g, ' ');
+/** Live board items for one note, in the z-then-created order the server's GET uses. */
+async function liveCanvasItems(noteId: string): Promise<LocalCanvasItem[]> {
+  return (await localDb.canvasItems.where('noteId').equals(noteId).toArray())
+    .filter((i) => i.deletedAt === null)
+    .sort((a, b) => a.z - b.z || a.createdAt.localeCompare(b.createdAt));
 }
 
-function markSnippet(text: string, query: string): string {
-  const clean = plain(text).replace(/\s+/g, ' ').trim();
-  const at = clean.toLowerCase().indexOf(query.toLowerCase());
-  if (at < 0) return clean.slice(0, 180);
-  const from = Math.max(0, at - 60);
-  const head = from > 0 ? '…' : '';
-  return `${head}${clean.slice(from, at)}<mark>${clean.slice(at, at + query.length)}</mark>${clean.slice(at + query.length, at + query.length + 100)}`;
+async function liveCanvasEdges(noteId: string): Promise<LocalCanvasEdge[]> {
+  return (await localDb.canvasEdges.where('noteId').equals(noteId).toArray()).filter((e) => e.deletedAt === null);
 }
 
-function matches(n: LocalNote, q: string): boolean {
-  const needle = q.toLowerCase();
-  return (
-    n.title.toLowerCase().includes(needle)
-    || n.contentText.toLowerCase().includes(needle)
-    || n.tags.some((t) => t.toLowerCase().includes(needle))
-  );
+/** Strokes render in the order they were drawn, so createdAt is the sort, not updatedAt. */
+async function liveInk(noteId: string): Promise<LocalInk[]> {
+  return (await localDb.ink.where('noteId').equals(noteId).toArray())
+    .filter((s) => s.deletedAt === null)
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
 }
+
+/** Every canvas and ink route is scoped by a note the caller owns. */
+async function requireLiveNote(id: string, what: string): Promise<LocalNote> {
+  const row = await localDb.notes.get(id);
+  if (!row || row.deletedAt !== null) notFound(what);
+  return noteRow(row);
+}
+
+// The substring-scan search helpers that used to live here are gone. `search/query.ts`
+// replaces them with a MiniSearch index that implements all six operators the server
+// parser supports, so a query offline means what it means online. Two behaviour changes
+// came with it and both are deliberate: bare terms no longer match TAGS (the server's
+// tsvector is title plus content only, so matching tags offline was a divergence, not a
+// feature), and stopwords are dropped the way Postgres drops them.
 
 // --- dashboard helpers ----------------------------------------------------------
 
@@ -279,6 +339,43 @@ function notebookPayload(nb: LocalNotebook): Record<string, unknown> {
  */
 function cardPayload(c: LocalFlashcard): Record<string, unknown> {
   return { noteId: c.noteId, question: c.question, answer: c.answer, suspended: c.suspended === 1 };
+}
+
+/**
+ * The canvas item body, in the one shape that serves BOTH the create and the bulk
+ * update - which the coalescing rule makes mandatory rather than convenient. POST
+ * /api/canvas/:noteId/items reads kind and the geometry; PATCH reads the geometry and
+ * ignores the rest, so a create that has swallowed three drags still carries
+ * everything either route needs.
+ *
+ * `noteId` rides in the payload because the push has to build a URL from it. The
+ * outbox only knows the record's own id.
+ */
+function canvasItemPayload(it: LocalCanvasItem): Record<string, unknown> {
+  return {
+    noteId: it.noteId,
+    kind: it.kind,
+    x: it.x,
+    y: it.y,
+    width: it.width,
+    height: it.height,
+    rotation: it.rotation,
+    z: it.z,
+    data: parseBlob(it.data),
+  };
+}
+
+function canvasEdgePayload(e: LocalCanvasEdge): Record<string, unknown> {
+  return { noteId: e.noteId, from: e.fromItemId, to: e.toItemId, label: e.label, style: e.style };
+}
+
+function inkPayload(s: LocalInk): Record<string, unknown> {
+  return { noteId: s.noteId, stroke: parseBlob(s.stroke) };
+}
+
+/** A delete needs the board's note id to address the row, and nothing else. */
+function noteScopedPayload(noteId: string): Record<string, unknown> {
+  return { noteId };
 }
 
 // --- the one-time localStorage import -------------------------------------------
@@ -454,18 +551,25 @@ export async function localSnapshot(): Promise<GuestData> {
  * outbox populated would push the same notes a SECOND time under new ids.
  */
 export async function clearLocalStore(): Promise<void> {
+  // An array rather than Dexie's varargs form: the overloads stop at five tables.
   await localDb.transaction(
     'rw',
-    localDb.notebooks,
-    localDb.notes,
-    localDb.flashcards,
-    localDb.reviews,
-    localDb.outbox,
+    [
+      localDb.notebooks, localDb.notes, localDb.flashcards, localDb.reviews,
+      localDb.canvasItems, localDb.canvasEdges, localDb.ink, localDb.blobs, localDb.outbox,
+    ],
     async () => {
       await localDb.notebooks.clear();
       await localDb.notes.clear();
       await localDb.flashcards.clear();
       await localDb.reviews.clear();
+      await localDb.canvasItems.clear();
+      await localDb.canvasEdges.clear();
+      await localDb.ink.clear();
+      // The bytes go too. They are staged for an upload that will never happen now:
+      // these rows were never on a server, and the notes referencing them are being
+      // dropped in this same transaction.
+      await localDb.blobs.clear();
       await localDb.outbox.clear();
     },
   );
@@ -616,7 +720,13 @@ export const localApi = {
     notebookId: string; title?: string; contentJson?: unknown; contentText?: string; tags?: string[]; kind?: string;
   }): Promise<{ note: Note }> => {
     await ready();
-    if (b.kind === 'canvas') {
+    // A board is refused for a GUEST and allowed for everyone else, which is the one
+    // place in this file the distinction is visible. The store can hold boards now -
+    // that is what Stage 2 built - but guest mode is still the capped trial it always
+    // was, and quietly widening it is a product decision nobody made. A signed-in user
+    // on a train is the case this exists for.
+    const kind = b.kind === 'canvas' ? 'canvas' : 'doc';
+    if (kind === 'canvas' && isGuest()) {
       throw new GuestFeatureError('Make an account to use boards. Only written notes work without one.');
     }
     const now = correctedNow();
@@ -630,7 +740,7 @@ export const localApi = {
         title: b.title ?? '',
         contentJson: JSON.stringify(b.contentJson ?? emptyDoc()),
         contentText: b.contentText ?? '',
-        kind: 'doc',
+        kind,
         pinned: 0,
         archived: 0,
         tags: b.tags ? [...new Set(b.tags)] : [],
@@ -712,6 +822,16 @@ export const localApi = {
         baseUpdatedAt: existing.baseUpdatedAt,
         clientUpdatedAt: now,
       });
+
+      // Everything queued for this note's board and ink goes with it, and not merely
+      // to save requests. Every canvas and ink route is scoped through the note and
+      // answers 404 once it is a tombstone, while the note delete is pushed FIRST -
+      // so anything left behind would be retried, refused and retried again on every
+      // sync from here on.
+      for (const entry of await localDb.outbox.toArray()) {
+        if (entry.entity !== 'canvasItem' && entry.entity !== 'canvasEdge' && entry.entity !== 'ink') continue;
+        if ((entry.payload as { noteId?: string }).noteId === id) await localDb.outbox.delete(entry.seq!);
+      }
     });
     return { ok: true };
   },
@@ -719,22 +839,356 @@ export const localApi = {
   // Panels that are simply empty without a server, rather than broken.
   versions: async () => ({ versions: [] }),
   comments: async () => ({ comments: [] }),
-  ink: async () => ({ strokes: [] }),
-  canvas: async () => ({ items: [], edges: [] }),
   templates: async () => ({ templates: [] }),
+
+  // canvas boards -----------------------------------------------------------------
+  //
+  // Per-item last-write-wins, as the design says, and per-item is what makes that
+  // tolerable: items carry their own ids, so two people moving two different stickies
+  // never collide. Two devices moving the SAME sticky lose one of the moves silently,
+  // and there is no history table to recover it from. That is a real limitation and
+  // is written down in the spec rather than glossed over.
+
+  canvas: async (noteId: string): Promise<{ items: CanvasItem[]; edges: CanvasEdge[] }> => {
+    await ready();
+    return {
+      items: (await liveCanvasItems(noteId)).map(toCanvasItemDto),
+      edges: (await liveCanvasEdges(noteId)).map(toCanvasEdgeDto),
+    };
+  },
+
+  createCanvasItem: async (
+    noteId: string,
+    b: { kind: CanvasItemKind; x: number; y: number; width: number; height: number; z?: number; rotation?: number; data?: CanvasItemData },
+  ): Promise<{ item: CanvasItem }> => {
+    await ready();
+    const now = correctedNow();
+    const created = await localDb.transaction('rw', localDb.canvasItems, localDb.notes, localDb.outbox, async () => {
+      await requireLiveNote(noteId, 'board');
+      // New items land on top, matching the server's COALESCE(MAX(z), 0) + 1. Computed
+      // over tombstones too, so an undelete cannot land on a z another item now holds.
+      const siblings = await localDb.canvasItems.where('noteId').equals(noteId).toArray();
+      const top = siblings.reduce((max, i) => Math.max(max, i.z), 0) + 1;
+
+      const item: LocalCanvasItem = {
+        id: newLocalId(),
+        noteId,
+        kind: b.kind,
+        x: Number.isFinite(b.x) ? b.x : 0,
+        y: Number.isFinite(b.y) ? b.y : 0,
+        width: Number.isFinite(b.width) ? b.width : 220,
+        height: Number.isFinite(b.height) ? b.height : 160,
+        rotation: b.rotation ?? 0,
+        z: b.z ?? top,
+        data: JSON.stringify(b.data ?? {}),
+        createdAt: now,
+        updatedAt: now,
+        deletedAt: null,
+        baseUpdatedAt: null,
+      };
+      await localDb.canvasItems.add(item);
+      await enqueue({
+        entity: 'canvasItem',
+        op: 'create',
+        recordId: item.id,
+        payload: canvasItemPayload(item),
+        baseUpdatedAt: null,
+        clientUpdatedAt: now,
+      });
+      return item;
+    });
+    return { item: toCanvasItemDto(created) };
+  },
+
+  /**
+   * Bulk, and atomic, exactly as the route is: a multi-selection drag commits once.
+   *
+   * One outbox entry per item rather than one per request. They coalesce on
+   * [entity+recordId], which is what keeps a two-hour offline board session at one
+   * queued write per item touched instead of one per frame-batch.
+   */
+  updateCanvasItems: async (
+    noteId: string,
+    patches: Array<{ id: string } & Partial<Omit<CanvasItem, 'id' | 'createdAt' | 'updatedAt'>>>,
+  ): Promise<{ items: CanvasItem[] }> => {
+    await ready();
+    const now = correctedNow();
+    await localDb.transaction('rw', localDb.canvasItems, localDb.outbox, async () => {
+      for (const p of patches) {
+        const existing = await localDb.canvasItems.get(p.id);
+        // Silently skipped rather than an error: a tombstoned item is one another
+        // device deleted while this one was still dragging it, and the delete wins.
+        if (!existing || existing.deletedAt !== null || existing.noteId !== noteId) continue;
+
+        const next: LocalCanvasItem = { ...existing, updatedAt: now };
+        if (p.x !== undefined) next.x = p.x;
+        if (p.y !== undefined) next.y = p.y;
+        if (p.width !== undefined) next.width = p.width;
+        if (p.height !== undefined) next.height = p.height;
+        if (p.rotation !== undefined) next.rotation = p.rotation;
+        if (p.z !== undefined) next.z = p.z;
+        if (p.data !== undefined) next.data = JSON.stringify(p.data);
+        // `kind` is deliberately not applied even though the DTO allows it: the bulk
+        // PATCH route does not accept it, so honouring it here would change the item
+        // on this device and nowhere else - a divergence with nothing to report it.
+        await localDb.canvasItems.put(next);
+
+        await enqueue({
+          entity: 'canvasItem',
+          op: 'update',
+          recordId: next.id,
+          payload: canvasItemPayload(next),
+          baseUpdatedAt: existing.baseUpdatedAt,
+          clientUpdatedAt: now,
+        });
+      }
+    });
+    return { items: (await liveCanvasItems(noteId)).map(toCanvasItemDto) };
+  },
+
+  deleteCanvasItem: async (noteId: string, itemId: string): Promise<{ ok: true }> => {
+    await ready();
+    const now = correctedNow();
+    await localDb.transaction('rw', localDb.canvasItems, localDb.canvasEdges, localDb.outbox, async () => {
+      const existing = await localDb.canvasItems.get(itemId);
+      if (!existing || existing.deletedAt !== null || existing.noteId !== noteId) return;
+      await localDb.canvasItems.put({ ...existing, deletedAt: now, updatedAt: now });
+      await enqueue({
+        entity: 'canvasItem',
+        op: 'delete',
+        recordId: itemId,
+        payload: noteScopedPayload(noteId),
+        baseUpdatedAt: existing.baseUpdatedAt,
+        clientUpdatedAt: now,
+      });
+
+      // Connectors go with the card. The server does the same thing on its side, so
+      // these deletes are redundant when the push lands - but they are what keeps the
+      // board from rendering a connector to nothing in the meantime, and a delete of
+      // an already-deleted edge is a no-op there rather than an error.
+      for (const edge of await localDb.canvasEdges.where('noteId').equals(noteId).toArray()) {
+        if (edge.deletedAt !== null) continue;
+        if (edge.fromItemId !== itemId && edge.toItemId !== itemId) continue;
+        await localDb.canvasEdges.put({ ...edge, deletedAt: now, updatedAt: now });
+        await enqueue({
+          entity: 'canvasEdge',
+          op: 'delete',
+          recordId: edge.id,
+          payload: noteScopedPayload(noteId),
+          baseUpdatedAt: edge.baseUpdatedAt,
+          clientUpdatedAt: now,
+        });
+      }
+    });
+    return { ok: true };
+  },
+
+  createCanvasEdge: async (
+    noteId: string,
+    b: { from: string; to: string; label?: string; style?: string },
+  ): Promise<{ edge: CanvasEdge }> => {
+    await ready();
+    const now = correctedNow();
+    const created = await localDb.transaction('rw', localDb.canvasEdges, localDb.canvasItems, localDb.notes, localDb.outbox, async () => {
+      await requireLiveNote(noteId, 'board');
+      // The same rule the route enforces: two distinct, live items on THIS board. A
+      // connector to a card that is gone renders as a stub pointing at nothing.
+      const from = await localDb.canvasItems.get(b.from);
+      const to = await localDb.canvasItems.get(b.to);
+      const usable = (i: LocalCanvasItem | undefined) => Boolean(i && i.deletedAt === null && i.noteId === noteId);
+      if (b.from === b.to || !usable(from) || !usable(to)) {
+        throw new GuestFeatureError('Connectors need two different cards on this board.');
+      }
+
+      const edge: LocalCanvasEdge = {
+        id: newLocalId(),
+        noteId,
+        fromItemId: b.from,
+        toItemId: b.to,
+        label: b.label ?? '',
+        style: b.style ?? 'arrow',
+        createdAt: now,
+        updatedAt: now,
+        deletedAt: null,
+        baseUpdatedAt: null,
+      };
+      await localDb.canvasEdges.add(edge);
+      await enqueue({
+        entity: 'canvasEdge',
+        op: 'create',
+        recordId: edge.id,
+        payload: canvasEdgePayload(edge),
+        baseUpdatedAt: null,
+        clientUpdatedAt: now,
+      });
+      return edge;
+    });
+    return { edge: toCanvasEdgeDto(created) };
+  },
+
+  deleteCanvasEdge: async (noteId: string, edgeId: string): Promise<{ ok: true }> => {
+    await ready();
+    const now = correctedNow();
+    await localDb.transaction('rw', localDb.canvasEdges, localDb.outbox, async () => {
+      const existing = await localDb.canvasEdges.get(edgeId);
+      if (!existing || existing.deletedAt !== null || existing.noteId !== noteId) return;
+      await localDb.canvasEdges.put({ ...existing, deletedAt: now, updatedAt: now });
+      await enqueue({
+        entity: 'canvasEdge',
+        op: 'delete',
+        recordId: edgeId,
+        payload: noteScopedPayload(noteId),
+        baseUpdatedAt: existing.baseUpdatedAt,
+        clientUpdatedAt: now,
+      });
+    });
+    return { ok: true };
+  },
+
+  // ink ------------------------------------------------------------------------------
+  //
+  // The cheapest surface in Stage 2, and for the same reason review_log was the cheapest
+  // in Stage 1: a stroke is written once and never edited. Two devices drawing on one
+  // note produce two sets of rows and both survive - there is no conflict to resolve,
+  // so there is no resolution code and no version field to invent one with.
+
+  ink: async (noteId: string): Promise<{ strokes: InkStroke[] }> => {
+    await ready();
+    return { strokes: (await liveInk(noteId)).map(toInkStrokeDto) };
+  },
+
+  /** Append a batch. The ids come back POSITIONALLY - useInkLayer maps ids[i] onto
+   *  batch[i] to replace its temporary ids, so the order is load-bearing. */
+  addInk: async (noteId: string, strokes: Array<Omit<InkStroke, 'id'>>): Promise<{ ids: string[] }> => {
+    await ready();
+    const now = correctedNow();
+    return localDb.transaction('rw', localDb.ink, localDb.notes, localDb.outbox, async () => {
+      await requireLiveNote(noteId, 'note');
+      const ids: string[] = [];
+      const startedAt = Date.parse(now);
+      for (const [i, s] of strokes.entries()) {
+        // A millisecond apart, rather than one instant for the whole batch. Strokes
+        // render in createdAt order and a burst of quick marks arrives here as one
+        // call, so a shared timestamp would leave the order to the id tie-break -
+        // which is random, and would restack overlapping ink on every reload.
+        //
+        // It only holds until the first sync: the server stamps its own created_at
+        // for the batch and the pull adopts it, at which point the strokes DO share
+        // an instant and the tie falls back to id. Within a single burst that is
+        // invisible, and the alternative is a timestamp the server would have to
+        // accept from a client.
+        const at = new Date(startedAt + i).toISOString();
+        const row: LocalInk = {
+          id: newLocalId(),
+          noteId,
+          stroke: JSON.stringify({ points: s.points, color: s.color, width: s.width, tool: s.tool }),
+          createdAt: at,
+          updatedAt: at,
+          deletedAt: null,
+          baseUpdatedAt: null,
+        };
+        await localDb.ink.add(row);
+        await enqueue({
+          entity: 'ink',
+          op: 'create',
+          recordId: row.id,
+          payload: inkPayload(row),
+          baseUpdatedAt: null,
+          clientUpdatedAt: now,
+        });
+        ids.push(row.id);
+      }
+      return { ids };
+    });
+  },
+
+  deleteInk: async (noteId: string, inkId: string): Promise<{ ok: true }> => {
+    await ready();
+    const now = correctedNow();
+    await localDb.transaction('rw', localDb.ink, localDb.outbox, async () => {
+      const existing = await localDb.ink.get(inkId);
+      if (!existing || existing.deletedAt !== null || existing.noteId !== noteId) return;
+      await localDb.ink.put({ ...existing, deletedAt: now, updatedAt: now });
+      await enqueue({
+        entity: 'ink',
+        op: 'delete',
+        recordId: inkId,
+        payload: noteScopedPayload(noteId),
+        baseUpdatedAt: existing.baseUpdatedAt,
+        clientUpdatedAt: now,
+      });
+    });
+    return { ok: true };
+  },
+
+  /**
+   * Clear a whole layer.
+   *
+   * ONE outbox entry for the lot, keyed `layer:<noteId>` rather than one delete per
+   * stroke. A page of handwriting is thousands of rows, and queueing thousands of
+   * DELETEs to reproduce a request the API can already express as one would turn a
+   * single tap into a reconnect that hammers the server for minutes. The prefix is
+   * what keeps it unambiguous: a stroke id is 14 characters of [a-z0-9] and can never
+   * look like this.
+   *
+   * Every per-stroke ink entry for this note is dropped in the same transaction. They
+   * are all superseded - a create the server never saw has nothing to delete, and a
+   * delete is redundant behind a clear.
+   */
+  clearInk: async (noteId: string): Promise<{ ok: true; removed: number }> => {
+    await ready();
+    const now = correctedNow();
+    const removed = await localDb.transaction('rw', localDb.ink, localDb.outbox, async () => {
+      const live = await liveInk(noteId);
+      for (const s of live) await localDb.ink.put({ ...s, deletedAt: now, updatedAt: now });
+
+      for (const entry of await localDb.outbox.where('entity').equals('ink').toArray()) {
+        if ((entry.payload as { noteId?: string }).noteId === noteId) await localDb.outbox.delete(entry.seq!);
+      }
+      // Queued unconditionally, even for a layer drawn entirely offline whose strokes
+      // the server has therefore never seen. Deciding otherwise would mean deciding it
+      // holds none of them, and the individual deletes that would have said so were
+      // just dropped as superseded - so the cheap guess costs a wasted request and the
+      // wrong guess costs erased ink coming back on the next pull.
+      await enqueue({
+        entity: 'ink',
+        op: 'delete',
+        recordId: `layer:${noteId}`,
+        payload: noteScopedPayload(noteId),
+        baseUpdatedAt: null,
+        clientUpdatedAt: now,
+      });
+      return live.length;
+    });
+    return { ok: true, removed };
+  },
+
+  /**
+   * An image inserted with no connection.
+   *
+   * Returns a `local-blob:<id>` reference rather than a URL, and that is the whole
+   * design: an object URL would be dead on the next reload, so the note has to point
+   * at something stable while the bytes live in IndexedDB. local/blobs.ts owns what
+   * happens next, and the editor's image node resolves the reference for rendering.
+   */
+  uploadImage: async (form: FormData): Promise<{ url: string }> => {
+    await ready();
+    const file = form.get('file');
+    if (!(file instanceof Blob)) throw new GuestFeatureError('That file could not be read.');
+    const name = file instanceof File ? file.name : 'image';
+    return { url: await stashBlob(file, name) };
+  },
 
   // search + tags
   search: async (q: string, limit = 20): Promise<{ results: SearchResult[] }> => {
     await ready();
-    const term = q.trim();
-    if (!term) return { results: [] };
     const notebooks = await notebookMap();
-    const hits = (await liveNotes()).filter((n) => matches(n, term)).slice(0, limit);
+    const hits = await searchLocal(q, limit);
     return {
-      results: hits.map((n) => ({
-        note: toNoteLite(n, notebooks.get(n.notebookId)),
-        snippetHtml: markSnippet(n.contentText || n.title, term),
-        score: 1,
+      results: hits.map((h) => ({
+        note: toNoteLite(h.note, notebooks.get(h.note.notebookId)),
+        snippetHtml: h.snippetHtml,
+        score: h.score,
       })),
     };
   },
@@ -1061,10 +1515,14 @@ export const localApi = {
     weekStart.setHours(0, 0, 0, 0);
     const editedThisWeek = live.filter((n) => new Date(n.updatedAt) >= weekStart).length;
 
-    // The warning is true of a store that has never synced and false of one that has, so
-    // it is asked rather than assumed: the offline desktop app reads this same dashboard
-    // for an account whose notes very much are saved.
-    const neverSynced = (await readMeta('initialSyncDone')) !== '1';
+    // "Nothing here is saved" is a statement about having no ACCOUNT, so that is what
+    // it asks. It used to ask whether the first sync had finished, which was the same
+    // question until the version 2 upgrade started clearing initialSyncDone to force a
+    // re-pull: from then on, a signed-in user opening the app offline straight after
+    // an upgrade would be told their notes were not saved, which is both alarming and
+    // false - the re-pull is about boards and ink the mirror is MISSING, not about
+    // anything the server has lost.
+    const noAccountBehindThis = isGuest();
     const unarchivedNotebooks = notebooks.filter((nb) => nb.archived === 0);
 
     return {
@@ -1093,7 +1551,7 @@ export const localApi = {
         // note_comments), so they are reported as zero rather than guessed at.
         notesWithoutSummary: 0,
         unresolvedComments: 0,
-        suggestions: neverSynced ? ['Nothing here is saved. Make an account to keep it.'] : [],
+        suggestions: noAccountBehindThis ? ['Nothing here is saved. Make an account to keep it.'] : [],
       },
       // The server builds recall from per-notebook review history; Stage 1 does not
       // mirror enough to reproduce it, and an invented one would be worse than none.
