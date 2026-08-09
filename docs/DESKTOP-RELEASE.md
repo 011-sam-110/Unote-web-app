@@ -96,7 +96,30 @@ All three must end in `200`. These are the exact URLs the download page uses, pi
 
 ## 6. Now deploy the website
 
-Merge the branch to `main`. Only now does `/download` point at something real.
+Only now does `/download` point at something real. `main` auto-deploys, so this single
+command is the deploy:
+
+```bash
+git push origin feat/desktop-distribution:main
+```
+
+It is a fast-forward as of 2026-08-09 (`origin/main` at `df78dcc` is an ancestor). If
+somebody has merged to `main` since, re-run the merge first - and re-run the suites,
+because the last merge's real damage was semantic rather than a conflict: four catalogues
+kept claiming flashcard review needs an account after the offline work had made it work
+for guests, and only the tests noticed.
+
+Then confirm the deploy actually took, rather than assuming:
+
+```bash
+curl -s https://unote-six.vercel.app/download | grep -E "<title>|rel=\"canonical\""
+```
+
+The title must be the download page's own, not the homepage's. If it is the homepage's,
+the `/download` rewrite in `vercel.json` did not take effect and crawlers are seeing the
+wrong head - users will be fine either way, because React Router renders the right page
+regardless. Poll gently: hammering the production URL trips a Vercel bot challenge that
+blocks exactly this kind of check.
 
 ## 7. Afterwards
 
