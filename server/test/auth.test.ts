@@ -41,10 +41,11 @@ describe('POST /api/auth/signup', () => {
     expect(notebooks.body.notebooks).toHaveLength(1);
     expect(notebooks.body.notebooks[0].name).toBeTruthy();
 
-    // ...and can see the shared built-in templates.
+    // ...and can see the shared built-in templates. The exact set is pinned in
+    // templates.test.ts; all this account has to prove is that it gets them at all.
     const templates = await agent.get('/api/templates');
     expect(templates.status).toBe(200);
-    expect((templates.body.templates as Array<{ builtin: boolean }>).filter((t) => t.builtin)).toHaveLength(2);
+    expect((templates.body.templates as Array<{ builtin: boolean }>).filter((t) => t.builtin).length).toBeGreaterThan(0);
   });
 
   it('never stores the password in plaintext', async () => {

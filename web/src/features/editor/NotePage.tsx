@@ -746,12 +746,23 @@ function NoteWorkspace({ initialNote, initialBacklinks }: NoteWorkspaceProps) {
    * to become a structured one. Matched by the server's stable builtin id rather than by
    * name, because a user can rename their own copy.
    */
+  /**
+   * Apply a built-in template to this (empty) note.
+   *
+   * Resolved by id first and by NAME as a fallback, which is not belt-and-braces: the
+   * built-in ids carry a numeric prefix that sets their order in the picker, so reordering
+   * the set renumbers them - and when that happened, both buttons here silently stopped
+   * working, because an id this file hard-codes had quietly become somebody else's. The
+   * name is the stable half of the pair.
+   */
   async function applyTemplate(builtinId: string, label: string) {
     const ed = editorRef.current;
     if (!ed || ed.isDestroyed) return;
     try {
       const { templates } = await api.templates();
-      const tpl = templates.find((t) => t.id === builtinId);
+      const tpl =
+        templates.find((t) => t.id === builtinId) ??
+        templates.find((t) => t.builtin && t.name.toLowerCase() === label.toLowerCase());
       if (!tpl) {
         toast(`The ${label} template is not available`, 'error');
         return;
@@ -918,14 +929,14 @@ function NoteWorkspace({ initialNote, initialBacklinks }: NoteWorkspaceProps) {
                 <button
                   type="button"
                   className="folio-note-blank__btn"
-                  onClick={() => void applyTemplate('builtin-01-lecture-note', 'Lecture note')}
+                  onClick={() => void applyTemplate('builtin-02-lecture-note', 'Lecture note')}
                 >
                   Lecture note template
                 </button>
                 <button
                   type="button"
                   className="folio-note-blank__btn"
-                  onClick={() => void applyTemplate('builtin-02-cornell-notes', 'Cornell notes')}
+                  onClick={() => void applyTemplate('builtin-01-cornell-notes', 'Cornell notes')}
                 >
                   Cornell layout
                 </button>
