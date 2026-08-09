@@ -1,8 +1,39 @@
 # Offline desktop app — design
 
 **Date:** 2026-08-09
-**Status:** approved, not started
+**Status:** Stages 0 and 1 built on `feat/offline-desktop`. Plan: `docs/superpowers/plans/2026-08-09-offline-desktop.md`
 **Visual review:** https://claude.ai/code/artifact/344b5c92-d2a6-4b80-94d5-55d106f4fe4b
+
+## Corrections found while building
+
+Recorded here because each one contradicts something stated below, and the commit
+messages are the only other place they exist.
+
+- **No CSP change was needed.** §3 is right that `worker-src` is already present; it
+  was verified, not assumed.
+- **`updated_at` needs a column DEFAULT**, not just `NOT NULL` after a backfill.
+  Without one, every existing insert into `notebooks`, `flashcards`, `canvas_edges`
+  and `note_ink` returns 500 - none of those statements names the column.
+- **The schema block belongs at the END of `schema.sql`.** Placed near the `users`
+  ALTERs it references tables created 30 lines later, failing the whole migration on
+  a fresh database's first boot.
+- **Tags do not sync with the note for free.** §7 says `note_tags` needs nothing
+  because tags ride inside the note's PATCH payload. True for push; false for pull.
+  The delta feed now aggregates them into the note row.
+- **The outbox's coalescing constrains payload shape.** Because an update collapses
+  into a pending create by replacing the payload wholesale, every update payload has
+  to be a complete create-valid body - otherwise the push becomes a create missing
+  `notebookId`, collects 400, and wedges the queue permanently.
+- **`registerType: 'autoUpdate'` was wrong** for the claim in §3 that an update
+  "activates on next launch". It forces `skipWaiting` and `clientsClaim`, seizing
+  open pages while `cleanupOutdatedCaches` deletes the precache underneath them.
+- **A pre-existing crash, unrelated to offline:** 14 consecutive 'easy' reviews of one
+  card overflow the JS `Date` range in the SM-2 scheduler. Both the server route and
+  the new client port now clamp the interval to 36500 days.
+
+**Deployment note.** The Electron shell loads the production origin, so Stage 0's
+offline support does nothing until a web build carrying the service worker is
+deployed. Until then the app is an ordinary window onto the live site.
 
 An Electron desktop app for Windows and macOS that loads the live site, keeps working
 with no connection, and picks up every web deploy without shipping a new binary.
