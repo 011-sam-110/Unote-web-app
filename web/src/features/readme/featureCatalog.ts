@@ -36,9 +36,13 @@ export const FEATURE_SECTIONS: FeatureSection[] = [
     title: 'Study',
     blurb: 'Turn a note into flashcards and let the schedule decide when you see them again.',
     lines: [
-      { what: 'Select a passage and make a card from it, or write one by hand', needs: 'createCard' },
-      { what: 'Review with Space to reveal, then 1-4 for how well it went', needs: 'review' },
-      { what: 'Cards you find hard come back sooner; cards you know drift further out', needs: 'review' },
+      // Neither making a card nor reviewing one is gated any more. Both used to need an
+      // account because the cards and the SM-2 schedule lived on the server; the offline
+      // work moved both into the local store, so a guest gets the whole loop. Saying
+      // otherwise would advertise a wall that is no longer there.
+      { what: 'Select a passage and make a card from it, or write one by hand' },
+      { what: 'Review with Space to reveal, then 1-4 for how well it went' },
+      { what: 'Cards you find hard come back sooner; cards you know drift further out' },
     ],
     tip: {
       emoji: '🧠',

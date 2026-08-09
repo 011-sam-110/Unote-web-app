@@ -11,6 +11,7 @@
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api" },
     { "source": "/uploads/(.*)", "destination": "/api" },
+    { "source": "/download", "destination": "/download.html" },
     { "source": "/((?!api/|uploads/).*)", "destination": "/index.html" }
   ],
   "headers": [
@@ -24,7 +25,7 @@
       ]
     },
     {
-      "source": "/(login|signup|recover|capture)",
+      "source": "/(login|signup|recover|capture|try)",
       "headers": [{ "key": "X-Robots-Tag", "value": "noindex, follow" }]
     },
     {

@@ -1,34 +1,40 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  Two URLs, honestly.
+  GENERATED FILE - do not hand-edit. Run `npm run sitemap` after changing which pages are
+  public; the route table lives in scripts/build-sitemap.mjs.
 
-  Every other route is either behind a login, a single-use surface (/capture, /join/:token),
-  or an account form that is explicitly noindex. Padding a sitemap with those would be asking
-  Google to index pages we have simultaneously told it to ignore - and /try is excluded for a
-  third reason: it is an action, not a page, and it redirects the moment it loads.
+  Every lastmod below is the git committer date of the files that render that page, never the
+  day this file was written. A sitemap that claims everything changed today is a sitemap
+  Google stops trusting.
 
-  /sitemap is the human-readable map of the product, at src/features/marketing/SitemapPage.tsx.
-  Note that it is client-rendered like the rest of the app, so a crawler that runs no
-  JavaScript (GPTBot, ClaudeBot, PerplexityBot) sees only the static head in index.html. It is
-  listed because Google does execute JavaScript and the page is genuinely public content, not
-  because it will help a text-only crawler.
+  No changefreq and no priority. Google has said plainly that it ignores both, and priority
+  is meaningless anyway on a site with two indexable pages - it only ever expressed a
+  ranking BETWEEN your own URLs. Emitting them would be decoration pretending to be a signal.
 
-  This file is hand-maintained, and web/src/features/marketing/sitemap.test.ts fails if it
-  stops matching the entries marked `indexed` in siteMap.ts - so the page a person reads and
-  the file a crawler reads cannot drift apart. `lastmod` is deliberately NOT generated: a
-  sitemap that claims everything changed today is a sitemap Google stops trusting.
+  Not listed, on purpose:
+    /login, /signup, /recover
+      account forms, sent as X-Robots-Tag: noindex from vercel.json
+    /try
+      not a page but an action - loading it starts a guest session, so a crawler that renders JS creates data
+    /capture
+      single-use QR phone-pairing surface, noindex
+    /join/:token
+      unguessable share links, noindex nofollow - listing them defeats the point
+    /notebook/:id, /note/:id, /study, /ask, /search, /tags
+      behind RequireAuth, so a crawler only ever sees the redirect to /login
 -->
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>https://unote-six.vercel.app/</loc>
-    <lastmod>2026-07-22</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>1.0</priority>
+    <lastmod>2026-08-09</lastmod>
   </url>
   <url>
     <loc>https://unote-six.vercel.app/sitemap</loc>
     <lastmod>2026-08-09</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.5</priority>
+  </url>
+  <url>
+    <!-- lastmod is the repo HEAD date, not this page's: nothing that renders it is committed yet. -->
+    <loc>https://unote-six.vercel.app/download</loc>
+    <lastmod>2026-08-09</lastmod>
   </url>
 </urlset>

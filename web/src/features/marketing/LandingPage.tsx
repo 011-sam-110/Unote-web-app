@@ -9,6 +9,7 @@ import Hero from './sections/Hero';
 import CapabilityStrip from './sections/CapabilityStrip';
 import FeatureBento from './sections/FeatureBento';
 import AiBand from './sections/AiBand';
+import DesktopBand from './sections/DesktopBand';
 import MakerNote from './sections/MakerNote';
 import ClosingCta from './sections/ClosingCta';
 import useReveals from './useReveals';
@@ -30,6 +31,9 @@ export default function LandingPage() {
         <CapabilityStrip />
         <FeatureBento />
         <AiBand />
+        {/* After the product has argued for itself, before the maker note. Somebody who has not
+            decided they want the notebook does not care which window it opens in. */}
+        <DesktopBand />
         <MakerNote />
         <ClosingCta />
       </main>

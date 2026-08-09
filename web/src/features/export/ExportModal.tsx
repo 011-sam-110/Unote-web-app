@@ -33,9 +33,15 @@ export default function ExportModal({ open, onClose }: { open: boolean; onClose:
     setError(null);
     setSummary(null);
     if (guest) {
-      const g = guestExportSummary();
-      setSummary({ notes: g.notes, notebooks: g.notebooks, included: g.notes, truncated: false, maxNotes: g.notes });
-      return;
+      // The local store answers asynchronously now that it is a database, so this branch
+      // is a promise like the server one rather than a synchronous read.
+      let stale = false;
+      void guestExportSummary().then((g) => {
+        if (!stale) setSummary({ notes: g.notes, notebooks: g.notebooks, included: g.notes, truncated: false, maxNotes: g.notes });
+      });
+      return () => {
+        stale = true;
+      };
     }
     let cancelled = false;
     api

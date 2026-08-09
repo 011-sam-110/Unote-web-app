@@ -1,0 +1,139 @@
+<!doctype html>
+<!-- The /download entry.
+
+     This is a SECOND real HTML file rather than a React Router route, and the head below is
+     the entire reason. vercel.json rewrites every non-API path to /index.html, so a client-
+     only /download would have handed every crawler that does not execute JavaScript - GPTBot,
+     ClaudeBot and PerplexityBot, which are exactly the readers this static head was written
+     for - the homepage's title, description, canonical and JSON-LD. The page would have been
+     indexed, if at all, as a duplicate of "/", which defeats the point of giving the download
+     its own URL. It loads the same /src/main.tsx, so React renders the interactive page over
+     the top of this.
+
+     vercel.json rewrites /download here. A direct hit on /download.html is served by the
+     filesystem before rewrites run, which is why the canonical below names /download: one URL
+     is the address, the other is an implementation detail. -->
+<html lang="en-GB">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+
+    <!-- WARNING: the inline theme-bootstrap block at the bottom of this head is a BYTE-FOR-BYTE
+         copy of the one in index.html, and it has to stay one. A single sha256 hash pinned in
+         vercel.json and server/src/lib/csp.ts allows both, so one changed character here - a
+         space, a word of a comment - and the browser silently refuses to run this copy and a
+         client-side navigation from /download to /login paints in the wrong theme. Edit neither
+         copy without the other, and change nothing about the pinned hash: identical bytes are
+         what keeps it identical. server/test/csp.test.ts asserts the two files agree and that
+         the hash still matches, so a one-sided edit fails there rather than in production.
+         (Note: do not write the literal tag name in this comment - the test finds the block by
+         regex and would match the comment instead.) -->
+
+    <title>Download Unote for Windows and macOS</title>
+    <!-- No claim of offline here on purpose. This branch ships a service worker, so the web
+         app works offline too, and "the offline one" is a pitch the product contradicts the
+         first time somebody closes their laptop lid on a browser tab. -->
+    <meta
+      name="description"
+      content="Unote as a desktop app for Windows and macOS: its own window and icon, and it updates itself. Free, and the browser version is an equal option."
+    />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#fdfcfa" />
+
+    <!-- Canonical and og:url are absolute, which means they are the ONE place to change
+         when a custom domain replaces the vercel.app hostname. -->
+    <link rel="canonical" href="https://unote-six.vercel.app/download" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Unote" />
+    <meta property="og:locale" content="en_GB" />
+    <meta property="og:url" content="https://unote-six.vercel.app/download" />
+    <meta property="og:title" content="Unote for desktop - Windows and macOS" />
+    <meta
+      property="og:description"
+      content="Its own window instead of a browser tab, and it keeps itself up to date. Free, and the web version does everything it does."
+    />
+    <meta property="og:image" content="https://unote-six.vercel.app/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Unote: where your whole degree comes together." />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Unote for desktop - Windows and macOS" />
+    <meta
+      name="twitter:description"
+      content="Its own window instead of a browser tab, and it keeps itself up to date. Free, and the web version does everything it does."
+    />
+    <meta name="twitter:image" content="https://unote-six.vercel.app/og.png" />
+
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='84'%3E%F0%9F%93%93%3C/text%3E%3C/svg%3E"
+    />
+
+    <!-- Static JSON-LD in the served HTML, for the same reason index.html gives: the crawlers
+         that matter here execute no JavaScript, so anything the SPA renders is invisible to
+         them. operatingSystem lists all three surfaces because they are three ways to run one
+         product, not three products.
+
+         The three downloadUrl values are the same strings as DOWNLOAD_URLS in
+         src/features/download/DownloadPage.tsx, and all three are pinned to `artifactName` in
+         electron-builder.yml. A static head cannot import a constant, so this is a genuine
+         second copy - change the artifact names and change all three places. macOS is two
+         assets because the release builds both architectures; a browser cannot tell Apple
+         silicon from Intel, so the page asks rather than guessing.
+
+         softwareVersion tracks the root package.json version, which is what electron-builder
+         stamps onto the build. -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "Unote",
+        "url": "https://unote-six.vercel.app/download",
+        "applicationCategory": "ProductivityApplication",
+        "operatingSystem": "Windows, macOS, Web browser",
+        "softwareVersion": "0.1.0",
+        "downloadUrl": [
+          "https://github.com/011-sam-110/Folio/releases/latest/download/Unote-Setup.exe",
+          "https://github.com/011-sam-110/Folio/releases/latest/download/Unote-arm64.dmg",
+          "https://github.com/011-sam-110/Folio/releases/latest/download/Unote-x64.dmg"
+        ],
+        "installUrl": "https://unote-six.vercel.app/download",
+        "inLanguage": "en-GB",
+        "description": "The Unote desktop app for Windows and macOS: the student notebook in its own window, with its own icon, updating itself in the background. The browser version does the same job, offline included, with nothing to install.",
+        "offers": {
+          "@type": "Offer",
+          "price": "0",
+          "priceCurrency": "GBP"
+        },
+        "featureList": [
+          "Runs in its own window with its own icon",
+          "Opens without a browser",
+          "Updates itself in the background",
+          "Works offline, as the browser version also does"
+        ]
+      }
+    </script>
+
+    <script>
+      // Theme bootstrap — runs before first paint to avoid a light/dark FOUC.
+      // Mirrors src/lib/theme.ts (kept inline: it must run before any module loads).
+      (function () {
+        try {
+          var saved = localStorage.getItem('folio:theme');
+          var theme = saved === 'light' || saved === 'dark'
+            ? saved
+            : (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+          document.documentElement.setAttribute('data-theme', theme);
+        } catch (e) {
+          document.documentElement.setAttribute('data-theme', 'light');
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

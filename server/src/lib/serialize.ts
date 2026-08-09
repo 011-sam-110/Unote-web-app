@@ -6,8 +6,12 @@ export interface NotebookLiteRow { id: string; name: string; emoji: string; colo
 // with ids that ultimately trace back to the request (`/notes/:id`, a notebook id
 // off a narrow SELECT), so a bare `WHERE id = ?` here would let any signed-in user
 // read another user's tags, attachments or notebook chrome by guessing an id.
+// `deleted_at IS NULL`: notebooks are tombstoned rather than hard-deleted (so the delete
+// can replicate to an offline client), and this is the notebook chrome every note
+// projection carries. Without it a note restored from the trash would still be labelled
+// with a notebook the sidebar no longer lists; `notebook: null` is the honest answer.
 const notebookLiteStmt = () =>
-  db.prepare('SELECT id, name, emoji, color FROM notebooks WHERE id = ? AND user_id = ?');
+  db.prepare('SELECT id, name, emoji, color FROM notebooks WHERE id = ? AND user_id = ? AND deleted_at IS NULL');
 // note_tags carries no user_id, so ownership is proven by joining up to the parent note.
 const tagsStmt = () =>
   db.prepare(

@@ -35,6 +35,7 @@ export default function MarketingFooter({ sectionsOnPage = false }: MarketingFoo
                 {s.label}
               </a>
             ))}
+            <Link to="/download">Download</Link>
             <Link to="/sitemap">Sitemap</Link>
             <Link to="/login">Log in</Link>
             <Link to="/signup">Start free</Link>

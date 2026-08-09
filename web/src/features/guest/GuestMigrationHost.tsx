@@ -12,7 +12,8 @@ import { toast } from '../../components/Toast';
 import { errorMessage } from '../../lib/format';
 import { useAuth } from '../auth/AuthContext';
 import { downloadGuestExport } from './guestExport';
-import { clearData, readData } from './guestStore';
+import { clearLocalStore, localSnapshot } from '../../lib/local/localApi';
+import { clearData } from './guestStore';
 import { deferHandover, endGuest, handoverPending, isGuest } from './guestMode';
 import { migrateGuestWork, type MigrationProgress } from './guestMigrate';
 import './guest.css';
@@ -44,9 +45,17 @@ export default function GuestMigrationHost() {
     if (isGuest()) endGuest({ keepWork: true });
     if (AUTH_PATHS.some((p) => pathname.startsWith(p))) return;
     if (!handoverPending()) return;
-    const data = readData();
-    setCounts({ notes: data.notes.length, notebooks: data.notebooks.length });
+    // The dialog opens on the synchronous check and fills its counts when the store
+    // answers: waiting for the read would let a route change land first, and the numbers
+    // are a sentence in the copy rather than the decision to show it.
     setOpen(true);
+    let cancelled = false;
+    void localSnapshot().then((data) => {
+      if (!cancelled) setCounts({ notes: data.notes.length, notebooks: data.notebooks.length });
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [user, pathname]);
 
   if (!open || !user) return null;
@@ -78,7 +87,11 @@ export default function GuestMigrationHost() {
     }
   }
 
-  function discard() {
+  async function discard() {
+    // Both stores: the local rows the notes actually live in, and the pre-upgrade
+    // localStorage blob guestMode reads to decide whether any work is present. Leaving
+    // either behind would make the toast below untrue.
+    await clearLocalStore();
     clearData();
     setOpen(false);
     toast('Unsaved notes deleted from this browser', 'ok');

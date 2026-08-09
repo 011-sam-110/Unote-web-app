@@ -74,11 +74,11 @@ export function shortcutGroups(mod: string, shift: string): Group[] {
     {
       name: 'Reviewing flashcards',
       rows: [
-        { keys: ['Space'], label: 'Show the answer', needs: 'review' },
-        { keys: ['1'], label: 'Again', needs: 'review' },
-        { keys: ['2'], label: 'Hard', needs: 'review' },
-        { keys: ['3'], label: 'Good', needs: 'review' },
-        { keys: ['4'], label: 'Easy', needs: 'review' },
+        { keys: ['Space'], label: 'Show the answer' },
+        { keys: ['1'], label: 'Again' },
+        { keys: ['2'], label: 'Hard' },
+        { keys: ['3'], label: 'Good' },
+        { keys: ['4'], label: 'Easy' },
       ],
     },
   ];

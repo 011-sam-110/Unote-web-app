@@ -7,7 +7,6 @@ import { Placeholder, CharacterCount } from '@tiptap/extensions';
 import TaskList from '@tiptap/extension-task-list';
 import TaskItem from '@tiptap/extension-task-item';
 import { TableKit } from '@tiptap/extension-table';
-import Image from '@tiptap/extension-image';
 import Highlight from '@tiptap/extension-highlight';
 import Typography from '@tiptap/extension-typography';
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
@@ -23,6 +22,7 @@ import SlashCommand from './SlashCommand';
 import { createMathClickHandler } from './mathEdit';
 import { Column, ColumnList } from './Columns';
 import { createTextColorExtensions } from './TextColor';
+import LocalImage from './nodes/LocalImage';
 import ChemNode from './nodes/chem/ChemNode';
 import Model3d from './nodes/model3d/Model3dNode';
 import { SketchNode } from './nodes/sketch';
@@ -74,7 +74,10 @@ export function createFolioExtensions(opts: BuildExtensionsOpts): Extensions {
     TaskList,
     TaskItem.configure({ nested: true }),
     TableKit.configure({ table: { resizable: true, lastColumnResizable: true, cellMinWidth: 40 } }),
-    Image.configure({ HTMLAttributes: { class: 'folio-image' } }),
+    // The stock Image node plus a node view that resolves `local-blob:` sources, so an
+    // image inserted with no connection renders from IndexedDB rather than as a
+    // broken box. Everything else about it is unchanged, including serialisation.
+    LocalImage.configure({ HTMLAttributes: { class: 'folio-image' } }),
     Highlight.configure({ multicolor: false }),
     // Smart quotes and ellipsis are welcome; the arrow and dash rules are not.
     // Unconfigured, Typography silently rewrote `1 << 3` to `1 « 3`, `n >> 1` to

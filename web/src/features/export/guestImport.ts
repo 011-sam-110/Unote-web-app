@@ -1,14 +1,18 @@
-// Bringing Markdown into a guest's browser-local store.
+// Bringing Markdown into the browser-local store.
 //
 // The account import wizard stages every file in Postgres before anything is filed, which
 // a guest has no session to reach. This is the same idea with the server taken out: read
-// the text in the browser, read folder names as notebooks, and write straight into
-// guestStore. It reuses the wizard's own frontmatter/hashtag parser and its zip expander
+// the text in the browser, read folder names as notebooks, and write straight into the
+// local store. It reuses the wizard's own frontmatter/hashtag parser and its zip expander
 // rather than growing a second dialect of either.
+//
+// Writing through localApi rather than the store directly is what gets these notes an
+// outbox entry each, so a folder of Markdown imported offline reaches the account on the
+// next sync instead of staying on this one device.
 import { markdownToDoc } from '../ask/mdToTiptap';
 import { parseSourceTags } from '../import/connectors/extract';
 import { expandArchives } from '../import/zipEntries';
-import { createNote, createNotebook, readData } from '../guest/guestStore';
+import { localApi } from '../../lib/local/localApi';
 
 const TEXT_EXT = /\.(md|markdown|mdx|txt|text)$/i;
 
@@ -58,17 +62,19 @@ export async function importIntoGuestStore(input: File[] | FileList): Promise<Gu
   }
 
   // Existing notebooks are reused by name so importing twice does not double them up.
-  const byName = new Map(readData().notebooks.map((nb) => [nb.name.trim().toLowerCase(), nb.id]));
+  const existingNotebooks = (await localApi.notebooks()).notebooks;
+  const byName = new Map(existingNotebooks.map((nb) => [nb.name.trim().toLowerCase(), nb.id]));
   let notebooksCreated = 0;
   let notes = 0;
 
-  const fallbackId = () => {
-    const existing = readData().notebooks[0];
+  const fallbackId = async () => {
+    const existing = existingNotebooks[0];
     if (existing) return existing.id;
-    const made = createNotebook({ name: 'Imported', emoji: '📥' });
+    const { notebook } = await localApi.createNotebook({ name: 'Imported', emoji: '📥' });
     notebooksCreated++;
-    byName.set('imported', made.id);
-    return made.id;
+    byName.set('imported', notebook.id);
+    existingNotebooks.push(notebook);
+    return notebook.id;
   };
 
   for (const file of usable) {
@@ -94,17 +100,17 @@ export async function importIntoGuestStore(input: File[] | FileList): Promise<Gu
       if (found) {
         notebookId = found;
       } else {
-        const made = createNotebook({ name: folder.trim() });
-        byName.set(key, made.id);
+        const { notebook } = await localApi.createNotebook({ name: folder.trim() });
+        byName.set(key, notebook.id);
         notebooksCreated++;
-        notebookId = made.id;
+        notebookId = notebook.id;
       }
     } else {
-      notebookId = fallbackId();
+      notebookId = await fallbackId();
     }
 
     const doc = markdownToDoc(body) as unknown as DocNode;
-    createNote({
+    await localApi.createNote({
       notebookId,
       title: titleFrom(file.name, title, body),
       contentJson: doc as unknown as Record<string, unknown>,

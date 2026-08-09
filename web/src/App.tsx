@@ -16,6 +16,8 @@ import { _subscribeImportModal, type OpenImportModalArgs } from './components/im
 import OnboardingHost from './features/onboarding/OnboardingHost';
 import ImportWizardHost from './features/import/wizard/ImportWizardHost';
 import GuestBanner from './features/guest/GuestBanner';
+import ConnectionStatus from './components/ConnectionStatus';
+import SyncRunner from './lib/sync/SyncRunner';
 
 const COLLAPSE_KEY = 'folio:sidebarCollapsed';
 
@@ -259,10 +261,15 @@ function AppShell() {
           {/* Above the outlet, so it is on every route a guest can reach - the editor
               included, which is the one that matters. Renders nothing when signed in. */}
           <GuestBanner />
+          {/* Beside the guest banner for the same reason: it has to be true on every
+              route including the editor, which is the one that matters. Renders
+              nothing when online with an empty queue. */}
+          <ConnectionStatus />
           <Outlet />
         </main>
       </div>
 
+      <SyncRunner />
       <Toaster />
       <QuickSwitcher
         open={quickSwitcherOpen}

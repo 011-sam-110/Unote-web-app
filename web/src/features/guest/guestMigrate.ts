@@ -10,7 +10,8 @@
 //  - Notebooks are matched to the account's existing ones by name before a new one is
 //    created, so a returning user does not accumulate a second "My notes" every visit.
 import { api } from '../../lib/api';
-import { clearData, readData } from './guestStore';
+import { clearLocalStore, localSnapshot } from '../../lib/local/localApi';
+import { clearData } from './guestStore';
 import { isGuest } from './guestMode';
 
 export interface MigrationProgress {
@@ -33,7 +34,7 @@ export async function migrateGuestWork(onProgress?: (p: MigrationProgress) => vo
     throw new Error('Sign in before bringing your notes across.');
   }
 
-  const data = readData();
+  const data = await localSnapshot();
   const notes = data.notes;
   const total = notes.length;
   let done = 0;
@@ -92,7 +93,16 @@ export async function migrateGuestWork(onProgress?: (p: MigrationProgress) => vo
 
   // Only a clean run drops the local copy. If anything failed the guest notes stay put,
   // and the prompt can be shown again rather than the work quietly disappearing.
+  //
+  // Both stores go: the Dexie rows these notes were read from, and the pre-upgrade
+  // localStorage blob that guestMode still reads to decide whether work is present. The
+  // outbox goes with them (clearLocalStore), which matters more than it looks - those
+  // entries name ids the account has never heard of, and pushing them after a handover
+  // would create every note a second time.
   const complete = notesFailed === 0 && notebooksFailed === 0;
-  if (complete) clearData();
+  if (complete) {
+    await clearLocalStore();
+    clearData();
+  }
   return { notesCreated: total - notesFailed, notebooksCreated, failed: notesFailed + notebooksFailed, complete };
 }

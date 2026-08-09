@@ -10,7 +10,35 @@ import type {
   ImportBatch, ImportItem, ImportSource, ImportLabelSpace, ImportSuggestionInput, ImportGroupInput, ImportCommitResult,
 } from './types';
 import { isGuest } from '../features/guest/guestMode';
-import { GuestFeatureError, guestApi, guestBlockedMessage } from '../features/guest/guestApi';
+import { GuestFeatureError, guestBlockedMessage, isGuestBlocked } from '../features/guest/guestErrors';
+import { localApi } from './local/localApi';
+import { noteRequestOutcome, isOnline } from './sync/connectivity';
+import { isWrite, isMirroredRead } from './sync/methods';
+import { syncNow } from './sync/engine';
+import type { SyncChangesResponse } from './sync/contract';
+
+/**
+ * Why a method is unavailable with no connection, as opposed to unavailable without
+ * an account. The distinction is worth the second message: "make an account" is
+ * useless advice to somebody who has one and is on a train.
+ */
+function offlineBlockedMessage(method: string): string {
+  const NEEDS_NET: Record<string, string> = {
+    aiImprove: 'AI needs a connection - it runs on the server.',
+    aiSummarize: 'AI needs a connection - it runs on the server.',
+    aiFlashcards: 'AI needs a connection - it runs on the server.',
+    aiAsk: 'AI needs a connection - it runs on the server.',
+    aiChat: 'The assistant needs a connection - it runs on the server.',
+    aiSuggest: 'AI review needs a connection.',
+    import: 'Importing needs a connection - the file is read on the server.',
+    createShare: 'Sharing needs a connection - a share link has to be served from somewhere.',
+    versions: 'Note history is kept on the server, so it needs a connection.',
+    restore: 'Restoring an old version needs a connection.',
+    comments: 'Comments need a connection.',
+    qr: 'Pairing your phone needs a connection.',
+  };
+  return NEEDS_NET[method] ?? 'That needs a connection. Your notes are still here and still saving.';
+}
 
 export class ApiError extends Error {
   status: number;
@@ -34,7 +62,20 @@ export function setUnauthorizedHandler(fn: UnauthorizedHandler | null): void {
 }
 
 async function http<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(path, init);
+  let res: Response;
+  try {
+    res = await fetch(path, init);
+  } catch (err) {
+    // fetch only rejects when the request never reached a server: DNS, TLS, a
+    // refused connection, an aborted transport. THAT is what offline means here.
+    //
+    // An HTTP error response - 400, 404, 500 - proves the opposite: something
+    // answered. Conflating the two is how a validation bug turns into a phantom
+    // offline state that starts queueing every write in the app.
+    noteRequestOutcome(false);
+    throw err;
+  }
+  noteRequestOutcome(true);
   const isJson = res.headers.get('content-type')?.includes('application/json');
   if (!res.ok) {
     // The auth endpoints own their 401s - a wrong password and the signed-out /me
@@ -220,7 +261,11 @@ const serverApi = {
 
   // canvas boards - spatial children of a note with kind='canvas'.
   canvas: (noteId: string) => http<{ items: CanvasItem[]; edges: CanvasEdge[] }>(`/api/canvas/${noteId}`),
-  createCanvasItem: (noteId: string, b: { kind: CanvasItemKind; x: number; y: number; width: number; height: number; data?: CanvasItemData }) =>
+  /** `id` is optional and is only ever sent for an item created offline: the board's
+   *  connectors address items by id, so a server-minted replacement would orphan
+   *  every one of them. The server accepts only newId()'s shape and mints its own
+   *  for anything else. */
+  createCanvasItem: (noteId: string, b: { id?: string; kind: CanvasItemKind; x: number; y: number; width: number; height: number; z?: number; rotation?: number; data?: CanvasItemData }) =>
     http<{ item: CanvasItem }>(`/api/canvas/${noteId}/items`, json('POST', b)),
   /** BULK and atomic. Every drag/resize/z-order commit goes through here as ONE
    *  request - never one per item and never one per pointermove frame. */
@@ -228,7 +273,7 @@ const serverApi = {
     http<{ items: CanvasItem[] }>(`/api/canvas/${noteId}/items`, json('PATCH', { items })),
   deleteCanvasItem: (noteId: string, itemId: string) =>
     http<{ ok: true }>(`/api/canvas/${noteId}/items/${itemId}`, { method: 'DELETE' }),
-  createCanvasEdge: (noteId: string, b: { from: string; to: string; label?: string; style?: string }) =>
+  createCanvasEdge: (noteId: string, b: { id?: string; from: string; to: string; label?: string; style?: string }) =>
     http<{ edge: CanvasEdge }>(`/api/canvas/${noteId}/edges`, json('POST', b)),
   deleteCanvasEdge: (noteId: string, edgeId: string) =>
     http<{ ok: true }>(`/api/canvas/${noteId}/edges/${edgeId}`, { method: 'DELETE' }),
@@ -236,8 +281,10 @@ const serverApi = {
   // ink - works on ANY note id, not just canvases, which is what lets the same
   // layer annotate a normal document note.
   ink: (noteId: string) => http<{ strokes: InkStroke[] }>(`/api/canvas/${noteId}/ink`),
-  /** Append-only, and batched: one request per stroke-flush, never per point. */
-  addInk: (noteId: string, strokes: Array<Omit<InkStroke, 'id'>>) =>
+  /** Append-only, and batched: one request per stroke-flush, never per point.
+   *  A stroke drawn offline carries the id its local copy already has, so the
+   *  eraser still addresses the same row after the push. */
+  addInk: (noteId: string, strokes: Array<Omit<InkStroke, 'id'> & { id?: string }>) =>
     http<{ ids: string[] }>(`/api/canvas/${noteId}/ink`, json('POST', { strokes })),
   deleteInk: (noteId: string, inkId: string) =>
     http<{ ok: true }>(`/api/canvas/${noteId}/ink/${inkId}`, { method: 'DELETE' }),
@@ -310,9 +357,31 @@ const serverApi = {
     http<{ items: ImportItem[]; grouper: string }>(`/api/import/batches/${batchId}/group-ai`, json('POST', {})),
   commitImport: (batchId: string, itemIds: string[]) => http<ImportCommitResult>(`/api/import/batches/${batchId}/commit`, json('POST', { itemIds })),
   discardImportBatch: (batchId: string) => http<{ ok: true }>(`/api/import/batches/${batchId}`, { method: 'DELETE' }),
+
+  /**
+   * The delta feed the offline mirror pulls. Not routed through the local store for
+   * the obvious reason: it is the thing that fills the local store.
+   */
+  syncChanges: (q: { since?: string; limit?: number } = {}) => {
+    const p = new URLSearchParams();
+    if (q.since) p.set('since', q.since);
+    if (q.limit) p.set('limit', String(q.limit));
+    const qs = p.toString();
+    return http<SyncChangesResponse>(`/api/sync/changes${qs ? `?${qs}` : ''}`);
+  },
 };
 
 export type Api = typeof serverApi;
+
+/**
+ * The server object with NO local-store routing in front of it.
+ *
+ * Only the sync engine may use this. Everything else must go through `api`, or an
+ * offline write would throw instead of queueing, and an online write would leave
+ * the mirror stale - which is the two-sources-of-truth problem this whole design
+ * exists to remove.
+ */
+export const serverOnlyApi = serverApi;
 
 /**
  * Guest mode is applied here rather than in every page.
@@ -332,13 +401,109 @@ const ALWAYS_SERVER = new Set([
   'sharePeek', 'shareJoin', 'sharedNote', 'updateSharedNote', 'shareEvents', 'sharedInk', 'addSharedInk',
 ]);
 
+/** guest | online | offline. Everything below routes on this. */
+export type ApiMode = 'guest' | 'online' | 'offline';
+
+export function getMode(): ApiMode {
+  if (isGuest()) return 'guest';
+  return isOnline() ? 'online' : 'offline';
+}
+
+type AnyFn = (...args: never[]) => Promise<unknown>;
+
+/**
+ * An online write: local first, then the server, then adopt what the server says.
+ *
+ * Local-first even when connected is the point. A write that went straight to the
+ * server would leave the mirror stale, and the next read - which comes from the
+ * mirror - would show the user their own edit missing. One path for both connection
+ * states is what keeps that impossible.
+ *
+ * The local call has already queued an outbox entry by the time we get here, so a
+ * failure needs no compensation: the entry simply stays queued and the next sync
+ * sends it. That is also why this does not rethrow a transport error - the write IS
+ * saved, locally, and telling the user it failed would be false.
+ */
+/**
+ * An ONLINE write: straight to the server, then pull the result into the mirror.
+ *
+ * This is deliberately NOT local-first, and the reason is worth recording because
+ * the design originally said the opposite.
+ *
+ * Serving online writes and reads from the mirror requires `localApi` to be
+ * field-for-field equivalent to the server. It is not. It ignores `kind: 'canvas'`,
+ * so a board created online came back as a document and the app rendered the text
+ * editor. It cannot resolve wikilinks, which the server extracts from content_text
+ * into the `links` table on save, so backlinks disappeared. Seven e2e specs caught
+ * exactly that - they pass on the base commit in 58 seconds and failed here.
+ *
+ * The gap is closable field by field, but "the app also feels faster online" was
+ * never the goal; working offline was. So online behaviour is now unchanged from
+ * before this feature existed, and the mirror is kept current by pulling the
+ * server's own record afterwards through the delta feed - the same path a change
+ * from another device takes, and the one the convergence tests already cover.
+ */
+function writeThroughServer(server: AnyFn): AnyFn {
+  return (async (...args: never[]) => {
+    const result = await server(...args);
+    // Fire-and-forget: the write has already landed, and blocking the caller on a
+    // sync cycle is what made every create feel slow enough to time out a
+    // page.waitForURL.
+    void syncNow().catch(() => {
+      // The mirror is briefly behind. The next poll or reconnect fixes it.
+    });
+    return result;
+  }) as AnyFn;
+}
+
+/**
+ * The seam. Pages are unaware which side answered.
+ *
+ * Online behaviour is byte-for-byte what it was before this feature existed: the
+ * server answers everything. The mirror serves guest mode and offline mode only.
+ * That boundary is deliberate - see writeThroughServer for the evidence that moved
+ * it - and it means adding offline support cannot regress the online app.
+ *
+ * The default is refusal rather than fallthrough, unchanged from when this only
+ * handled guest mode: a method with no local implementation rejects with a sentence
+ * instead of calling a server that could only answer 401.
+ */
 export const api: Api = new Proxy(serverApi, {
   get(target, prop, receiver) {
     const key = String(prop);
-    if (!isGuest() || ALWAYS_SERVER.has(key)) return Reflect.get(target, prop, receiver);
-    const local = (guestApi as Record<string, unknown>)[key];
-    if (typeof local === 'function') return local;
-    return () => Promise.reject(new GuestFeatureError(guestBlockedMessage(key)));
+    const server = () => Reflect.get(target, prop, receiver);
+
+    // Auth is how guest mode ends, and a share link belongs to whoever sent it
+    // rather than to the browser opening it. Neither can be answered locally.
+    if (ALWAYS_SERVER.has(key)) return server();
+
+    const local = (localApi as Record<string, unknown>)[key];
+    const hasLocal = typeof local === 'function';
+    const mode = getMode();
+
+    if (mode === 'guest') {
+      // Local, or a sentence explaining why not - with the refusal table winning.
+      //
+      // The precedence matters now that the local store holds boards, ink and image
+      // bytes for the offline desktop app. Those implementations exist for a
+      // SIGNED-IN user on a train; guest mode is still the capped trial it always
+      // was, and "there is a local function for it" is not a decision to hand a
+      // visitor three features nobody offered them.
+      if (hasLocal && !isGuestBlocked(key)) return local;
+      return () => Promise.reject(new GuestFeatureError(guestBlockedMessage(key)));
+    }
+
+    if (mode === 'offline') {
+      if (hasLocal && (isWrite(key) || isMirroredRead(key))) return local;
+      // A stub that answers "no versions" is right for a guest who has none and
+      // wrong for a signed-in user who does - saying so is better than lying.
+      return () => Promise.reject(new GuestFeatureError(offlineBlockedMessage(key)));
+    }
+
+    // Online: the server answers. A write additionally kicks a sync so the mirror
+    // has the change ready for the next time this device loses its connection.
+    if (hasLocal && isWrite(key)) return writeThroughServer(server() as AnyFn);
+    return server();
   },
 }) as Api;
 

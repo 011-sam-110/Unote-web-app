@@ -14,6 +14,9 @@ export default defineConfig({
     // those files would share a module registry with whatever else already warmed the
     // cycle up first - they'd still pass, but only because the very ordering property they
     // exist to pin was disabled to get them there.
+    // The offline tests bring their own IndexedDB - each imports 'fake-indexeddb/auto',
+    // which assigns onto globalThis. happy-dom ships no indexedDB of its own, so the two
+    // do not fight; if a future happy-dom adds one, these tests are where it will show.
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
     // The *.loadOrder.test.ts files each dynamically import a whole module cycle - TipTap
     // extensions, the API client, the command registry - from a cold registry, and were

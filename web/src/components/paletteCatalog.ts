@@ -34,7 +34,7 @@ export const PALETTE_CATALOG: PaletteDoc[] = [
   { id: 'create-phone-capture', title: 'Open phone capture QR', hint: 'Scan with your phone to capture a page', section: 'Create', needs: 'qr' },
   { id: 'note-snapshot', title: 'Snapshot now', hint: 'Save a named version of this note', section: 'Note', needs: 'snapshot' },
   { id: 'view-sidebar', title: 'Toggle sidebar', hint: 'Collapse or expand the sidebar', section: 'View', shortcut: '⌘\\' },
-  { id: 'study-notebook', title: 'Study this notebook', hint: 'Review just these flashcards', section: 'Study', needs: 'review' },
+  { id: 'study-notebook', title: 'Study this notebook', hint: 'Review just these flashcards', section: 'Study' },
 ];
 
 const BY_ID = new Map(PALETTE_CATALOG.map((c) => [c.id, c]));

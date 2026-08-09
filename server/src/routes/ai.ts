@@ -312,13 +312,18 @@ router.post('/flashcards', async (req, res) => {
     // the scoped `t` - the module-level `db` draws a different pooled connection and
     // would run outside the transaction.
     await tx(async t => {
+      // updated_at explicitly, not via the column default: the default is the DATABASE
+      // clock while /api/study/review and the card PATCH stamp the APP clock, and mixing
+      // the two can leave the first review carrying an EARLIER updated_at than the insert.
+      // GET /api/sync/changes pages by (updated_at, id), so a cursor that goes backwards
+      // means a client silently never sees that review.
       const insert = t.prepare(
-        'INSERT INTO flashcards (id, user_id, note_id, question, answer, due_at) VALUES (?, ?, ?, ?, ?, ?)',
+        'INSERT INTO flashcards (id, user_id, note_id, question, answer, due_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
       );
       for (const c of cardSet) {
         // The owner comes from the session, not the request - and `noteId` was proven to
         // belong to `uid` by getNote() above, so card and note can never diverge.
-        await insert.run(c.id, uid, noteId, c.question, c.answer, now);
+        await insert.run(c.id, uid, noteId, c.question, c.answer, now, now);
       }
     });
 

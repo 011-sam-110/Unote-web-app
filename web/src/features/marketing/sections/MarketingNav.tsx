@@ -9,7 +9,7 @@
 // after the hero's own CTA has left the screen and hides again once the closing CTA is in
 // view, so there are never two primary buttons competing.
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import Wordmark from '../Wordmark';
 
 const LINKS = [
@@ -22,6 +22,12 @@ export default function MarketingNav() {
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [dockVisible, setDockVisible] = useState(false);
+  // This nav is shared with /download, where none of those three sections exist and a bare
+  // fragment would be a link that visibly does nothing. Off the landing page the fragments
+  // are prefixed with "/" so they navigate home first. On "/" they stay bare, which keeps
+  // them same-document jumps and keeps that page's behaviour exactly as it was.
+  const onLanding = useLocation().pathname === '/';
+  const sectionHref = (href: string) => (onLanding ? href : `/${href}`);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8);
@@ -83,10 +89,16 @@ export default function MarketingNav() {
 
           <nav className="mkt-nav__links" aria-label="Sections">
             {LINKS.map((l) => (
-              <a key={l.href} className="mkt-nav__link" href={l.href}>
+              <a key={l.href} className="mkt-nav__link" href={sectionHref(l.href)}>
                 {l.label}
               </a>
             ))}
+            {/* A route, not a fragment, so it is a Link. It sits with the section links
+                rather than beside "Start free" on purpose: the desktop app is somewhere else
+                on the site to go and read about, not a competing call to action. */}
+            <Link className="mkt-nav__link" to="/download">
+              Download
+            </Link>
           </nav>
 
           <div className="mkt-nav__actions">
@@ -118,12 +130,15 @@ export default function MarketingNav() {
             <a
               key={l.href}
               className="mkt-nav__sheet-link"
-              href={l.href}
+              href={sectionHref(l.href)}
               onClick={() => setMenuOpen(false)}
             >
               {l.label}
             </a>
           ))}
+          <Link className="mkt-nav__sheet-link" to="/download" onClick={() => setMenuOpen(false)}>
+            Download
+          </Link>
           <Link className="mkt-nav__sheet-link" to="/login" onClick={() => setMenuOpen(false)}>
             Log in
           </Link>

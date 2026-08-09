@@ -10,9 +10,15 @@
 // function over TipTap JSON with no Node dependencies, and a second copy would drift from
 // the one that writes the account export - which is the copy the round trip is tested
 // against.
+//
+// The store this reads is lib/local (Dexie), not the localStorage blob it was written
+// against - hence the async entry points. `GuestData` survives only as the shape
+// localSnapshot() hands back: one value holding the whole store, which is what a zip
+// builder wants and what a table-per-entity API does not give.
 import { zipSync, strToU8 } from 'fflate';
 import { tiptapToMarkdown, type TTNode } from '../../../../server/src/lib/export';
-import { readData, type GuestData, type GuestNote } from './guestStore';
+import { localSnapshot } from '../../lib/local/localApi';
+import type { GuestData, GuestNote } from './guestStore';
 
 /** Everything a filesystem or a zip reader could object to, plus path separators. */
 function safeName(raw: string, fallback: string): string {
@@ -38,8 +44,8 @@ export interface GuestExportSummary {
   notebooks: number;
 }
 
-export function guestExportSummary(): GuestExportSummary {
-  const data = readData();
+export async function guestExportSummary(): Promise<GuestExportSummary> {
+  const data = await localSnapshot();
   return { notes: data.notes.length, notebooks: data.notebooks.length };
 }
 
@@ -49,7 +55,7 @@ export function guestNoteMarkdown(note: GuestNote, notebookName: string): string
   return `${frontmatter(note, notebookName)}${body}`;
 }
 
-export function buildGuestZip(data: GuestData = readData()): Uint8Array {
+export function buildGuestZip(data: GuestData): Uint8Array {
   const files: Record<string, Uint8Array> = {};
   const used = new Set<string>();
   const notebookNames = new Map(data.notebooks.map((nb) => [nb.id, nb.name]));
@@ -80,9 +86,9 @@ export function buildGuestZip(data: GuestData = readData()): Uint8Array {
     ].join('\n'),
   );
 
-  // zipSync rather than the async worker API: a guest store is capped by the browser's
-  // own localStorage quota (a few MB of text), so this compresses in well under a frame's
-  // worth of work and needs no worker to stay off the main thread for.
+  // zipSync rather than the async worker API. This was safe when the store was capped by
+  // the localStorage quota; on IndexedDB it is a judgement call, kept because the content
+  // is still plain text only - every path that produces a large attachment needs a server.
   return zipSync(files, { level: 6 });
 }
 
@@ -104,17 +110,17 @@ function stamp(): string {
 }
 
 export async function downloadGuestExport(): Promise<void> {
-  const data = readData();
+  const data = await localSnapshot();
   if (data.notes.length === 0) throw new Error('There is nothing to export yet.');
   const bytes = buildGuestZip(data);
   triggerDownload(new Blob([bytes as BlobPart], { type: 'application/zip' }), `unote-notes-${stamp()}.zip`);
 }
 
 /** The single-note export, so the note page's Export control works for a guest too. */
-export function downloadGuestNote(noteId: string): void {
-  const data = readData();
+export async function downloadGuestNote(noteId: string): Promise<void> {
+  const data = await localSnapshot();
   const note = data.notes.find((n) => n.id === noteId);
-  if (!note) throw new Error('That note is not in this browser any more.');
+  if (!note) throw new Error('That note is not on this device any more.');
   const notebookName = data.notebooks.find((nb) => nb.id === note.notebookId)?.name ?? 'Notes';
   const markdown = guestNoteMarkdown(note, notebookName);
   triggerDownload(new Blob([markdown], { type: 'text/markdown;charset=utf-8' }), `${safeName(note.title, 'untitled')}.md`);

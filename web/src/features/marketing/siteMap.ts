@@ -60,6 +60,13 @@ export const SITE_MAP: SiteBranch[] = [
         indexed: true,
       },
       {
+        title: 'Download for desktop',
+        path: '/download',
+        blurb: 'The same notebook and the same account, in a window instead of a tab. Free, and genuinely optional.',
+        access: 'open',
+        indexed: true,
+      },
+      {
         title: 'Start writing',
         path: '/try',
         blurb: 'Opens a notebook straight away. No email, no password; your notes stay on the device until you keep them.',
@@ -97,6 +104,11 @@ export const SITE_MAP: SiteBranch[] = [
       },
       { title: 'Search', path: '/search', blurb: 'Full-text across every note, with operators for tag, notebook and date.', access: 'account' },
       { title: 'Tags', path: '/tags', blurb: 'Every tag you use, what it is on, and how to merge or rename one.', access: 'account' },
+      {
+        title: 'Offline',
+        blurb: 'Writing, ink, boards, images and search all keep working with no connection. Changes queue and sync when you are back.',
+        access: 'account',
+      },
     ],
   },
   {

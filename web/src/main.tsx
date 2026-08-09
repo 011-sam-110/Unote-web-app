@@ -18,6 +18,7 @@ import { AuthProvider, useAuth } from './features/auth/AuthContext'
 import RequireAuth from './features/auth/RequireAuth'
 import LandingPage from './features/marketing/LandingPage'
 import SitemapPage from './features/marketing/SitemapPage'
+import DownloadPage from './features/download/DownloadPage'
 import LoginPage from './features/auth/LoginPage'
 import SignupPage from './features/auth/SignupPage'
 import RecoverPage from './features/auth/RecoverPage'
@@ -25,6 +26,7 @@ import JoinPage from './features/share/JoinPage'
 import TryRoute from './features/guest/TryRoute'
 import GuestMigrationHost from './features/guest/GuestMigrationHost'
 import { useGuest } from './features/guest/guestMode'
+import { registerServiceWorker } from './registerSW'
 import './styles/index.css'
 
 // AuthProvider sits inside the router (rather than around RouterProvider) so the auth
@@ -59,7 +61,18 @@ function RootRoute() {
   // A guest already chose the product over the pitch, so "/" is their dashboard. Sending
   // them back to the marketing page would look like being signed out of the notes they
   // are part way through writing.
-  if (!user && !guest && pathname === '/') return <LandingPage />
+  //
+  // Inside the Electron shell the pitch is already spent. desktop/main.ts loads this same
+  // production origin, so without the check below the desktop app opens onto the marketing
+  // hero - "Start writing, it's free" shown to somebody who has already installed the thing.
+  // The signed-out desktop root is the login screen instead. It keeps the guest link, so a
+  // first run with no account is still not a dead end.
+  //
+  // `unoteDesktop` is exposed by desktop/preload.ts over contextBridge and is simply absent
+  // in a browser, so the web landing page is untouched by this.
+  if (!user && !guest && pathname === '/') {
+    return window.unoteDesktop?.isDesktop ? <LoginPage /> : <LandingPage />
+  }
   // A QR-paired phone is signed in as the user but authorised for capture only, so the
   // desktop shell would render and then 403 on every fetch it makes. Send it where its
   // session actually works. The server enforces the same boundary independently.
@@ -85,7 +98,24 @@ const router = createBrowserRouter([
       // product rather than a signed-out pitch, and a link to it sits in the footer of
       // every marketing page. It stays outside <App> for the same reason the landing page
       // does - no sidebar, and none of the shell's authenticated fetches.
+      //
+      // Unlike /download it has no second HTML entry, so a crawler that runs no JavaScript
+      // gets index.html's head rather than this page's. That is a deliberate difference in
+      // kind, not an oversight: /download exists to be FOUND by those crawlers, while this
+      // page exists to answer "what is in this app?" for a person who is already here.
       { path: '/sitemap', element: <SitemapPage /> },
+
+      // The desktop download page. Public, and the one route with a SECOND HTML entry
+      // behind it (web/download.html) - the SPA's catch-all rewrite would otherwise hand
+      // crawlers the homepage's head for a page that is not the homepage, and the bots
+      // this site is written for run no JavaScript. This route is only what renders on
+      // top of that document once the bundle loads.
+      //
+      // Inside AuthRoot like every other public page, which costs one /me round trip
+      // before first paint. It uses no auth context and could be hoisted to a top-level
+      // entry to paint sooner; it is here because "/" already pays the same cost and two
+      // marketing pages behaving differently is the more expensive kind of surprise.
+      { path: '/download', element: <DownloadPage /> },
 
       // The one-click way in without an account. Public by necessity, and it does its
       // work (start the session, seed a first note) before redirecting into the shell.
@@ -120,6 +150,8 @@ const router = createBrowserRouter([
     ],
   },
 ])
+
+registerServiceWorker()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

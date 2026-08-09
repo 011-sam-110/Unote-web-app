@@ -522,7 +522,7 @@ export async function setGroups(
     // from a request body must never be trusted to name a row.
     let notebookId: string | null = null;
     if (g.notebookId) {
-      const owned = await db.prepare('SELECT id FROM notebooks WHERE id = ? AND user_id = ?').get<{ id: string }>(String(g.notebookId), uid);
+      const owned = await db.prepare('SELECT id FROM notebooks WHERE id = ? AND user_id = ? AND deleted_at IS NULL').get<{ id: string }>(String(g.notebookId), uid);
       notebookId = owned?.id ?? null;
     }
     let index = 0;
@@ -585,7 +585,7 @@ export async function saveSuggestions(
     let sugId: string | null = null;
     let sugName: string | null = null;
     if (nb.kind === 'existing' && nb.id) {
-      const owned = await db.prepare('SELECT id FROM notebooks WHERE id = ? AND user_id = ?').get<{ id: string }>(String(nb.id), uid);
+      const owned = await db.prepare('SELECT id FROM notebooks WHERE id = ? AND user_id = ? AND deleted_at IS NULL').get<{ id: string }>(String(nb.id), uid);
       if (owned) sugId = owned.id;
     } else if (nb.kind === 'new' && nb.name) {
       sugName = String(nb.name).trim().slice(0, 80) || null;
@@ -636,7 +636,7 @@ export async function decideItem(uid: string, batchId: string, itemId: string, p
   let decidedNotebookName = item.decided_notebook_name;
   if ('decidedNotebookId' in patch) {
     if (patch.decidedNotebookId) {
-      const owned = await db.prepare('SELECT id FROM notebooks WHERE id = ? AND user_id = ?').get<{ id: string }>(String(patch.decidedNotebookId), uid);
+      const owned = await db.prepare('SELECT id FROM notebooks WHERE id = ? AND user_id = ? AND deleted_at IS NULL').get<{ id: string }>(String(patch.decidedNotebookId), uid);
       if (!owned) throw new Error('unknown notebook');
       decidedNotebookId = owned.id;
       decidedNotebookName = null; // choosing an existing notebook clears any proposed new-notebook name
@@ -689,9 +689,15 @@ export async function decideItem(uid: string, batchId: string, itemId: string, p
 
 // --- commit (the no-AI note-create path) -----------------------------------------------------
 
+// Every notebook lookup in this file carries `deleted_at IS NULL`. Notebooks are
+// tombstoned rather than hard-deleted (a hard delete cannot replicate to an offline
+// client), so without it an import would resolve to, and file notes into, a notebook the
+// student has trashed - invisible in every list. The MAX(position) query below is the one
+// exception: it is a write-side slot allocation, and skipping tombstones there would hand
+// a new notebook a position a trashed one still holds.
 async function findNotebookByName(uid: string, name: string): Promise<string | undefined> {
   const row = await db
-    .prepare('SELECT id FROM notebooks WHERE user_id = ? AND lower(name) = lower(?) ORDER BY created_at ASC LIMIT 1')
+    .prepare('SELECT id FROM notebooks WHERE user_id = ? AND deleted_at IS NULL AND lower(name) = lower(?) ORDER BY created_at ASC LIMIT 1')
     .get<{ id: string }>(uid, name);
   return row?.id;
 }
@@ -701,8 +707,12 @@ async function createNotebook(uid: string, name: string): Promise<string> {
   const now = nowIso();
   const maxPos = ((await db.prepare('SELECT COALESCE(MAX(position), -1) as m FROM notebooks WHERE user_id = ?').get<{ m: number }>(uid)) as { m: number }).m;
   await db
-    .prepare('INSERT INTO notebooks (id, user_id, name, emoji, color, position, archived, created_at) VALUES (?, ?, ?, ?, ?, ?, 0, ?)')
-    .run(id, uid, name.slice(0, 80), '📓', '#6366f1', maxPos + 1, now);
+    // updated_at explicitly, not via the column default: the default is the DATABASE clock
+    // while every notebook mutation stamps the APP clock, and mixing the two can leave a
+    // later edit carrying an EARLIER updated_at than the insert - a sync cursor that goes
+    // backwards.
+    .prepare('INSERT INTO notebooks (id, user_id, name, emoji, color, position, archived, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)')
+    .run(id, uid, name.slice(0, 80), '📓', '#6366f1', maxPos + 1, now, now);
   return id;
 }
 
@@ -809,7 +819,7 @@ export async function commitBatch(uid: string, batchId: string, itemIds: string[
   async function resolveNotebook(item: ItemRow): Promise<string> {
     if (item.decided_notebook_id ?? item.suggested_notebook_id) {
       const chosen = (item.decided_notebook_id ?? item.suggested_notebook_id)!;
-      const owned = await db.prepare('SELECT id FROM notebooks WHERE id = ? AND user_id = ?').get<{ id: string }>(chosen, uid);
+      const owned = await db.prepare('SELECT id FROM notebooks WHERE id = ? AND user_id = ? AND deleted_at IS NULL').get<{ id: string }>(chosen, uid);
       if (!owned) throw new Error('chosen notebook not found');
       return owned.id;
     }
@@ -983,7 +993,7 @@ export interface LabelSpaceDto {
  *  note; the client would otherwise have to download them all. */
 export async function labelSpace(uid: string): Promise<LabelSpaceDto> {
   const notebooks = await db
-    .prepare('SELECT id, name, emoji FROM notebooks WHERE user_id = ? AND archived = 0 ORDER BY position ASC, created_at ASC')
+    .prepare('SELECT id, name, emoji FROM notebooks WHERE user_id = ? AND deleted_at IS NULL AND archived = 0 ORDER BY position ASC, created_at ASC')
     .all<{ id: string; name: string; emoji: string }>(uid);
 
   const tagRows = await db

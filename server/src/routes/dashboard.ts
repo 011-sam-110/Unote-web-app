@@ -72,7 +72,10 @@ router.get('/', async (req, res) => {
   const notes = ((await db
     .prepare('SELECT COUNT(*) as c FROM notes WHERE user_id = ? AND archived = 0 AND deleted_at IS NULL')
     .get(uid)) as { c: number }).c;
-  const notebooks = ((await db.prepare('SELECT COUNT(*) as c FROM notebooks WHERE user_id = ?').get(uid)) as { c: number }).c;
+  // `deleted_at IS NULL` throughout this handler: notebooks and flashcards are tombstoned
+  // rather than hard-deleted now (so the delete can replicate to an offline client), and
+  // an unfiltered read here would keep counting and listing rows the student has trashed.
+  const notebooks = ((await db.prepare('SELECT COUNT(*) as c FROM notebooks WHERE user_id = ? AND deleted_at IS NULL').get(uid)) as { c: number }).c;
   const activeBodies = (await db
     .prepare('SELECT content_text, content_json FROM notes WHERE user_id = ? AND archived = 0 AND deleted_at IS NULL')
     .all(uid)) as Array<{
@@ -81,7 +84,7 @@ router.get('/', async (req, res) => {
   }>;
   const words = activeBodies.reduce((sum, r) => sum + wordCountOf(r.content_text), 0);
   const flashcardsDue = ((await db
-    .prepare('SELECT COUNT(*) as c FROM flashcards WHERE user_id = ? AND suspended = 0 AND due_at <= ?')
+    .prepare('SELECT COUNT(*) as c FROM flashcards WHERE user_id = ? AND deleted_at IS NULL AND suspended = 0 AND due_at <= ?')
     .get(uid, now)) as {
     c: number;
   }).c;
@@ -117,7 +120,7 @@ router.get('/', async (req, res) => {
   const weekActivity = days.map(date => ({ date, count: counts.get(date) ?? 0 }));
 
   const notebookRows = (await db
-    .prepare('SELECT id, name, emoji, color FROM notebooks WHERE user_id = ? AND archived = 0 ORDER BY position ASC')
+    .prepare('SELECT id, name, emoji, color FROM notebooks WHERE user_id = ? AND deleted_at IS NULL AND archived = 0 ORDER BY position ASC')
     .all(uid)) as Array<{
     id: string;
     name: string;
@@ -229,7 +232,8 @@ router.get('/', async (req, res) => {
        JOIN notes n ON n.id = f.note_id
        JOIN notebooks nb ON nb.id = n.notebook_id
        WHERE f.user_id = ? AND n.user_id = ? AND f.suspended = 0 AND f.due_at <= ?
-         AND n.archived = 0 AND n.deleted_at IS NULL AND nb.archived = 0
+         AND f.deleted_at IS NULL AND n.archived = 0 AND n.deleted_at IS NULL
+         AND nb.archived = 0 AND nb.deleted_at IS NULL
        GROUP BY nb.id, nb.name
        ORDER BY due DESC`,
     )
@@ -273,7 +277,7 @@ router.get('/', async (req, res) => {
           `SELECT f.id as id, f.question as question, f.answer as answer
            FROM flashcards f JOIN notes n ON n.id = f.note_id
            WHERE f.user_id = ? AND n.user_id = ? AND n.notebook_id = ? AND n.archived = 0 AND n.deleted_at IS NULL
-             AND f.suspended = 0 AND f.due_at <= ?
+             AND f.deleted_at IS NULL AND f.suspended = 0 AND f.due_at <= ?
            ORDER BY f.due_at ASC LIMIT 1`,
         )
         .get(uid, uid, nb.id, now)) as { id: string; question: string; answer: string } | undefined;
@@ -284,7 +288,7 @@ router.get('/', async (req, res) => {
               `SELECT f.id as id, f.question as question, f.answer as answer
                FROM flashcards f JOIN notes n ON n.id = f.note_id
                WHERE f.user_id = ? AND n.user_id = ? AND n.notebook_id = ? AND n.archived = 0 AND n.deleted_at IS NULL
-                 AND f.suspended = 0
+                 AND f.deleted_at IS NULL AND f.suspended = 0
                ORDER BY RANDOM() LIMIT 1`,
             )
             .get(uid, uid, nb.id)) as { id: string; question: string; answer: string } | undefined);

@@ -100,7 +100,7 @@ CREATE TABLE IF NOT EXISTS note_versions (
   note_id TEXT NOT NULL REFERENCES notes(id) ON DELETE CASCADE,
   title TEXT NOT NULL DEFAULT '',
   content_json TEXT NOT NULL,
-  cause TEXT NOT NULL DEFAULT 'autosave', -- autosave | manual | ai | restore | import
+  cause TEXT NOT NULL DEFAULT 'autosave', -- autosave | manual | ai | restore | import | conflict
   label TEXT,
   created_at TEXT NOT NULL DEFAULT to_char(now() AT TIME ZONE 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')
 );
@@ -497,3 +497,73 @@ ALTER TABLE import_items ADD COLUMN IF NOT EXISTS captured_at TEXT;
 -- time: "column group_key does not exist", on boot, for every deployment that already had data.
 -- Commit walks a group at a time and looks up already-committed siblings to stay resumable.
 CREATE INDEX IF NOT EXISTS idx_import_items_group ON import_items(batch_id, group_key, group_index);
+
+-- ---------------------------------------------------------------------------
+-- Additive columns for delta sync (offline desktop app).
+--
+-- Two separate needs, both unmeetable before this block:
+--   * updated_at answers "what changed since <cursor>". Only notes and
+--     canvas_items had one, so the other four tables could not be synced at all.
+--   * deleted_at is a tombstone. A hard DELETE cannot be replicated to a client
+--     that was offline when it happened - that client's outbox re-uploads the row
+--     and RESURRECTS it, silently. Every mirrored table needs one.
+--
+-- Deliberately at the END of this file rather than beside the users ALTERs, for the
+-- same reason recorded above idx_import_items_group: on an existing database the
+-- CREATE TABLEs below are no-ops, but on a FRESH one the statements in this script
+-- run in order, so an ALTER placed near the top would name a table that does not
+-- exist yet and fail the whole migration on first boot.
+--
+-- The backfill order is load-bearing: add nullable, fill from created_at, THEN set a
+-- default, THEN set NOT NULL. Adding the column with a default instead would stamp
+-- every pre-existing row with now() and lose the created_at ordering, so a client's
+-- first sync would see the entire account arrive at one instant.
+-- ---------------------------------------------------------------------------
+
+ALTER TABLE notebooks    ADD COLUMN IF NOT EXISTS updated_at TEXT;
+ALTER TABLE canvas_edges ADD COLUMN IF NOT EXISTS updated_at TEXT;
+ALTER TABLE note_ink     ADD COLUMN IF NOT EXISTS updated_at TEXT;
+ALTER TABLE flashcards   ADD COLUMN IF NOT EXISTS updated_at TEXT;
+
+UPDATE notebooks    SET updated_at = created_at WHERE updated_at IS NULL;
+UPDATE canvas_edges SET updated_at = created_at WHERE updated_at IS NULL;
+UPDATE note_ink     SET updated_at = created_at WHERE updated_at IS NULL;
+UPDATE flashcards   SET updated_at = created_at WHERE updated_at IS NULL;
+
+-- The default is not tidiness. Every INSERT into these four tables predates the
+-- column and names it nowhere - notebooks in routes/notebooks.ts and lib/importBatch.ts,
+-- flashcards in routes/study.ts and routes/ai.ts, canvas_edges and note_ink in
+-- routes/canvas.ts and routes/share.ts - so without a default the NOT NULL below turns
+-- "create a notebook" into a 500 for every caller. Same expression the columns declared
+-- inline above use, so a row's updated_at is the same shape wherever it came from.
+ALTER TABLE notebooks    ALTER COLUMN updated_at SET DEFAULT to_char(now() AT TIME ZONE 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"');
+ALTER TABLE canvas_edges ALTER COLUMN updated_at SET DEFAULT to_char(now() AT TIME ZONE 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"');
+ALTER TABLE note_ink     ALTER COLUMN updated_at SET DEFAULT to_char(now() AT TIME ZONE 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"');
+ALTER TABLE flashcards   ALTER COLUMN updated_at SET DEFAULT to_char(now() AT TIME ZONE 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"');
+
+ALTER TABLE notebooks    ALTER COLUMN updated_at SET NOT NULL;
+ALTER TABLE canvas_edges ALTER COLUMN updated_at SET NOT NULL;
+ALTER TABLE note_ink     ALTER COLUMN updated_at SET NOT NULL;
+ALTER TABLE flashcards   ALTER COLUMN updated_at SET NOT NULL;
+
+-- Tombstones. Nullable and NULL-by-default throughout: a null deleted_at is a live
+-- row, which is exactly what every existing row is and what every existing query
+-- already assumes (`deleted_at IS NULL` on notes).
+ALTER TABLE notebooks    ADD COLUMN IF NOT EXISTS deleted_at TEXT;
+ALTER TABLE canvas_items ADD COLUMN IF NOT EXISTS deleted_at TEXT;
+ALTER TABLE canvas_edges ADD COLUMN IF NOT EXISTS deleted_at TEXT;
+ALTER TABLE note_ink     ADD COLUMN IF NOT EXISTS deleted_at TEXT;
+ALTER TABLE flashcards   ADD COLUMN IF NOT EXISTS deleted_at TEXT;
+
+-- Delta-sync covering indexes. The cursor is composite (updated_at, id), so the
+-- index must be too or every sync page becomes a sort.
+--
+-- canvas_items, canvas_edges and note_ink carry no user_id: they are scoped by
+-- note_id and the sync query joins through notes. Their index therefore leads on
+-- note_id, and notes' own idx_notes_user_updated covers the join side.
+CREATE INDEX IF NOT EXISTS idx_notebooks_sync    ON notebooks(user_id, updated_at, id);
+CREATE INDEX IF NOT EXISTS idx_notes_sync        ON notes(user_id, updated_at, id);
+CREATE INDEX IF NOT EXISTS idx_flashcards_sync   ON flashcards(user_id, updated_at, id);
+CREATE INDEX IF NOT EXISTS idx_canvas_items_sync ON canvas_items(note_id, updated_at, id);
+CREATE INDEX IF NOT EXISTS idx_canvas_edges_sync ON canvas_edges(note_id, updated_at, id);
+CREATE INDEX IF NOT EXISTS idx_note_ink_sync     ON note_ink(note_id, updated_at, id);

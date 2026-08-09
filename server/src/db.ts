@@ -236,13 +236,41 @@ export function migrate(): Promise<void> {
   return migrated;
 }
 
-/** Purge notes soft-deleted more than `days` ago (and their cascaded history). */
-export async function purgeExpiredDeletedNotes(days = 30): Promise<number> {
+/**
+ * Tables carrying a `deleted_at` tombstone, purged on the same 30-day clock.
+ *
+ * `notes` leads deliberately: notebooks cascade to their notes, so purging notebooks
+ * first would delete notes that were never tombstoned and take their count with them.
+ */
+const TOMBSTONED = ['notes', 'notebooks', 'canvas_items', 'canvas_edges', 'note_ink', 'flashcards'] as const;
+
+/**
+ * Purge rows soft-deleted more than `days` ago, across every tombstoned table.
+ *
+ * Tombstones exist so an offline client learns about a delete it missed. They are
+ * therefore garbage the moment no client could still be that far behind - but they
+ * are NOT optional before then, so the window has to outlast a plausible offline
+ * stretch. 30 days matches what notes already used.
+ */
+export async function purgeExpiredDeleted(days = 30): Promise<Record<string, number>> {
   const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
-  const r = await db
-    .prepare('DELETE FROM notes WHERE deleted_at IS NOT NULL AND deleted_at < ?')
-    .run(cutoff);
-  return r.changes;
+  const out: Record<string, number> = {};
+  for (const table of TOMBSTONED) {
+    // The table name is interpolated, never a parameter - Postgres has no placeholder
+    // for an identifier. It comes from the const list above, so nothing user-supplied
+    // reaches this string.
+    const r = await db
+      .prepare(`DELETE FROM ${table} WHERE deleted_at IS NOT NULL AND deleted_at < ?`)
+      .run(cutoff);
+    out[table] = r.changes;
+  }
+  return out;
+}
+
+/** @deprecated use purgeExpiredDeleted. Kept so existing boot code is untouched. */
+export async function purgeExpiredDeletedNotes(days = 30): Promise<number> {
+  const counts = await purgeExpiredDeleted(days);
+  return counts.notes ?? 0;
 }
 
 export function newId(): string {

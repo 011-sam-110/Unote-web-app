@@ -1,6 +1,7 @@
 import { Router } from 'express';
-import { db, newId, nowIso, tx } from '../db.js';
+import { db, nowIso, tx } from '../db.js';
 import { userId } from '../auth/middleware.js';
+import { resolveId } from '../lib/clientId.js';
 import { recordNoteEvent } from '../lib/events.js';
 
 const router = Router();
@@ -12,6 +13,20 @@ const router = Router();
  * Keeping items as rows (not a blob) means dragging one sticky writes one row
  * instead of rewriting the whole document, which matters because the editor
  * autosaves continuously while a drag is in flight.
+ *
+ * Two properties here exist for the offline client rather than for the website,
+ * and both are the same properties notes and notebooks already have:
+ *
+ *   * CREATES ACCEPT A CLIENT-SUPPLIED ID. A board built on a train is a set of
+ *     items and the connectors between them. Re-minting the item ids on first push
+ *     would leave every one of those connectors pointing at an id that no longer
+ *     exists, and the client's own mirror holding a second copy of every item
+ *     under the id it invented.
+ *   * DELETES ARE TOMBSTONES, NOT HARD DELETES. A row that is simply gone cannot
+ *     be replicated: the delta feed has nothing to send, so a client that was
+ *     offline when it happened keeps the item forever and re-uploads it from its
+ *     outbox. `deleted_at` is on all three tables and the 30-day purge in db.ts
+ *     already covers them; these routes were the missing half.
  */
 
 interface ItemRow {
@@ -102,10 +117,10 @@ router.get('/:noteId', async (req, res) => {
     return;
   }
   const items = await db
-    .prepare('SELECT * FROM canvas_items WHERE note_id = ? ORDER BY z ASC, created_at ASC')
+    .prepare('SELECT * FROM canvas_items WHERE note_id = ? AND deleted_at IS NULL ORDER BY z ASC, created_at ASC')
     .all<ItemRow>(noteId);
   const edges = await db
-    .prepare('SELECT * FROM canvas_edges WHERE note_id = ?')
+    .prepare('SELECT * FROM canvas_edges WHERE note_id = ? AND deleted_at IS NULL')
     .all<EdgeRow>(noteId);
   res.json({ items: items.map(serializeItem), edges: edges.map(serializeEdge) });
 });
@@ -119,8 +134,18 @@ router.post('/:noteId/items', async (req, res) => {
   }
   const b = (req.body ?? {}) as Record<string, unknown>;
   const kind = String(b.kind ?? 'sticky');
-  const id = newId();
+  const id = resolveId(b.id);
   const now = nowIso();
+
+  // A collision means this client already created the item and is retrying a push
+  // whose response it never saw. 409 rather than a 500 from the PK violation, so the
+  // outbox reads it as "this already landed" and settles instead of retrying forever.
+  // Tombstones count: a soft-deleted row still occupies the primary key.
+  const clash = await db.prepare('SELECT id FROM canvas_items WHERE id = ?').get<{ id: string }>(id);
+  if (clash) {
+    res.status(409).json({ error: 'id already exists', id });
+    return;
+  }
 
   // New items land on top. Computing this server-side avoids the client having to
   // know the current max, which it may not if another device just added one.
@@ -177,7 +202,9 @@ router.patch('/:noteId/items', async (req, res) => {
       const id = String(u.id ?? '');
       if (!id) continue;
       // note_id is part of the predicate so an id from another board cannot be
-      // smuggled in alongside legitimate ones.
+      // smuggled in alongside legitimate ones. `deleted_at IS NULL` is there for the
+      // offline client: a device that dragged an item while another device was
+      // deleting it must not be able to move a tombstone back to life.
       await t
         .prepare(
           `UPDATE canvas_items
@@ -185,7 +212,7 @@ router.patch('/:noteId/items', async (req, res) => {
                   width = COALESCE(?, width), height = COALESCE(?, height),
                   rotation = COALESCE(?, rotation), z = COALESCE(?, z),
                   data = COALESCE(?, data), updated_at = ?
-            WHERE id = ? AND note_id = ?`,
+            WHERE id = ? AND note_id = ? AND deleted_at IS NULL`,
         )
         .run(
           u.x === undefined ? null : num(u.x, 0),
@@ -203,7 +230,7 @@ router.patch('/:noteId/items', async (req, res) => {
   });
 
   const items = await db
-    .prepare('SELECT * FROM canvas_items WHERE note_id = ? ORDER BY z ASC, created_at ASC')
+    .prepare('SELECT * FROM canvas_items WHERE note_id = ? AND deleted_at IS NULL ORDER BY z ASC, created_at ASC')
     .all<ItemRow>(noteId);
   res.json({ items: items.map(serializeItem) });
 });
@@ -215,13 +242,29 @@ router.delete('/:noteId/items/:itemId', async (req, res) => {
     res.status(404).json({ error: 'Canvas not found' });
     return;
   }
-  const r = await db
-    .prepare('DELETE FROM canvas_items WHERE id = ? AND note_id = ?')
-    .run(itemId, noteId);
-  if (r.changes === 0) {
-    res.status(404).json({ error: 'Item not found' });
-    return;
-  }
+  // updated_at moves with deleted_at. The delta feed orders by (updated_at, id) and
+  // clients pull with a cursor, so a tombstone whose updated_at stayed put is
+  // invisible to any client already synced past it - the delete never arrives and
+  // that client re-uploads the item from its outbox.
+  const deletedAt = nowIso();
+  await tx(async (t) => {
+    await t
+      .prepare('UPDATE canvas_items SET deleted_at = ?, updated_at = ? WHERE id = ? AND note_id = ? AND deleted_at IS NULL')
+      .run(deletedAt, deletedAt, itemId, noteId);
+    // The ON DELETE CASCADE that used to take the connectors with the item no longer
+    // fires, because nothing is being deleted. Tombstoning them here is what keeps a
+    // connector from outliving the card it was drawn to.
+    await t
+      .prepare(
+        `UPDATE canvas_edges SET deleted_at = ?, updated_at = ?
+          WHERE note_id = ? AND deleted_at IS NULL AND (from_item_id = ? OR to_item_id = ?)`,
+      )
+      .run(deletedAt, deletedAt, noteId, itemId, itemId);
+  });
+  // Deliberately not a 404 when nothing changed. A delete is idempotent, and an
+  // offline client's outbox retries an entry until it succeeds - so answering 404 for
+  // an item this device has already deleted would wedge that entry on every sync,
+  // forever, behind a request that can never succeed.
   res.json({ ok: true });
 });
 
@@ -237,22 +280,34 @@ router.post('/:noteId/edges', async (req, res) => {
   const to = String(b.to ?? '');
 
   // Both endpoints must already live on this board; otherwise a connector could
-  // be used to probe whether an item id exists on someone else's canvas.
+  // be used to probe whether an item id exists on someone else's canvas. Tombstoned
+  // items do not count as endpoints - a connector to a deleted card is a stub.
   const ends = await db
-    .prepare('SELECT COUNT(*) AS n FROM canvas_items WHERE note_id = ? AND id IN (?, ?)')
+    .prepare('SELECT COUNT(*) AS n FROM canvas_items WHERE note_id = ? AND deleted_at IS NULL AND id IN (?, ?)')
     .get<{ n: number }>(noteId, from, to);
   if (!ends || Number(ends.n) < 2 || from === to) {
     res.status(400).json({ error: 'Connector endpoints must be two distinct items on this canvas' });
     return;
   }
 
-  const id = newId();
+  const id = resolveId(b.id);
+  const clash = await db.prepare('SELECT id FROM canvas_edges WHERE id = ?').get<{ id: string }>(id);
+  if (clash) {
+    res.status(409).json({ error: 'id already exists', id });
+    return;
+  }
+
+  // updated_at written explicitly rather than left to the column default. The default
+  // is the DATABASE clock and every other mutation here stamps the APP clock; mixing
+  // them can hand a later edit an earlier updated_at than the insert, which is exactly
+  // the non-monotonic cursor the sync feed cannot tolerate.
+  const now = nowIso();
   await db
     .prepare(
-      `INSERT INTO canvas_edges (id, note_id, from_item_id, to_item_id, label, style, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO canvas_edges (id, note_id, from_item_id, to_item_id, label, style, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     )
-    .run(id, noteId, from, to, String(b.label ?? ''), String(b.style ?? 'arrow'), nowIso());
+    .run(id, noteId, from, to, String(b.label ?? ''), String(b.style ?? 'arrow'), now, now);
 
   const row = await db.prepare('SELECT * FROM canvas_edges WHERE id = ?').get<EdgeRow>(id);
   res.status(201).json({ edge: serializeEdge(row!) });
@@ -265,13 +320,11 @@ router.delete('/:noteId/edges/:edgeId', async (req, res) => {
     res.status(404).json({ error: 'Canvas not found' });
     return;
   }
-  const r = await db
-    .prepare('DELETE FROM canvas_edges WHERE id = ? AND note_id = ?')
-    .run(edgeId, noteId);
-  if (r.changes === 0) {
-    res.status(404).json({ error: 'Connector not found' });
-    return;
-  }
+  const deletedAt = nowIso();
+  await db
+    .prepare('UPDATE canvas_edges SET deleted_at = ?, updated_at = ? WHERE id = ? AND note_id = ? AND deleted_at IS NULL')
+    .run(deletedAt, deletedAt, edgeId, noteId);
+  // Idempotent, for the same reason the item delete is.
   res.json({ ok: true });
 });
 
@@ -287,7 +340,7 @@ router.get('/:noteId/ink', async (req, res) => {
     return;
   }
   const rows = await db
-    .prepare('SELECT id, stroke FROM note_ink WHERE note_id = ? ORDER BY created_at ASC')
+    .prepare('SELECT id, stroke FROM note_ink WHERE note_id = ? AND deleted_at IS NULL ORDER BY created_at ASC')
     .all<{ id: string; stroke: string }>(noteId);
   res.json({ strokes: rows.map((r) => ({ id: r.id, ...safeParse(r.stroke) })) });
 });
@@ -295,6 +348,11 @@ router.get('/:noteId/ink', async (req, res) => {
 /**
  * Append strokes. Ink is append-only per stroke (rather than a whole-layer PUT)
  * so a dropped request loses at most the strokes in flight, not the page.
+ *
+ * A stroke may carry its own `id`, for one drawn while offline. It is stripped out
+ * of the stored JSON rather than left in it: the GET above spreads the parsed blob
+ * over `{ id: r.id }`, so an id inside the payload would silently override the
+ * column and the layer would then try to erase a stroke by an id no row has.
  */
 router.post('/:noteId/ink', async (req, res) => {
   const uid = userId(req);
@@ -310,10 +368,18 @@ router.post('/:noteId/ink', async (req, res) => {
   const now = nowIso();
   await tx(async (t) => {
     for (const s of strokes) {
-      const id = newId();
+      const { id: supplied, ...body } = (s ?? {}) as Record<string, unknown>;
+      const id = resolveId(supplied);
+      // ON CONFLICT DO NOTHING rather than the 409 the item and edge creates
+      // answer with. This is a BATCH, so one already-landed stroke must not fail
+      // the other nineteen - and a stroke is immutable, so re-sending one is
+      // provably a no-op rather than a lost edit.
       await t
-        .prepare('INSERT INTO note_ink (id, note_id, stroke, created_at) VALUES (?, ?, ?, ?)')
-        .run(id, noteId, JSON.stringify(s), now);
+        .prepare(
+          `INSERT INTO note_ink (id, note_id, stroke, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?) ON CONFLICT (id) DO NOTHING`,
+        )
+        .run(id, noteId, JSON.stringify(body), now, now);
       created.push(id);
     }
   });
@@ -331,7 +397,10 @@ router.delete('/:noteId/ink/:inkId', async (req, res) => {
     res.status(404).json({ error: 'Note not found' });
     return;
   }
-  await db.prepare('DELETE FROM note_ink WHERE id = ? AND note_id = ?').run(inkId, noteId);
+  const deletedAt = nowIso();
+  await db
+    .prepare('UPDATE note_ink SET deleted_at = ?, updated_at = ? WHERE id = ? AND note_id = ? AND deleted_at IS NULL')
+    .run(deletedAt, deletedAt, inkId, noteId);
   res.json({ ok: true });
 });
 
@@ -343,7 +412,10 @@ router.delete('/:noteId/ink', async (req, res) => {
     res.status(404).json({ error: 'Note not found' });
     return;
   }
-  const r = await db.prepare('DELETE FROM note_ink WHERE note_id = ?').run(noteId);
+  const deletedAt = nowIso();
+  const r = await db
+    .prepare('UPDATE note_ink SET deleted_at = ?, updated_at = ? WHERE note_id = ? AND deleted_at IS NULL')
+    .run(deletedAt, deletedAt, noteId);
   res.json({ ok: true, removed: r.changes });
 });
 

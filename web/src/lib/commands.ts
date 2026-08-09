@@ -153,7 +153,10 @@ export const GLOBAL_COMMANDS: Command[] = [
     hint: 'Review due flashcards',
     keywords: ['flashcards', 'review', 'srs', 'spaced repetition'],
     icon: 'layers',
-    needs: 'review',
+    // No `needs` any more. Reviewing used to require an account because SM-2 ran on the
+    // server; the offline work moved the scheduler into the local store, so a guest can
+    // review their own cards and the gate became a lie the app told about itself. The
+    // catalogue tests caught it, which is exactly what they are for.
     run: (ctx) => ctx.navigate('/study'),
   },
   {

@@ -102,6 +102,16 @@
   font-size: 10.5px;
   color: var(--ink-3);
 }
+/* Shown only when the local index answered. Quiet by design - it explains a changed
+   result order, it is not a warning, and offline is a normal state for this app. */
+.sr-meta-row__local {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: auto;
+  font-size: 11.5px;
+  color: var(--ink-3);
+}
 .sr-sort {
   display: flex;
   align-items: center;

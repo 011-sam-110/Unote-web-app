@@ -1,0 +1,346 @@
+/* The /download page.
+
+   Everything here renders inside .mkt, so the palette, the type scale, the spacing steps and
+   the buttons all come from marketing.css. This file holds only the layout that is specific to
+   this page. That split is the point: the download page is the same site as the landing page
+   and should be indistinguishable from it, and duplicating a second set of colours here is how
+   two pages quietly drift into two brands.
+
+   The colour rules marketing.css sets out apply here too, and the one that bites on a page like
+   this is YELLOW: it is the recall colour, for the things you highlight and revise from. It is
+   NOT a warning colour, so the unsigned-build cards below are plain paper with a rule around
+   them rather than the amber banner the instinct reaches for.
+
+   Selector discipline matches marketing.css: every rule starts at a single .dl-* class, with no
+   bare element selectors that could collide with the app's shared component CSS.
+
+   No scroll reveals. useReveals only hides an element once it has committed to animating it,
+   and wiring it up here would buy three fades on a two-screen page in exchange for three more
+   ways for the copy to end up invisible - a trade this repo has already lost once. */
+
+/* --- the download block --------------------------------------------------- */
+
+/* Same washed, dot-gridded paper as the hero, so the page opens on the surface the landing
+   page opens on rather than on flat white. */
+.dl-get {
+  padding: clamp(48px, 8vw, 88px) var(--sp-gutter) var(--sp-band);
+  text-align: center;
+  border-bottom: 1px solid var(--mkt-rule-soft);
+  background-color: var(--mkt-wash);
+  background-image: radial-gradient(rgba(120, 105, 80, 0.13) 1px, transparent 1.5px);
+  background-size: 26px 26px;
+}
+.dl-get__inner {
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.dl-get__title {
+  margin: 0;
+  font-family: var(--mkt-display);
+  font-size: var(--t-h2);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.08;
+  text-wrap: balance;
+}
+.dl-get__lede {
+  margin: 20px auto 0;
+  max-width: 560px;
+  font-size: var(--t-md);
+  line-height: 1.6;
+  color: var(--mkt-ink-2);
+  text-wrap: pretty;
+  /* Same reason the marketing ledes turn it off: auto-hyphenation breaks "browser" across a
+     line in centred copy and reads as a typesetting fault. */
+  hyphens: none;
+}
+
+.dl-get__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 28px;
+}
+
+/* The Apple silicon / Intel split. Full body size rather than fine print: it is a question the
+   reader has to answer for themselves - no browser can answer it for them - and an Intel Mac
+   owner who skims past it downloads a file that will not open. */
+.dl-get__intel {
+  margin: 18px auto 0;
+  max-width: 560px;
+  font-size: var(--t-base);
+  line-height: 1.6;
+  color: var(--mkt-ink-2);
+  hyphens: none;
+}
+.dl-get__intel strong {
+  font-weight: 650;
+  color: var(--mkt-ink);
+}
+/* Underlined rather than coloured, the same choice the hero's secondary door makes: colouring
+   it would put it in competition with the button a line above. */
+.dl-get__intel-link {
+  color: var(--mkt-ink);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.dl-get__intel-link:focus-visible {
+  outline: 2px solid var(--mkt-accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* The detection note. It exists to tell the reader that the guess above is a guess, which is
+   what keeps a wrong guess from reading as "this page will not let me have the other one". */
+.dl-get__detected {
+  margin: 18px auto 0;
+  max-width: 520px;
+  font-size: var(--t-sm);
+  line-height: 1.55;
+  color: var(--mkt-ink-3);
+}
+.dl-get__meta {
+  margin: 8px 0 0;
+  font-family: var(--mkt-mono);
+  font-size: var(--t-xs);
+  line-height: 1.7;
+  color: var(--mkt-ink-3);
+}
+
+/* --- the unsigned-build warning ------------------------------------------- */
+
+.dl-warn {
+  width: min(820px, 100%);
+  margin: 48px auto 0;
+  padding-top: 32px;
+  border-top: 1px solid var(--mkt-rule);
+  text-align: left;
+}
+.dl-warn__title {
+  margin: 0;
+  font-size: var(--t-lg);
+  font-weight: 650;
+  letter-spacing: -0.018em;
+}
+.dl-warn__lede {
+  margin: 8px 0 0;
+  max-width: 60ch;
+  font-size: var(--t-base);
+  line-height: 1.6;
+  color: var(--mkt-ink-2);
+}
+/* minmax(0, 1fr) rather than 1fr, for the reason the AI band documents: a grid item's automatic
+   minimum is its min-content, so one long unbreakable string inside either card would widen the
+   whole row past the page. */
+.dl-warn__list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin: 22px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.dl-warn__item {
+  padding: 20px 22px;
+  border: 1px solid var(--mkt-rule);
+  border-radius: var(--mkt-radius);
+  background: var(--mkt-paper);
+  box-shadow: var(--mkt-shadow-sm);
+}
+.dl-warn__item-title {
+  margin: 0;
+  font-size: var(--t-base);
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+.dl-warn__item-body {
+  margin: 9px 0 0;
+  font-size: var(--t-base);
+  line-height: 1.6;
+  color: var(--mkt-ink-2);
+  hyphens: none;
+}
+/* The literal words on the dialog and the literal buttons to press. Set in full ink so they
+   can be picked out of the paragraph at a glance by someone with the dialog already open. */
+.dl-warn__item-body strong {
+  font-weight: 650;
+  color: var(--mkt-ink);
+}
+/* A command someone has to retype into Terminal. It wraps at any character rather than
+   overflowing the card, because a path with no spaces in it is one unbreakable word and at
+   390px that is wider than the phone. */
+.dl-warn__item-body code {
+  padding: 1px 5px;
+  border: 1px solid var(--mkt-rule);
+  border-radius: 4px;
+  background: var(--mkt-paper-2);
+  font-family: var(--mkt-mono);
+  font-size: 0.9em;
+  color: var(--mkt-ink);
+  overflow-wrap: anywhere;
+}
+
+/* --- what the app adds ----------------------------------------------------- */
+
+.dl-adds {
+  max-width: var(--mkt-max);
+  margin: 0 auto;
+  padding: var(--sp-section) var(--sp-gutter) 0;
+}
+.dl-adds__list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.dl-add {
+  padding: 26px 24px;
+  border: 1px solid var(--mkt-rule);
+  border-radius: var(--mkt-radius-lg);
+  background: #fff;
+}
+.dl-add__title {
+  margin: 0;
+  font-size: var(--t-md);
+  font-weight: 650;
+  letter-spacing: -0.015em;
+  line-height: 1.3;
+  text-wrap: balance;
+}
+.dl-add__body {
+  margin: 10px 0 0;
+  font-size: var(--t-base);
+  line-height: 1.6;
+  color: var(--mkt-ink-2);
+  text-wrap: pretty;
+  hyphens: none;
+}
+
+/* The correction to the three claims above it, so it is marked as an aside in the same way the
+   AI band's note is - a rule down the left, not a box. */
+.dl-adds__note {
+  margin: 34px auto 0;
+  max-width: 74ch;
+  padding: 2px 0 2px 16px;
+  border-left: 2px solid var(--mkt-rule-strong);
+  font-size: var(--t-base);
+  line-height: 1.65;
+  color: var(--mkt-ink-2);
+  hyphens: none;
+}
+
+/* --- the web version ------------------------------------------------------- */
+
+/* The closing band mirrors the opening one, the way the landing page's does: same wash, same
+   grain, and the light rising from the bottom edge instead of falling from the top. */
+.dl-web {
+  margin-top: var(--sp-section);
+  padding: var(--sp-band) var(--sp-gutter);
+  text-align: center;
+  border-top: 1px solid var(--mkt-rule-soft);
+  background-color: var(--mkt-wash);
+  background-image:
+    radial-gradient(ellipse 800px 420px at 50% 110%, rgba(255, 227, 110, 0.28), transparent 65%),
+    radial-gradient(rgba(120, 105, 80, 0.11) 1px, transparent 1.5px);
+  background-size: auto, 26px 26px;
+}
+.dl-web__inner {
+  max-width: 720px;
+  margin: 0 auto;
+}
+.dl-web__title {
+  margin: 0;
+  font-family: var(--mkt-display);
+  font-size: var(--t-h2-sm);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.08;
+  text-wrap: balance;
+}
+.dl-web__lede {
+  margin: 18px auto 0;
+  max-width: 540px;
+  font-size: var(--t-md);
+  line-height: 1.6;
+  color: var(--mkt-ink-2);
+  text-wrap: pretty;
+  hyphens: none;
+}
+
+/* Four short answers in two columns, left-aligned inside a centred band - the same shape as
+   the landing page's assurances, and for the same reason: stacked and centred they read as a
+   list of slogans rather than as points. */
+.dl-web__points {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px 32px;
+  width: min(640px, 100%);
+  margin: 32px auto 0;
+  padding: 0;
+  list-style: none;
+  text-align: left;
+}
+.dl-web__point {
+  position: relative;
+  padding: 9px 0 9px 22px;
+  font-size: var(--t-base);
+  line-height: 1.5;
+  color: var(--mkt-ink-2);
+}
+.dl-web__point::before {
+  content: '';
+  position: absolute;
+  left: 3px;
+  top: 16px;
+  width: 6px;
+  height: 6px;
+  border-radius: 2px;
+  background: var(--mkt-rule-strong);
+}
+
+.dl-web__cta {
+  margin-top: 34px;
+}
+
+/* --- responsive ------------------------------------------------------------ */
+
+/* Three cards go straight to one. At two columns the third is an orphan on a row of its own,
+   and at this width three columns put the bodies down to three words a line. */
+@media (max-width: 900px) {
+  .dl-adds__list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 760px) {
+  .dl-warn__list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .dl-web__points {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  /* Clear the nav's docked CTA, which is fixed to the bottom edge below this width. It never
+     shows on this page - it watches for the landing page's hero and closing CTA and finds
+     neither - but the padding costs nothing and survives that changing. */
+  .dl-web {
+    padding-bottom: calc(var(--sp-band) + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+@media (max-width: 460px) {
+  /* Full-bleed buttons. Two centred buttons at their own intrinsic widths read as accidental
+     rather than composed, and the second one is a real choice here, not a footnote. */
+  .dl-get__actions {
+    flex-direction: column;
+    gap: 10px;
+  }
+  .dl-get__actions .mkt-btn,
+  .dl-web__cta .mkt-btn {
+    width: 100%;
+  }
+}

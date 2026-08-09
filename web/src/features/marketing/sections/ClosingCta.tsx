@@ -36,6 +36,13 @@ export default function ClosingCta() {
             <p className="mkt-close__alt">
               Already have an account? <Link to="/login">Log in</Link>
             </p>
+            {/* Second line, below the log-in one, because it is a smaller ask than either.
+                Deliberately not a third button: the desktop app is a preference about where
+                the notebook opens, and putting it next to the primary would turn the one
+                decision this section asks for into two. */}
+            <p className="mkt-close__alt">
+              Rather have it in its own window? <Link to="/download">Unote for desktop</Link>
+            </p>
           </div>
 
           <ul className="mkt-close__assurances mkt-reveal" data-reveal-delay="200">

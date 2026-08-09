@@ -31,3 +31,7 @@ docs/landing-review*/
 # tesseract.js runtime assets - copied from node_modules by web/scripts/vendor-tesseract.mjs
 # at pre(dev|build). ~7MB of binaries that npm already pins; never commit them.
 web/public/tesseract/
+
+# Electron shell build output and packaged installers.
+dist-desktop/
+release/
