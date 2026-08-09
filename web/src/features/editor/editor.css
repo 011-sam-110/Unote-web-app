@@ -432,6 +432,31 @@
 
 /* ---------- Details / toggle ---------- */
 
+/*
+ * @tiptap/extension-details' node view renders this shape - NOT the `<details>`
+ * tree its own `renderHTML` describes, and not a `div[data-type='detailsSummary']`
+ * either:
+ *
+ *   <div class="folio-details" data-type="details">
+ *     <button type="button" aria-label="Expand details content"></button>
+ *     <div>                                    <- contentDOM, no attributes at all
+ *       <summary>…</summary>
+ *       <div data-type="detailsContent" hidden>…</div>
+ *     </div>
+ *   </div>
+ *
+ * That empty <button> is the ONLY element wired to the open/close handler, and the
+ * extension ships it with no text, no class and no styles. Against the global button
+ * reset in base.css (`background:none; border:none; padding:0`) an empty inline-block
+ * computes to a literal 0x0 box, so it could not be clicked or even seen - the summary
+ * row underneath merely LOOKED clickable because of the `cursor: pointer` below.
+ * Everything here exists to give that button a real box, a chevron, and a place in the
+ * row beside the summary.
+ *
+ * Layout rules are keyed on `[data-type='details']`, which only the node view sets, so
+ * a statically rendered `<details>` (what `renderHTML` emits, e.g. in an HTML export)
+ * keeps its native collapsing behaviour instead of being forced into a flex box.
+ */
 .folio-details {
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -439,8 +464,63 @@
   margin: 0.4em 0;
 }
 
-.folio-details summary,
-.folio-details > div[data-type='detailsSummary'] {
+.folio-details[data-type='details'] {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.2em;
+}
+
+/* The unnamed contentDOM wrapper: summary + content take the rest of the row. */
+.folio-details[data-type='details'] > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.folio-details[data-type='details'] > button {
+  flex: none;
+  /* Height matches the summary's line box and the margin matches its padding-top, so
+     the chevron sits on the summary's FIRST line however far the title wraps. */
+  height: 1.75em;
+  width: 1.4em;
+  margin-top: 0.3em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  color: var(--ink-2);
+  line-height: 1;
+  /* The button lives inside the contenteditable; without this a click on it can start
+     a text selection in the summary instead of reading as a button press. */
+  user-select: none;
+}
+
+.folio-details[data-type='details'] > button::before {
+  content: '▸';
+  display: block;
+  transition: transform 0.14s ease-out;
+}
+
+.folio-details[data-type='details'].is-open > button::before {
+  transform: rotate(90deg);
+}
+
+.folio-details[data-type='details'] > button:hover {
+  background: var(--bg-active);
+  color: var(--ink);
+}
+
+.folio-details[data-type='details'] > button:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .folio-details[data-type='details'] > button::before {
+    transition: none;
+  }
+}
+
+.folio-details summary {
   cursor: pointer;
   font-weight: 600;
   padding: 0.3em 0;
@@ -449,20 +529,19 @@
   gap: 0.4em;
 }
 
-.folio-details > div[data-type='detailsSummary']::before {
-  content: '▸';
-  display: inline-block;
-  transition: transform 0.14s ease-out;
-  color: var(--ink-2);
+/*
+ * In the node view the summary is the toggle's TITLE - editable text, not a click
+ * target (the same split Notion uses, and the reason the chevron has to exist). It
+ * inherited `cursor: pointer` above, which is what made a broken toggle look merely
+ * unresponsive rather than obviously missing its control. A statically rendered
+ * `<details><summary>` really does toggle on click, so it keeps the pointer.
+ */
+.folio-details[data-type='details'] summary {
+  cursor: text;
 }
 
-.folio-details[data-open='true'] > div[data-type='detailsSummary']::before,
-.folio-details[open] > div[data-type='detailsSummary']::before {
-  transform: rotate(90deg);
-}
-
-.folio-details > div[data-type='detailsContent'] {
-  padding: 0.2em 0 0.4em 1.1em;
+.folio-details > div > [data-type='detailsContent'] {
+  padding: 0.2em 0 0.4em;
 }
 
 /* ---------- Math ---------- */

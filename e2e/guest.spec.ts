@@ -151,21 +151,38 @@ test('a guest lands on a README that renders its own blocks', async ({ page }) =
   const firstToggleContent = firstToggle.locator('[data-type="detailsContent"]');
   await expect(firstToggleContent).toBeHidden();
 
-  // Opening it: the toggle's own "expand" <button> (@tiptap/extension-details' node view)
-  // gets NO CSS anywhere in this app - no class, no icon, no text - and the global button
-  // reset (base.css: `button { padding: 0; border: none; }`) collapses an empty button to
-  // a genuine 0x0 box. Measured directly: boundingBox() reports {width:0, height:0}, a
-  // real pointer click times out waiting for it to become actionable, and even a focused
-  // keyboard Enter does nothing. Only `dispatchEvent('click')` - which reaches the
-  // element's real listener without going through hit-testing - opens it. That is a
-  // genuine, pre-existing bug (the `Details.configure(...)` wiring predates this branch,
-  // first landed in 9edb1ec): nobody, on any input device, can currently open a toggle by
-  // interacting with it. Using `.click()` here would either hang the suite or silently
-  // paper over that with a fake "it opens fine" result, so this dispatches the event
-  // directly - proving the toggle's OWN logic and the content behind it are correct,
-  // without pretending the on-screen control is operable today. See the task report for
-  // the full readout; this is unrelated to buildReadme.ts and out of scope to fix here.
-  await firstToggle.locator('button').first().dispatchEvent('click');
+  // Opening it, the way a person would. The toggle's expand control is the <button>
+  // @tiptap/extension-details' node view renders as the first child of `.folio-details`;
+  // the extension ships it empty and unstyled, so it used to compute to a literal 0x0 box
+  // and NOBODY could open a toggle on any input device (see editor.css's `Details /
+  // toggle` block for the full shape). These assertions are the regression guard for that:
+  // `toBeVisible()` fails on a zero-area element, and Playwright's `.click()` does real
+  // hit-testing, so both fail if the button ever loses its box again. Deliberately NOT
+  // `dispatchEvent('click')` - that reaches the listener without going through the
+  // rendered UI at all, and would pass against a control no user can reach.
+  const firstToggleButton = firstToggle.locator('button').first();
+  await expect(firstToggleButton).toBeVisible();
+  await expect(firstToggleButton).toHaveAttribute('aria-expanded', 'false');
+  await firstToggleButton.click();
+  await expect(firstToggleContent).toBeVisible();
+  await expect(firstToggleButton).toHaveAttribute('aria-expanded', 'true');
+
+  // ...and it closes again, so this is a toggle rather than a one-way reveal.
+  await firstToggleButton.click();
+  await expect(firstToggleContent).toBeHidden();
+
+  // The keyboard path, which is a separate mechanism from the click and was separately
+  // broken: the button lives inside ProseMirror's contenteditable, and the editor's own
+  // keydown handler calls preventDefault() on Enter, which cancels the browser's implicit
+  // activation of a focused button. buildExtensions.ts's `renderToggleButton` handles
+  // Enter and Space on the button itself and keeps focus there afterwards, so both keys
+  // work and both directions work.
+  await firstToggleButton.focus();
+  await page.keyboard.press('Enter');
+  await expect(firstToggleContent).toBeVisible();
+  await page.keyboard.press('Enter');
+  await expect(firstToggleContent).toBeHidden();
+  await page.keyboard.press('Space');
   await expect(firstToggleContent).toBeVisible();
 
   // Every group's reference table and live demos sit INSIDE that group's toggle
@@ -175,7 +192,7 @@ test('a guest lands on a README that renders its own blocks', async ({ page }) =
   const toggles = page.locator('.folio-details');
   const toggleCount = await toggles.count();
   for (let i = 1; i < toggleCount; i++) {
-    await toggles.nth(i).locator('button').first().dispatchEvent('click');
+    await toggles.nth(i).locator('button').first().click();
   }
 
   // Live blocks, each read from what its node view actually emits.
