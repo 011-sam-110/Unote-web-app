@@ -8,10 +8,18 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      // autoUpdate: a new deploy installs in the background and activates on the
-      // next launch. No update prompt - the desktop shell has its own, and two
-      // competing update notices is one too many.
-      registerType: 'autoUpdate',
+      // 'prompt' rather than 'autoUpdate', and NOT because we prompt - registerSW.ts
+      // never wires a refresh callback, so an update installs silently and takes
+      // effect on the next launch.
+      //
+      // The reason is that 'autoUpdate' FORCES workbox.skipWaiting and clientsClaim
+      // to true and ignores any attempt to set them false. That combination activates
+      // a new worker immediately and claims already-open pages, while
+      // cleanupOutdatedCaches deletes the previous precache - leaving a running page
+      // holding the OLD build's code with its lazy chunks gone from both the cache and
+      // the CDN. Unote lazy-loads a lot (Ketcher, three.js, transformers.js, pdfjs),
+      // so the next 'Insert -> Chemistry' after a deploy would simply fail.
+      registerType: 'prompt',
       injectRegister: null, // registration is ours, in src/registerSW.ts
       workbox: {
         // The app shell only. Model weights and wasm are fetched from
