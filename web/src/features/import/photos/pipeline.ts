@@ -60,20 +60,25 @@ export async function ingestPhotos(
   batchId: string,
   files: File[],
   onProgress: (p: PhotoProgress) => void,
+  opts: { readText?: boolean } = {},
 ): Promise<PhotoIngestResult> {
+  // Opting out of OCR is a real choice, not a degraded mode: it skips a ~7MB one-off download
+  // and the per-photo recognise pass. The photos still import, still group by capture time, and
+  // are simply titled from their filenames instead of their contents.
+  const readText = opts.readText !== false;
   const states: PhotoState[] = files.map((f, i) => ({
     localId: `p${i}`,
     name: f.name,
     stage: 'queued',
     capturedAt: null,
   }));
-  const ocr = createOcrRunner();
+  const ocr = readText ? createOcrRunner() : null;
   const report = () =>
     onProgress({
       total: states.length,
       done: states.filter((s) => s.stage === 'staged' || s.stage === 'failed').length,
       files: states.slice(),
-      ocrAvailable: !ocr.engineFailed(),
+      ocrAvailable: !ocr || !ocr.engineFailed(),
     });
   report();
 
@@ -102,7 +107,7 @@ export async function ingestPhotos(
       // 3. Read the text locally. Free, unlimited, and never leaves the device.
       st.stage = 'reading';
       report();
-      const text = await ocr.recognize(fit.file);
+      const text = ocr ? await ocr.recognize(fit.file) : '';
 
       // 4. Stage the bytes + text against the batch.
       st.stage = 'uploading';
@@ -117,7 +122,7 @@ export async function ingestPhotos(
       staged.set(item.id, { item, capturedAt: capture.capturedAt });
       st.itemId = item.id;
       st.stage = 'staged';
-      st.note = text ? undefined : ocr.engineFailed() ? 'text reader unavailable' : 'no text found';
+      st.note = text ? undefined : !ocr ? 'imported as a picture' : ocr.engineFailed() ? 'text reader unavailable' : 'no text found';
     } catch (err) {
       st.stage = 'failed';
       st.note = errMsg(err);
@@ -125,7 +130,7 @@ export async function ingestPhotos(
     report();
   });
 
-  await ocr.terminate();
+  if (ocr) await ocr.terminate();
 
   // Group in the order the photos were given, so the fallbacks in groupByCaptureTime (which lean
   // on filename sequence when timestamps are missing) see a sensible starting order.
@@ -157,7 +162,7 @@ export async function ingestPhotos(
   return {
     items,
     groups,
-    ocrAvailable: !ocr.engineFailed(),
+    ocrAvailable: !ocr || !ocr.engineFailed(),
     failed: states.filter((s) => s.stage === 'failed').length,
   };
 }

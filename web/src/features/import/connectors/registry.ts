@@ -29,7 +29,7 @@ const files: SourceConnector = {
 const photos: SourceConnector = {
   id: 'photos',
   label: 'Photos',
-  description: 'JPG, PNG, HEIC - text is read with OCR',
+  description: 'Phone photos - grouped into notes by when they were taken',
   icon: 'camera',
   accept: 'image/*',
   supportsFolder: true,
