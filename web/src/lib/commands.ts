@@ -19,6 +19,7 @@ import type { NavigateFunction } from 'react-router-dom';
 import type { IconName } from '../components/Icon';
 import { toggleTheme } from './theme';
 import { openShortcuts, startTour } from '../features/onboarding/onboardingBus';
+import { ensureReadme } from '../features/readme/ensureReadme';
 
 export interface CommandContext {
   navigate: NavigateFunction;
@@ -206,6 +207,18 @@ export const GLOBAL_COMMANDS: Command[] = [
     keywords: ['onboarding', 'tour', 'guide', 'walkthrough', 'help', 'getting started'],
     icon: 'sparkles',
     run: () => startTour(),
+  },
+  {
+    id: 'help-guide',
+    title: 'Open the guide',
+    section: 'Help',
+    hint: 'The README: every command, in one note',
+    keywords: ['readme', 'docs', 'documentation', 'guide', 'help', 'commands', 'manual'],
+    icon: 'info',
+    run: async (ctx) => {
+      const id = await ensureReadme();
+      if (id) ctx.navigate(`/note/${id}`);
+    },
   },
   {
     id: 'help-shortcuts',

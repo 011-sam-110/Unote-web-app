@@ -16,6 +16,7 @@ import ShortcutsSheet from './ShortcutsSheet';
 import HintHost, { suppressHintsThisSession } from './HintHost';
 import { _subscribeOnboarding } from './onboardingBus';
 import { bindUser, getOnboarding, restartTour, useOnboarding } from './onboardingStore';
+import { ensureReadme } from '../readme/ensureReadme';
 
 export default function OnboardingHost({
   shortcutsOpen,
@@ -53,6 +54,9 @@ export default function OnboardingHost({
     if (handoverPending) return;
     if (getOnboarding().status !== 'unseen') return;
     autoOpened.current = true;
+    // Fire and forget: the tutorial must not wait on a network round-trip, and
+    // ensureReadme swallows its own failures.
+    void ensureReadme();
     openTour(-1);
   }, [user, openTour, handoverPending]);
 
