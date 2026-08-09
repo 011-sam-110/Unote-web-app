@@ -34,32 +34,61 @@ export function guestModeSupported(): boolean {
 }
 
 /**
- * Enter guest mode, seeding a notebook and one empty note on the first visit so the
- * caller has somewhere to send the person. Returns the note to open.
+ * Non-null only for the page load that actually seeded, and only ever set once per load -
+ * see the `readmeId` half of startGuest()'s idempotence below.
+ */
+let seededReadmeIdThisLoad: string | null = null;
+
+/**
+ * Enter guest mode, seeding a notebook, the README and one empty note on the first visit
+ * so the caller has somewhere to send the person. Returns the note to open.
  *
  * Idempotent, and that is load-bearing rather than tidiness: the caller is a React effect,
  * which StrictMode runs twice in development. A version that only reported a note id when
  * it had just seeded one answered "nothing to open" on the second pass and dropped the
  * visitor on the dashboard. Reporting the most recent note either way also gives the right
  * answer for someone returning to /try with work already here.
+ *
+ * That still is not enough on its own for `readmeId`: by the second StrictMode pass,
+ * `hasGuestWork()` is true (pass one just wrote it), so a naive re-check would see "work
+ * already here" and report `readmeId: null` - overwriting TryRoute's target with
+ * `latestNoteId()` before the person ever saw the README. `seededReadmeIdThisLoad`
+ * remembers what THIS page load seeded, independent of what's now in storage, so a repeat
+ * call within the same load reports the same readmeId again. A genuinely new page load
+ * resets the module (this variable goes back to null), so a real returning visitor - who
+ * seeded nothing this load - still gets `readmeId: null` from the `hasGuestWork()` check.
  */
-export function startGuest(): { noteId: string | null } {
+export function startGuest(): { noteId: string | null; readmeId: string | null } {
   try {
     localStorage.setItem(ACTIVE_KEY, '1');
   } catch {
-    return { noteId: null };
+    return { noteId: null, readmeId: null };
   }
   active = true;
+  // Storage stays the authority on "is there work" - the memo only ever answers "did I
+  // seed it THIS load". Gating the `!hasGuestWork()` check behind a non-null memo (as a
+  // prior version did) let a store cleared mid-load - endGuest -> startGuest, or
+  // clearData -> startGuest, both reachable with no page reload - skip re-seeding AND
+  // report the stale id from before the clear, pointing the caller at a note that no
+  // longer exists over an empty workspace.
+  let readmeId: string | null = null;
   if (!hasGuestWork()) {
     try {
-      seedGuestWorkspace();
+      readmeId = seedGuestWorkspace().readme.id;
+      seededReadmeIdThisLoad = readmeId;
     } catch {
       // Storage filled between the probe and the write. The shell still opens; the
       // dashboard's empty state is a survivable landing.
     }
+  } else {
+    // Work already here. Either a returning visitor (memo is null, correctly reports
+    // null below) or this load's own earlier seed being replayed on a StrictMode second
+    // pass (memo holds what THIS load wrote, reported again so the caller's target
+    // doesn't flip to `latestNoteId()` mid-mount).
+    readmeId = seededReadmeIdThisLoad;
   }
   emit();
-  return { noteId: latestNoteId() };
+  return { noteId: latestNoteId(), readmeId };
 }
 
 /**
@@ -74,6 +103,12 @@ export function endGuest(options: { keepWork: boolean }): void {
   }
   active = false;
   if (!options.keepWork) clearData();
+  // Belt-and-braces: storage (not this memo) is what the `!hasGuestWork()` check above
+  // now gates on, so this isn't load-bearing for the bug above. But a stale memo
+  // surviving past the work it described into a later seed is exactly the class of bug
+  // this file just had, so leaving it unset on the one call that actually ends this
+  // load's guest session is not a chance worth taking a second time.
+  seededReadmeIdThisLoad = null;
   emit();
 }
 

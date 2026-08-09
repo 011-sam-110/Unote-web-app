@@ -3,6 +3,7 @@
 // are declared locally so this module typechecks standalone, and the parent's structurally
 // identical InsertItem accepts `chemInsertable` when it is wired into the Insert menu.
 import type { Editor } from '@tiptap/core';
+import { chem, p } from '../../docBuilders';
 
 export type InsertSection = 'Basic' | 'Lists' | 'Notation' | 'Media' | 'Layout' | 'Advanced';
 
@@ -14,6 +15,9 @@ export interface InsertItem {
   section: InsertSection;
   keywords?: string[];
   run: (editor: Editor, range?: { from: number; to: number }) => void;
+  /** Live demonstration for the generated README. Omit when the block needs an
+   *  uploaded asset; add the reason to NO_DEMO instead. */
+  example?: () => Record<string, unknown>[];
 }
 
 export const chemInsertable: InsertItem = {
@@ -40,6 +44,10 @@ export const chemInsertable: InsertItem = {
     if (range) chain.deleteRange(range);
     chain.insertContent({ type: 'chem', attrs: { smiles: '', name: '', molfile: null } }).run();
   },
+  example: () => [
+    p('Type a SMILES string and get a structure. Double-click it to open the draw editor.'),
+    chem('CN1C=NC2=C1C(=O)N(C(=O)N2C)C', 'Caffeine'),
+  ],
 };
 
 export default chemInsertable;

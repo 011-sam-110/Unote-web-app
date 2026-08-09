@@ -7,6 +7,7 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNod
 import { createPortal } from 'react-dom';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useCommands, matchCommand, SECTION_ORDER, type Command, type CommandContext } from '../lib/commands';
+import { paletteDoc } from './paletteCatalog';
 import { useNotebooks } from './NotebooksContext';
 import { useTheme } from '../lib/theme';
 import { api } from '../lib/api';
@@ -100,11 +101,10 @@ export default function CommandPalette({
     }
 
     cmds.push({
-      id: 'create-note',
-      title: 'New note',
-      section: 'Create',
+      ...paletteDoc('create-note'),
+      // Overrides the catalog's static hint: this one is computed from the filing
+      // notebook, which is component state paletteDoc can't see.
       hint: filingNotebook ? `Filed in ${filingNotebook.emoji} ${filingNotebook.name}` : 'Filed in your last-used notebook',
-      shortcut: '⌘N',
       keywords: ['note', 'create'],
       icon: 'plus',
       run: async (ctx) => {
@@ -121,10 +121,7 @@ export default function CommandPalette({
     });
 
     cmds.push({
-      id: 'create-canvas',
-      title: 'New canvas',
-      section: 'Create',
-      hint: 'Infinite board: stickies, shapes and Apple Pencil ink',
+      ...paletteDoc('create-canvas'),
       keywords: ['canvas', 'board', 'whiteboard', 'draw', 'sketch', 'mindmap'],
       icon: 'canvas',
       run: async (ctx) => {
@@ -139,10 +136,7 @@ export default function CommandPalette({
     });
 
     cmds.push({
-      id: 'create-notebook',
-      title: 'New notebook',
-      section: 'Create',
-      hint: 'Add a notebook for a new module',
+      ...paletteDoc('create-notebook'),
       keywords: ['notebook', 'create', 'module'],
       icon: 'folder-plus',
       run: () => setMode('new-notebook'),
@@ -150,46 +144,31 @@ export default function CommandPalette({
 
     cmds.push(
       {
-        id: 'create-import-photo',
-        title: 'Import photo of notes',
-        section: 'Create',
-        hint: 'Photo → OCR → structured notes',
+        ...paletteDoc('create-import-photo'),
         keywords: ['ocr', 'camera', 'scan', 'photo'],
         icon: 'camera',
         run: () => openImportModal({ notebookId: filingNotebookId, defaultKind: 'photo' }),
       },
       {
-        id: 'create-import-slides',
-        title: 'Import slides PDF',
-        section: 'Create',
-        hint: 'Slides → outline notes',
+        ...paletteDoc('create-import-slides'),
         keywords: ['pdf', 'pptx', 'lecture', 'slides'],
         icon: 'upload',
         run: () => openImportModal({ notebookId: filingNotebookId, defaultKind: 'slides' }),
       },
       {
-        id: 'create-import-transcript',
-        title: 'Import transcript',
-        section: 'Create',
-        hint: 'Text/PDF/Docx → structured notes',
+        ...paletteDoc('create-import-transcript'),
         keywords: ['transcript', 'docx', 'essay'],
         icon: 'file-text',
         run: () => openImportModal({ notebookId: filingNotebookId, defaultKind: 'transcript' }),
       },
       {
-        id: 'import-old-notes',
-        title: 'Import old notes',
-        section: 'Create',
-        hint: 'Bulk import documents, photos or a folder',
+        ...paletteDoc('import-old-notes'),
         keywords: ['import', 'bulk', 'folder', 'obsidian', 'notion', 'migrate'],
         icon: 'upload',
         run: () => openImportWizard(),
       },
       {
-        id: 'create-phone-capture',
-        title: 'Open phone capture QR',
-        section: 'Create',
-        hint: 'Scan with your phone to capture a page',
+        ...paletteDoc('create-phone-capture'),
         keywords: ['qr', 'mobile', 'phone', 'camera'],
         icon: 'phone',
         run: () => onOpenPhoneCapture(),
@@ -197,11 +176,7 @@ export default function CommandPalette({
     );
 
     cmds.push({
-      id: 'view-sidebar',
-      title: 'Toggle sidebar',
-      section: 'View',
-      hint: 'Collapse or expand the sidebar',
-      shortcut: '⌘\\',
+      ...paletteDoc('view-sidebar'),
       keywords: ['collapse', 'expand', 'sidebar'],
       icon: 'menu',
       run: () => onToggleSidebar(),
@@ -209,10 +184,7 @@ export default function CommandPalette({
 
     if (noteId) {
       cmds.push({
-        id: 'note-snapshot',
-        title: 'Snapshot now',
-        section: 'Note',
-        hint: 'Save a named version of this note',
+        ...paletteDoc('note-snapshot'),
         keywords: ['version', 'history', 'save'],
         icon: 'copy',
         run: async () => {
@@ -225,9 +197,9 @@ export default function CommandPalette({
 
     if (contextNotebook) {
       cmds.push({
-        id: 'study-notebook',
-        title: 'Study this notebook',
-        section: 'Study',
+        ...paletteDoc('study-notebook'),
+        // Overrides the catalog's static hint: this one names the specific notebook
+        // being studied, which is component state paletteDoc can't see.
         hint: `Cram ${contextNotebook.emoji} ${contextNotebook.name} only`,
         keywords: ['cram', 'flashcards', 'review'],
         icon: 'layers',

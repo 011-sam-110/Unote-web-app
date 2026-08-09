@@ -15,6 +15,7 @@
 // indistinguishable from notes the student wrote themselves: same ownership, same
 // search index, same backlinks.
 import { api } from '../../lib/api';
+import { bullets as bulletsOf, h, p } from '../editor/docBuilders';
 
 export interface SeedResult {
   notebookId: string;
@@ -28,19 +29,9 @@ const NOTEBOOK_NAME = 'Algorithms (example)';
 const LINKED_TITLE = 'Sorting algorithms';
 const MAIN_TITLE = 'Lecture 1: Big-O notation';
 
-function p(text: string) {
-  return { type: 'paragraph', content: [{ type: 'text', text }] };
-}
-
-function h(level: number, text: string) {
-  return { type: 'heading', attrs: { level }, content: [{ type: 'text', text }] };
-}
-
-function bullets(items: string[]) {
-  return {
-    type: 'bulletList',
-    content: items.map((text) => ({ type: 'listItem', content: [p(text)] })),
-  };
+/** seedExample's lists are all plain strings; the shared builder takes inline children. */
+function bullets(list: string[]) {
+  return bulletsOf(list.map((s) => [s]));
 }
 
 /**

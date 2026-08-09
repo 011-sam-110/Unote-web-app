@@ -122,3 +122,119 @@ test('signing up offers to bring the guest notes into the new account', async ({
   // And guest mode is over: the unsaved-work banner is gone.
   await expect(page.getByTestId('guest-banner')).toHaveCount(0);
 });
+
+/**
+ * A guest's first screen is the README, and it must RENDER - not merely exist as JSON.
+ *
+ * Asserting the doc contains a `chem` node proves nothing about whether a molecule
+ * appears. Each assertion below reads something only a working node view produces: the
+ * KaTeX span, the smiles-drawer SVG, an opened toggle's own content becoming visible, a
+ * callout's tone attribute, a table, a task-list checkbox.
+ *
+ * `smiles-drawer` draws into an <svg> here (smilesRenderer.ts uses its `SvgDrawer`, not a
+ * canvas backend) - there is no <canvas> anywhere in this document, so the structure is
+ * read from `.folio-chem-svg` gaining drawn children, not from a canvas element.
+ */
+test('a guest lands on a README that renders its own blocks', async ({ page }) => {
+  await page.goto('/try');
+
+  // The note's identity: NotePage renders the title in its own field above the body
+  // (buildReadme.ts deliberately emits no "README" heading in the body - a second `h1
+  // README` would sit right under the real one), so the title field is what to read.
+  await expect(page.getByLabel('Note title')).toHaveValue('README');
+
+  // Toggles render closed by default. `Details` is `persist: true`, so the content node
+  // already exists in the DOM, but the `hidden` attribute the DetailsContent node view
+  // sets keeps it out of the render tree until opened.
+  const firstToggle = page.locator('.folio-details').first();
+  await expect(firstToggle).toBeVisible();
+  const firstToggleContent = firstToggle.locator('[data-type="detailsContent"]');
+  await expect(firstToggleContent).toBeHidden();
+
+  // Opening it, the way a person would. The toggle's expand control is the <button>
+  // @tiptap/extension-details' node view renders as the first child of `.folio-details`;
+  // the extension ships it empty and unstyled, so it used to compute to a literal 0x0 box
+  // and NOBODY could open a toggle on any input device (see editor.css's `Details /
+  // toggle` block for the full shape). These assertions are the regression guard for that:
+  // `toBeVisible()` fails on a zero-area element, and Playwright's `.click()` does real
+  // hit-testing, so both fail if the button ever loses its box again. Deliberately NOT
+  // `dispatchEvent('click')` - that reaches the listener without going through the
+  // rendered UI at all, and would pass against a control no user can reach.
+  const firstToggleButton = firstToggle.locator('button').first();
+  await expect(firstToggleButton).toBeVisible();
+  await expect(firstToggleButton).toHaveAttribute('aria-expanded', 'false');
+  await firstToggleButton.click();
+  await expect(firstToggleContent).toBeVisible();
+  await expect(firstToggleButton).toHaveAttribute('aria-expanded', 'true');
+
+  // ...and it closes again, so this is a toggle rather than a one-way reveal.
+  await firstToggleButton.click();
+  await expect(firstToggleContent).toBeHidden();
+
+  // The keyboard path, which is a separate mechanism from the click and was separately
+  // broken: the button lives inside ProseMirror's contenteditable, and the editor's own
+  // keydown handler calls preventDefault() on Enter, which cancels the browser's implicit
+  // activation of a focused button. buildExtensions.ts's `renderToggleButton` handles
+  // Enter and Space on the button itself and keeps focus there afterwards, so both keys
+  // work and both directions work.
+  await firstToggleButton.focus();
+  await page.keyboard.press('Enter');
+  await expect(firstToggleContent).toBeVisible();
+  await page.keyboard.press('Enter');
+  await expect(firstToggleContent).toBeHidden();
+  await page.keyboard.press('Space');
+  await expect(firstToggleContent).toBeVisible();
+
+  // Every group's reference table and live demos sit INSIDE that group's toggle
+  // (buildReadme.ts's insertSection), so open the rest too. That is also required for the
+  // "every block is named" check below: `innerText()` (unlike `textContent()`) only reads
+  // what is actually rendered on screen, and a closed toggle's content does not count.
+  const toggles = page.locator('.folio-details');
+  const toggleCount = await toggles.count();
+  for (let i = 1; i < toggleCount; i++) {
+    await toggles.nth(i).locator('button').first().click();
+  }
+
+  // Live blocks, each read from what its node view actually emits.
+  await expect(page.locator('.katex').first()).toBeVisible();
+  await expect(page.locator('table').first()).toBeVisible();
+  await expect(page.locator('[data-tone="info"]').first()).toBeVisible();
+  await expect(page.getByRole('checkbox').first()).toBeVisible();
+
+  // The chemistry demo (caffeine) draws asynchronously once the smiles-drawer chunk has
+  // loaded and parsed the SMILES string - give it generous time. Read a bond line rather
+  // than "any child": smiles-drawer always writes a <style> tag into the <svg> first
+  // (SvgWrapper.js), which exists (and is present) whether or not a molecule ever drew,
+  // so checking for children alone would pass on an empty structure.
+  await expect(page.locator('.folio-chem-svg line').first()).toBeVisible({ timeout: 15_000 });
+
+  // Every insert block is named somewhere in the note.
+  const body = await page.getByTestId('note-editor').innerText();
+  for (const name of ['Callout', 'Table', 'Code block', 'Chemistry structure', '3D model']) {
+    expect(body, `README does not mention ${name}`).toContain(name);
+  }
+
+  // The guest build is honest about what it cannot do.
+  expect(body).toContain('needs an account');
+});
+
+test('a guest returning to /try lands on their own work, not the guide', async ({ page }) => {
+  await page.goto('/try');
+  await expect(page.getByLabel('Note title')).toHaveValue('README');
+
+  // The blank note seeded alongside the README (guestStore.ts's seedGuestWorkspace) has no
+  // title, which NoteCard falls back to labelling "Untitled" - rendered as a <button> (the
+  // card's own click target), not a link, so it is found by role=button, not role=link.
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Untitled', exact: true }).click();
+  await page.getByTestId('note-editor').click();
+  await page.keyboard.type('my own note');
+
+  // Let the autosave debounce fire before navigating away: a client-side route change
+  // would leave a pending timer running, but /try is a real navigation and would drop it.
+  await page.waitForTimeout(1200);
+
+  await page.goto('/try');
+  await expect(page.getByLabel('Note title')).not.toHaveValue('README');
+  await expect(page.getByTestId('note-editor')).toContainText('my own note');
+});

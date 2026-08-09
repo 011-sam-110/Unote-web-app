@@ -10,12 +10,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from '../../components/Toast';
 import { useAuth } from '../auth/AuthContext';
-import { useGuestHandoverPending } from '../guest/guestMode';
+import { useGuestHandoverPending, useGuestWorkPresent } from '../guest/guestMode';
 import TourOverlay from './TourOverlay';
 import ShortcutsSheet from './ShortcutsSheet';
 import HintHost, { suppressHintsThisSession } from './HintHost';
 import { _subscribeOnboarding } from './onboardingBus';
 import { bindUser, getOnboarding, restartTour, useOnboarding } from './onboardingStore';
+import { ensureReadme } from '../readme/ensureReadme';
 
 export default function OnboardingHost({
   shortcutsOpen,
@@ -32,6 +33,7 @@ export default function OnboardingHost({
   useMemo(() => bindUser(user?.id ?? null), [user?.id]);
   const state = useOnboarding();
   const handoverPending = useGuestHandoverPending();
+  const guestWorkPresent = useGuestWorkPresent();
 
   const [tourOpen, setTourOpen] = useState(false);
   const [resumeAt, setResumeAt] = useState(-1);
@@ -53,8 +55,24 @@ export default function OnboardingHost({
     if (handoverPending) return;
     if (getOnboarding().status !== 'unseen') return;
     autoOpened.current = true;
+    // ensureReadme() is gated on guestWorkPresent, NOT on handoverPending, even though
+    // both guard the same effect and now look like they should agree. They deliberately
+    // don't: "Not now" on the handover calls deferHandover(), which makes
+    // handoverPending false for the rest of this session while the guest's notes -
+    // including their own possibly-guest-build README - are still sitting unmigrated.
+    // Gating ensureReadme() on that same flag would create an account-side README right
+    // then, and guestMigrate copies every guest note across with no title dedupe when
+    // the migration is eventually accepted - two notes titled README. guestWorkPresent
+    // only goes false once there is truly nothing left to hand over (migrated, or
+    // declined for good), which is the one moment it's safe to create the account's own
+    // copy. handoverPending keeps gating the tour itself unchanged: that guard is about
+    // not talking over an unanswered prompt, not about note duplication.
+    //
+    // Fire and forget: the tutorial must not wait on a network round-trip, and
+    // ensureReadme swallows its own failures.
+    if (!guestWorkPresent) void ensureReadme();
     openTour(-1);
-  }, [user, openTour, handoverPending]);
+  }, [user, openTour, handoverPending, guestWorkPresent]);
 
   // A part-finished tour is offered back once, as a toast that can simply be ignored.
   useEffect(() => {
