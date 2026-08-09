@@ -26,6 +26,11 @@
 // Build every command off the shared `at(editor, range)` helper below and both are
 // handled for you. Prefer an Icon name for `icon` so the row matches the design
 // system; a literal glyph is the fallback when no vector icon fits.
+//
+// Optionally add `example: () => [...]` returning TipTap nodes. The generated README
+// renders it as a live demonstration of the block. Omit it when the block needs an
+// uploaded asset or an existing board, and add the reason to NO_DEMO below - the README
+// then prints the description and the reason rather than faking a render.
 import type { Editor } from '@tiptap/core';
 import { pickAndInsertImage } from './imageUpload';
 import { buildColumnsContent } from './Columns';
@@ -33,6 +38,12 @@ import { toast } from '../../components/Toast';
 import { chemInsertable } from './nodes/chem/chemInsertable';
 import { model3dInsertable } from './nodes/model3d/model3dInsertable';
 import { sketchInsertables } from './nodes/sketch';
+// `chem` is NOT imported here - the chemistry demo lives in chemInsertable.ts, which
+// declares its own InsertItem and imports from '../../docBuilders'.
+import {
+  blockMath, bullets, callout, code, codeText, columns, divider, h,
+  inlineMath, ordered, p, quote, table, todo, toggle, type Node,
+} from './docBuilders';
 
 export type InsertSection = 'Basic' | 'Lists' | 'Notation' | 'Media' | 'Layout' | 'Advanced';
 
@@ -49,7 +60,19 @@ export interface InsertItem {
   keywords?: string[];
   /** Insert at the caret when `range` is omitted; delete `range` (the "/" query) first when given. */
   run: (editor: Editor, range?: { from: number; to: number }) => void;
+  /** Live demonstration for the generated README. Omit when the block needs an
+   *  uploaded asset; add the reason to NO_DEMO instead. */
+  example?: () => Node[];
 }
+
+/** Why a block cannot demonstrate itself in a seeded note. Keyed by InsertItem id. */
+export const NO_DEMO: Record<string, string> = {
+  image: 'needs a file you upload',
+  model3d: 'needs a model file you upload',
+  'canvas-snapshot': 'needs a board of your own',
+  sketch: 'needs strokes you draw',
+  toc: 'not a block — it jumps to the outline panel',
+};
 
 type Range = { from: number; to: number };
 
@@ -70,6 +93,7 @@ export const INSERT_ITEMS: InsertItem[] = [
     section: 'Basic',
     keywords: ['paragraph', 'body'],
     run: (e, r) => at(e, r).setParagraph().run(),
+    example: () => [p('A plain paragraph. Most of a note is these.')],
   },
   {
     id: 'h1',
@@ -79,6 +103,7 @@ export const INSERT_ITEMS: InsertItem[] = [
     section: 'Basic',
     keywords: ['title'],
     run: (e, r) => at(e, r).setNode('heading', { level: 1 }).run(),
+    example: () => [h(1, 'Heading 1')],
   },
   {
     id: 'h2',
@@ -87,6 +112,7 @@ export const INSERT_ITEMS: InsertItem[] = [
     icon: 'H2',
     section: 'Basic',
     run: (e, r) => at(e, r).setNode('heading', { level: 2 }).run(),
+    example: () => [h(2, 'Heading 2')],
   },
   {
     id: 'h3',
@@ -95,6 +121,7 @@ export const INSERT_ITEMS: InsertItem[] = [
     icon: 'H3',
     section: 'Basic',
     run: (e, r) => at(e, r).setNode('heading', { level: 3 }).run(),
+    example: () => [h(3, 'Heading 3')],
   },
   {
     id: 'quote',
@@ -104,6 +131,7 @@ export const INSERT_ITEMS: InsertItem[] = [
     section: 'Basic',
     keywords: ['blockquote', 'citation'],
     run: (e, r) => at(e, r).setBlockquote().run(),
+    example: () => [quote('Use a quote for the sentence from the lecture you want to argue with later.')],
   },
   {
     id: 'divider',
@@ -113,6 +141,7 @@ export const INSERT_ITEMS: InsertItem[] = [
     section: 'Basic',
     keywords: ['hr', 'line', 'rule', 'separator'],
     run: (e, r) => at(e, r).setHorizontalRule().run(),
+    example: () => [divider()],
   },
 
   // -- Lists ------------------------------------------------------------------
@@ -124,6 +153,7 @@ export const INSERT_ITEMS: InsertItem[] = [
     section: 'Lists',
     keywords: ['ul', 'unordered'],
     run: (e, r) => at(e, r).toggleBulletList().run(),
+    example: () => [bullets([['Points that have no order'], ['Press Tab to nest one under another']])],
   },
   {
     id: 'ordered',
@@ -133,6 +163,7 @@ export const INSERT_ITEMS: InsertItem[] = [
     section: 'Lists',
     keywords: ['ol', 'ordered'],
     run: (e, r) => at(e, r).toggleOrderedList().run(),
+    example: () => [ordered([['Steps that do have an order'], ['Because the second follows the first']])],
   },
   {
     id: 'todo',
@@ -142,6 +173,13 @@ export const INSERT_ITEMS: InsertItem[] = [
     section: 'Lists',
     keywords: ['task', 'checkbox'],
     run: (e, r) => at(e, r).toggleTaskList().run(),
+    example: () => [
+      todo([
+        { checked: true, content: ['Read this far'] },
+        { checked: false, content: ['Press ', codeText('/'), ' and insert something'] },
+        { checked: false, content: ['Tick this box — it is real'] },
+      ]),
+    ],
   },
   {
     id: 'toggle',
@@ -151,6 +189,7 @@ export const INSERT_ITEMS: InsertItem[] = [
     section: 'Lists',
     keywords: ['details', 'collapse', 'accordion'],
     run: (e, r) => at(e, r).setDetails().run(),
+    example: () => [toggle('A toggle keeps long lists out of the way', [p('Open and shut. Its state is saved with the note.')])],
   },
 
   // -- Notation ---------------------------------------------------------------
@@ -163,6 +202,13 @@ export const INSERT_ITEMS: InsertItem[] = [
     section: 'Notation',
     keywords: ['latex', 'equation', 'katex', 'formula', 'inline', 'math'],
     run: (e, r) => at(e, r).insertInlineMath({ latex: 'x^2' }).run(),
+    example: () => [
+      p(
+        'Maths sits inside a sentence: a comparison sort needs at least ',
+        inlineMath('\\Omega(n \\log n)'),
+        ' comparisons.',
+      ),
+    ],
   },
   {
     id: 'math-block',
@@ -172,6 +218,7 @@ export const INSERT_ITEMS: InsertItem[] = [
     section: 'Notation',
     keywords: ['latex', 'equation', 'katex', 'formula', 'block', 'display'],
     run: (e, r) => at(e, r).insertBlockMath({ latex: 'a^2 + b^2 = c^2' }).run(),
+    example: () => [blockMath('P(A \\mid B) = \\frac{P(B \\mid A)\\,P(A)}{P(B)}')],
   },
   chemInsertable,
   model3dInsertable,
@@ -198,6 +245,15 @@ export const INSERT_ITEMS: InsertItem[] = [
     section: 'Media',
     keywords: ['grid', 'rows', 'columns'],
     run: (e, r) => at(e, r).insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run(),
+    example: () => [
+      table(
+        ['Sort', 'Worst case', 'Stable'],
+        [
+          [['Merge sort'], ['O(n log n)'], ['yes']],
+          [['Quicksort'], ['O(n²)'], ['no']],
+        ],
+      ),
+    ],
   },
   {
     id: 'callout',
@@ -210,6 +266,7 @@ export const INSERT_ITEMS: InsertItem[] = [
       at(e, r)
         .insertContent({ type: 'callout', attrs: { emoji: '💡', tone: 'info' }, content: [{ type: 'paragraph' }] })
         .run(),
+    example: () => [callout('💡', 'info', [p('A callout, for the thing you must not forget.')])],
   },
 
   // -- Layout -----------------------------------------------------------------
@@ -221,6 +278,7 @@ export const INSERT_ITEMS: InsertItem[] = [
     section: 'Layout',
     keywords: ['column', 'columns', 'layout', 'side by side'],
     run: (e, r) => at(e, r).insertContent(buildColumnsContent(2)).run(),
+    example: () => [columns([[p('Two columns.')], [p('Side by side.')]])],
   },
   {
     id: 'columns-3',
@@ -230,6 +288,7 @@ export const INSERT_ITEMS: InsertItem[] = [
     section: 'Layout',
     keywords: ['column', 'columns', 'layout', 'side by side'],
     run: (e, r) => at(e, r).insertContent(buildColumnsContent(3)).run(),
+    example: () => [columns([[p('Three columns.')], [p('For comparing.')], [p('Three things.')]])],
   },
 
   // -- Advanced ---------------------------------------------------------------
@@ -241,6 +300,19 @@ export const INSERT_ITEMS: InsertItem[] = [
     section: 'Advanced',
     keywords: ['snippet', 'pre'],
     run: (e, r) => at(e, r).toggleCodeBlock().run(),
+    example: () => [
+      code(
+        'python',
+        'def binary_search(a, target):\n' +
+          '    lo, hi = 0, len(a) - 1\n' +
+          '    while lo <= hi:\n' +
+          '        mid = (lo + hi) // 2\n' +
+          '        if a[mid] == target:\n' +
+          '            return mid\n' +
+          '        lo, hi = (mid + 1, hi) if a[mid] < target else (lo, mid - 1)\n' +
+          '    return -1',
+      ),
+    ],
   },
   {
     id: 'toc',
