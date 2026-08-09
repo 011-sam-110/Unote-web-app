@@ -6,32 +6,78 @@ directories:
   output: release
   buildResources: desktop/build
 
+# The web app is fetched from the origin at runtime, so no renderer assets ship
+# here. That is what keeps a web deploy reaching the app without a new binary.
 files:
   - dist-desktop/**/*
   - desktop/offline.html
 
-# The web app is fetched from the origin at runtime, so no renderer assets ship
-# here. That is what keeps a web deploy reaching the app without a new binary.
+# Was `provider: generic` pointing at https://unote-six.vercel.app/desktop, a path
+# that has never existed. The updater fetched /desktop/latest.yml, Vercel answered
+# with the SPA's index.html because of the catch-all rewrite, and the YAML parser
+# threw on a `<`. GitHub Releases is free for a public repo and electron-updater has
+# a first-class provider for it, so there is no reason to host a feed ourselves.
+#
+# releaseType is electron-builder's default anyway, but it is stated because it is
+# load-bearing: the Windows and macOS jobs upload into the SAME draft, and a human
+# publishes it once both have landed. Without the draft, the website would link to a
+# release that had one platform in it.
 publish:
-  provider: generic
-  url: https://unote-six.vercel.app/desktop
-  channel: latest
+  provider: github
+  owner: 011-sam-110
+  repo: Folio
+  releaseType: draft
 
 win:
   target: [nsis]
-  artifactName: Unote-Setup-${version}.${ext}
+  # No ${version} here on purpose. GitHub serves a permanent redirect at
+  # /releases/latest/download/<asset>, but only for an asset name that is identical
+  # in every release - so a static name makes the download page a plain <a href>
+  # instead of a hardcoded version string that goes stale, or a GitHub API call that
+  # would need its own connect-src entry in the CSP.
+  artifactName: Unote-Setup.${ext}
 
 nsis:
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true
 
+# Both architectures are listed explicitly because GitHub's `macos-latest` runner is
+# Apple silicon now (it points at macOS 26 arm64), and electron-builder defaults to
+# the host arch. Leaving this implicit would silently ship an arm64-only build and
+# every Intel Mac would download something that refuses to open.
+#
+# Both archs must come out of ONE electron-builder invocation. They share a single
+# latest-mac.yml, so splitting them across two CI jobs would have the second job
+# overwrite the first job's feed and strand half the users on a broken updater.
 mac:
-  target: [dmg, zip]   # zip is required for electron-updater on macOS
+  target:
+    - target: dmg
+      arch: [x64, arm64]
+    - target: zip   # zip is required for electron-updater on macOS
+      arch: [x64, arm64]
   category: public.app-category.productivity
   hardenedRuntime: true
   gatekeeperAssess: false
-  artifactName: Unote-${version}-${arch}.${ext}
+  # ${arch} stays, ${version} goes - same permanent-link reasoning as win above.
+  #
+  # Keeping "arm64" in the filename is not cosmetic. MacUpdater.filterFilesForArch
+  # decides which zip to hand an updating Mac by testing the URL for the literal
+  # substring "arm64"; rename these to something that loses it and every Apple
+  # silicon Mac quietly starts updating itself to the Intel build.
+  #
+  # Dropping ${version} was checked against electron-updater 6.8.9 rather than
+  # assumed, because differential updates derive the OLD blockmap URL by string
+  # replacement, in Provider.getBlockMapFiles:
+  #   baseUrl.pathname.replace(new RegExp(escapeRegExp(newVersion), "g"), oldVersion)
+  # On a generic/static host that would be a no-op with these names, it would fetch
+  # the new blockmap twice and the diff would be garbage. It is fine here only
+  # because GitHubProvider builds the path as /<owner>/<repo>/releases/download/
+  # <tag>/<file>, so the version still appears - in the tag. v0.2.0 -> v0.1.0 lands
+  # on the previous release, which holds an identically named asset. That is the
+  # whole reason the static name is safe, and it stops being true the moment this
+  # publish block goes back to a generic provider.
+  artifactName: Unote-${arch}.${ext}
 
 linux:
   target: []   # out of scope
