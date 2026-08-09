@@ -93,7 +93,7 @@ function insertRows(guest: boolean, items: InsertItem[]): Inline[][][] {
     // the first with the second lost a guest the more useful half.
     const reason = item.example ? '' : (NO_DEMO[item.id] ?? '');
     const gated = gateCell(guest, BLOCK_NEEDS[item.id]).length > 0;
-    const trailing: Inline[] = gated ? [reason ? `${reason} — ${GATE}` : GATE] : [reason];
+    const trailing: Inline[] = gated ? [reason ? `${reason} - ${GATE}` : GATE] : [reason];
     // The title verbatim, not lower-cased: it is the block's name as the menu shows it,
     // the string the coverage test looks for, and the slash menu matches case-insensitively.
     return [[codeText(`/${item.title}`)], [item.description], trailing];
@@ -107,7 +107,7 @@ function insertSection(guest: boolean): Node[] {
     // The groups below are toggles and they render closed, so a reader who does not know
     // that sees six one-line strips and assumes the section is empty.
     callout('📂', 'info', [
-      p('Each group below is a toggle. Open one and you get its full list of blocks, with most of them demonstrated underneath — the examples are live, so you can edit them in place.'),
+      p('Each group below is a toggle. Open one and you get its full list of blocks, with most of them demonstrated underneath - the examples are live, so you can edit them in place.'),
     ]),
   ];
 
@@ -166,7 +166,7 @@ function writeSection(): Node[] {
     ]),
     p('That two-column layout is itself a block. Marks are the usual ones: Ctrl+B bold, Ctrl+I italic, Ctrl+U underline, Ctrl+E inline code.'),
     callout('⌨️', 'ok', [
-      p('Nothing here is modal. Keep typing and the formatting happens underneath you — there is no toolbar to reach for and no mode to leave.'),
+      p('Nothing here is modal. Keep typing and the formatting happens underneath you - there is no toolbar to reach for and no mode to leave.'),
     ]),
     // No hand-written quote here: /Quote's own demo in section 02 says the same sentence,
     // and the reader met it twice within a page.
@@ -182,7 +182,7 @@ function connectSection(guest: boolean): Node[] {
   const backlinkCallout = guest
     ? callout('🔗', 'warn', [p(backlinks)])
     : callout('🔗', 'ok', [
-        p('Backlinks build themselves. Link a note and this one appears in its backlinks — there is no second step, and nothing to maintain.'),
+        p('Backlinks build themselves. Link a note and this one appears in its backlinks - there is no second step, and nothing to maintain.'),
       ]);
   return [
     h(1, '03 · Connect'),
@@ -249,8 +249,8 @@ function findSection(guest: boolean): Node[] {
     for (const row of group.rows) {
       // A guest still HAS the key - it is the feature behind it that needs a server - so
       // the binding is listed and marked rather than hidden.
-      const gate: Inline[] = guest && isGated(row.needs) ? [' — ', GATE] : [];
-      keyCol.push(p(codeText(row.keys.join(' + ')), ' — ', row.label, ...gate));
+      const gate: Inline[] = guest && isGated(row.needs) ? [' - ', GATE] : [];
+      keyCol.push(p(codeText(row.keys.join(' + ')), ' - ', row.label, ...gate));
     }
   }
 
@@ -263,10 +263,10 @@ function findSection(guest: boolean): Node[] {
     );
   } else {
     searchCol.push(
-      p(codeText('tag:revision'), ' — only that tag'),
-      p(codeText('notebook:algorithms'), ' — only that notebook'),
-      p(codeText('"decision tree"'), ' — that exact phrase'),
-      p(codeText('-quicksort'), ' — everything but'),
+      p(codeText('tag:revision'), ' - only that tag'),
+      p(codeText('notebook:algorithms'), ' - only that notebook'),
+      p(codeText('"decision tree"'), ' - that exact phrase'),
+      p(codeText('-quicksort'), ' - everything but'),
     );
   }
 
@@ -284,7 +284,7 @@ function findSection(guest: boolean): Node[] {
       p('If you learn one key, make it ', codeText('Ctrl+K'), '. It jumps to any note by name, which is faster than finding it in the sidebar once you have more than a handful.'),
     ]),
     columns([keyCol, searchCol]),
-    toggle(`Every command in the palette — ${commands.length}`, [
+    toggle(`Every command in the palette - ${commands.length}`, [
       table(['Command', 'Does', ''], commandRows),
     ]),
   ];
@@ -297,7 +297,7 @@ function featureSections(guest: boolean): Node[] {
     out.push(
       bullets(
         section.lines.map((line): Inline[] =>
-          guest && isGated(line.needs) ? [line.what, ` — ${GATE}`] : [line.what],
+          guest && isGated(line.needs) ? [line.what, ` - ${GATE}`] : [line.what],
         ),
       ),
     );
@@ -315,7 +315,7 @@ function closing(guest: boolean): Node[] {
   if (guest) {
     return [
       callout('🔑', 'warn', [
-        p('You are trying Unote without an account. Everything above works and stays in this browser — nothing is sent anywhere, and nothing survives clearing your browser data.'),
+        p('You are trying Unote without an account. Everything above works and stays in this browser - nothing is sent anywhere, and nothing survives clearing your browser data.'),
         p('Boards, flashcards, images, imports, AI and sharing need a server. Make an account and they turn on, with these notes carried over.'),
       ]),
     ];
@@ -331,7 +331,7 @@ export function buildReadme(opts: { guest: boolean }): ReadmeDoc {
   const { guest } = opts;
 
   const content: Node[] = [
-    p('Unote is a place to write, link and revise. This note is the short version of everything it does — and it is built out of the blocks it describes, so you are already looking at most of them. It is an ordinary note: edit it, take it apart, delete it.'),
+    p('Unote is a place to write, link and revise. This note is the short version of everything it does - and it is built out of the blocks it describes, so you are already looking at most of them. It is an ordinary note: edit it, take it apart, delete it.'),
     callout('💡', 'info', [
       p('Put your cursor on any empty line and press ', codeText('/'), `. That one key reaches all ${INSERT_ITEMS.length} blocks below.`),
     ]),

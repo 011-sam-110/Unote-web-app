@@ -82,7 +82,7 @@ export const NO_DEMO: Record<string, string> = {
   model3d: 'needs a model file you upload',
   'canvas-snapshot': 'needs a board of your own',
   sketch: 'needs strokes you draw',
-  toc: 'not a block — it jumps to the outline panel',
+  toc: 'not a block - it jumps to the outline panel',
   h1: 'every section title in this note is one',
   h2: 'the group titles below are these',
   h3: 'used for the smaller labels in this note',
@@ -190,7 +190,7 @@ export const INSERT_ITEMS: InsertItem[] = [
       todo([
         { checked: true, content: ['A ticked box, for the thing that is done'] },
         { checked: false, content: ['An empty one, for the thing that is not'] },
-        { checked: false, content: ['Tick this box — it is real, and the tick saves with the note'] },
+        { checked: false, content: ['Tick this box - it is real, and the tick saves with the note'] },
       ]),
     ],
   },
