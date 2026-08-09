@@ -1,0 +1,30 @@
+import { describe, expect, it } from 'vitest';
+import { SHORTCUT_COUNT, shortcutGroups } from './shortcutData';
+
+describe('shortcutData', () => {
+  it('has five groups', () => {
+    expect(shortcutGroups('Ctrl', 'Shift').map((g) => g.name)).toEqual([
+      'Anywhere', 'Writing', 'On a note', 'Search page', 'Reviewing flashcards',
+    ]);
+  });
+
+  it('SHORTCUT_COUNT is derived from the rows, not typed by hand', () => {
+    // The README prints this number, so it must track the data. No literal expectation:
+    // adding a binding is one edit, and asserting 25 here would make it two.
+    const rows = shortcutGroups('Ctrl', 'Shift').reduce((n, g) => n + g.rows.length, 0);
+    expect(SHORTCUT_COUNT).toBe(rows);
+    expect(SHORTCUT_COUNT).toBeGreaterThan(0);
+  });
+
+  it('substitutes the platform modifier into the keys', () => {
+    const anywhere = shortcutGroups('⌘', '⇧')[0];
+    expect(anywhere.rows[0].keys).toEqual(['⌘', 'K']);
+    expect(anywhere.rows[3].keys).toEqual(['⌘', '⇧', 'F']);
+  });
+
+  it('never emits an empty label', () => {
+    for (const g of shortcutGroups('Ctrl', 'Shift')) {
+      for (const r of g.rows) expect(r.label.length).toBeGreaterThan(0);
+    }
+  });
+});
