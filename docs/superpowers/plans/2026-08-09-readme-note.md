@@ -793,19 +793,28 @@ export interface PaletteDoc {
   needs?: string;
 }
 
+// These values were transcribed from CommandPalette.tsx AFTER the fact. The first draft
+// of this plan guessed them from a grep of the ids and got 4 titles, 9 hints and 2
+// shortcuts wrong, and invented a Ctrl+S for a command that has no shortcut - which would
+// have silently rewritten user-visible palette text. If you are re-running this plan,
+// still diff each field against the component: the file is the source of truth, always.
 export const PALETTE_CATALOG: PaletteDoc[] = [
-  { id: 'create-note', title: 'New note', hint: 'In the current notebook', section: 'Create', shortcut: 'Ctrl+N' },
-  { id: 'create-canvas', title: 'New board', hint: 'An infinite canvas for stickies and ink', section: 'Create', needs: 'createCanvasItem' },
-  { id: 'create-notebook', title: 'New notebook', hint: 'A place to file notes', section: 'Create' },
-  { id: 'create-import-photo', title: 'Import photos', hint: 'Phone photos of written pages', section: 'Create', needs: 'import' },
-  { id: 'create-import-slides', title: 'Import slides', hint: 'A PDF or PPTX deck', section: 'Create', needs: 'import' },
-  { id: 'create-import-transcript', title: 'Import transcript', hint: 'A lecture recording', section: 'Create', needs: 'import' },
-  { id: 'import-old-notes', title: 'Import old notes', hint: 'The bulk import wizard', section: 'Create', needs: 'createImportBatch' },
-  { id: 'create-phone-capture', title: 'Phone capture', hint: 'Scan a QR to send notes from your phone', section: 'Create', needs: 'qr' },
-  { id: 'note-snapshot', title: 'Snapshot now', hint: 'Save a version you can restore', section: 'Note', shortcut: 'Ctrl+S', needs: 'snapshot' },
-  { id: 'view-sidebar', title: 'Toggle sidebar', hint: 'Show or hide it', section: 'View', shortcut: 'Ctrl+\\' },
+  { id: 'create-note', title: 'New note', hint: 'In the current notebook', section: 'Create', shortcut: '⌘N' },
+  { id: 'create-canvas', title: 'New canvas', hint: 'Infinite board: stickies, shapes and Apple Pencil ink', section: 'Create', needs: 'createCanvasItem' },
+  { id: 'create-notebook', title: 'New notebook', hint: 'Add a notebook for a new module', section: 'Create' },
+  { id: 'create-import-photo', title: 'Import photo of notes', hint: 'Photo → OCR → structured notes', section: 'Create', needs: 'import' },
+  { id: 'create-import-slides', title: 'Import slides PDF', hint: 'Slides → outline notes', section: 'Create', needs: 'import' },
+  { id: 'create-import-transcript', title: 'Import transcript', hint: 'Text/PDF/Docx → structured notes', section: 'Create', needs: 'import' },
+  { id: 'import-old-notes', title: 'Import old notes', hint: 'Bulk import documents, photos or a folder', section: 'Create', needs: 'createImportBatch' },
+  { id: 'create-phone-capture', title: 'Open phone capture QR', hint: 'Scan with your phone to capture a page', section: 'Create', needs: 'qr' },
+  { id: 'note-snapshot', title: 'Snapshot now', hint: 'Save a named version of this note', section: 'Note', needs: 'snapshot' },
+  { id: 'view-sidebar', title: 'Toggle sidebar', hint: 'Collapse or expand the sidebar', section: 'View', shortcut: '⌘\\' },
   { id: 'study-notebook', title: 'Study this notebook', hint: 'Review just these flashcards', section: 'Study', needs: 'review' },
 ];
+
+// create-note and study-notebook compute their hint from component state at runtime, so
+// CommandPalette.tsx spreads the entry and then re-overrides `hint` with its own
+// expression. The strings above are static stand-ins for the generated README only.
 
 const BY_ID = new Map(PALETTE_CATALOG.map((c) => [c.id, c]));
 
