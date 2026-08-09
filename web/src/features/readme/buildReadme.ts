@@ -104,6 +104,11 @@ function insertSection(guest: boolean): Node[] {
   const out: Node[] = [
     h(1, '02 · Everything you can insert'),
     p('Type ', codeText('/'), ' and the name, or use the ', codeText('+'), ' in the left margin.'),
+    // The groups below are toggles and they render closed, so a reader who does not know
+    // that sees six one-line strips and assumes the section is empty.
+    callout('📂', 'info', [
+      p('Each group below is a toggle. Open one and you get its full list of blocks, with most of them demonstrated underneath — the examples are live, so you can edit them in place.'),
+    ]),
   ];
 
   for (const section of INSERT_SECTIONS) {
@@ -160,6 +165,9 @@ function writeSection(): Node[] {
       ],
     ]),
     p('That two-column layout is itself a block. Marks are the usual ones: Ctrl+B bold, Ctrl+I italic, Ctrl+U underline, Ctrl+E inline code.'),
+    callout('⌨️', 'ok', [
+      p('Nothing here is modal. Keep typing and the formatting happens underneath you — there is no toolbar to reach for and no mode to leave.'),
+    ]),
     // No hand-written quote here: /Quote's own demo in section 02 says the same sentence,
     // and the reader met it twice within a page.
   ];
@@ -169,6 +177,13 @@ function connectSection(guest: boolean): Node[] {
   const backlinks = guest
     ? 'Backlinks arrive with an account: without one there is no server to work out what points here.'
     : 'Every note lists its backlinks, so you can find the notes pointing at this one.';
+  // Tone follows the truth of the build: for an account this is a promise the app keeps,
+  // for a guest it is a limit they should know about before they rely on it.
+  const backlinkCallout = guest
+    ? callout('🔗', 'warn', [p(backlinks)])
+    : callout('🔗', 'ok', [
+        p('Backlinks build themselves. Link a note and this one appears in its backlinks — there is no second step, and nothing to maintain.'),
+      ]);
   return [
     h(1, '03 · Connect'),
     columns([
@@ -176,6 +191,7 @@ function connectSection(guest: boolean): Node[] {
       [h(3, 'Tag'), p('Write ', codeText('#revision'), ' anywhere in a sentence and the note files itself under it.')],
       [h(3, 'Come back'), p(backlinks)],
     ]),
+    backlinkCallout,
   ];
 }
 
@@ -264,6 +280,9 @@ function findSection(guest: boolean): Node[] {
   return [
     h(1, '04 · Find'),
     p('Press ', codeText('Ctrl+P'), ' to run any command, or ', codeText('?'), ` for all ${SHORTCUT_COUNT} bindings.`),
+    callout('🔑', 'ok', [
+      p('If you learn one key, make it ', codeText('Ctrl+K'), '. It jumps to any note by name, which is faster than finding it in the sidebar once you have more than a handful.'),
+    ]),
     columns([keyCol, searchCol]),
     toggle(`Every command in the palette — ${commands.length}`, [
       table(['Command', 'Does', ''], commandRows),
@@ -282,6 +301,12 @@ function featureSections(guest: boolean): Node[] {
         ),
       ),
     );
+    // Optional per-section aside, declared in featureCatalog rather than special-cased
+    // here, so adding one to a section stays a one-line edit in the same place its
+    // copy already lives.
+    if (section.tip) {
+      out.push(callout(section.tip.emoji, section.tip.tone, [p(section.tip.text)]));
+    }
   }
   return out;
 }

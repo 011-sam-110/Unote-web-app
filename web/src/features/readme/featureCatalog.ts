@@ -14,11 +14,20 @@ export interface FeatureLine {
   needs?: string;
 }
 
+/** An optional highlighted aside for a section. `tone` maps to the callout node's own
+ *  three tones, so it renders in the same colours the /Callout block offers. */
+export interface FeatureTip {
+  emoji: string;
+  tone: 'info' | 'warn' | 'ok';
+  text: string;
+}
+
 export interface FeatureSection {
   number: string;
   title: string;
   blurb: string;
   lines: FeatureLine[];
+  tip?: FeatureTip;
 }
 
 export const FEATURE_SECTIONS: FeatureSection[] = [
@@ -31,6 +40,11 @@ export const FEATURE_SECTIONS: FeatureSection[] = [
       { what: 'Review with Space to reveal, then 1-4 for how well it went', needs: 'review' },
       { what: 'Cards you find hard come back sooner; cards you know drift further out', needs: 'review' },
     ],
+    tip: {
+      emoji: '🧠',
+      tone: 'info',
+      text: 'Make the card while you are writing the note, not the night before. The whole point of the schedule is that it needs weeks to work.',
+    },
   },
   {
     number: '06',
@@ -70,6 +84,11 @@ export const FEATURE_SECTIONS: FeatureSection[] = [
       { what: 'Ask across every note and get answers with the sources listed', needs: 'aiAsk' },
       { what: 'Every change is shown as a diff you approve before it lands', needs: 'aiSuggest' },
     ],
+    tip: {
+      emoji: '⚠️',
+      tone: 'warn',
+      text: 'Nothing is rewritten without you seeing it first. Every suggestion arrives as a diff you accept or reject, so the AI cannot quietly change what you wrote.',
+    },
   },
   {
     number: '09',
