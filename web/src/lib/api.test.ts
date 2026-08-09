@@ -90,6 +90,33 @@ describe('routing', () => {
     expect(api.notes).toBe(localApi.notes);
   });
 
+  it('offline serves boards and ink from the mirror, which were stubs until Stage 2', () => {
+    noteRequestOutcome(false);
+    expect(api.canvas).toBe(localApi.canvas);
+    expect(api.ink).toBe(localApi.ink);
+    expect(api.addInk).toBe(localApi.addInk);
+    expect(api.createCanvasItem).toBe(localApi.createCanvasItem);
+    // Offline an image goes to the blobs table and comes back as a local reference.
+    expect(api.uploadImage).toBe(localApi.uploadImage);
+  });
+
+  it('guest mode still refuses boards, ink and images, though the mirror could answer', async () => {
+    // Stage 2 taught the local store to hold all three. Guest mode is still the capped
+    // trial it always was, and "there is a local function for it now" is not a decision
+    // to widen it - so guestErrors' table beats the presence of an implementation.
+    guestFlag.value = true;
+    for (const name of ['createCanvasItem', 'updateCanvasItems', 'addInk', 'clearInk', 'uploadImage'] as const) {
+      expect(typeof (localApi as Record<string, unknown>)[name]).toBe('function');
+      await expect(
+        (api[name] as (...a: never[]) => Promise<unknown>)('n1' as never, [] as never),
+      ).rejects.toThrow(/make an account/i);
+    }
+    // The READS stay as they always were for a guest: a valid empty answer, so the
+    // panel renders empty rather than broken. A guest has no boards to read.
+    await expect(api.canvas('n1')).resolves.toEqual({ items: [], edges: [] });
+    await expect(api.ink('n1')).resolves.toEqual({ strokes: [] });
+  });
+
   it('offline refuses something the mirror cannot answer, and says why', async () => {
     noteRequestOutcome(false);
     // aiChat has no offline meaning at all - there is nothing to run the model on.

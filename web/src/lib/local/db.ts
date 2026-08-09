@@ -9,7 +9,8 @@
 // db.test.ts case for that is a guard, not a formality.
 import Dexie, { type EntityTable } from 'dexie';
 import type {
-  LocalFlashcard, LocalNote, LocalNotebook, LocalReview, OutboxEntry, SyncMetaRow,
+  LocalBlob, LocalCanvasEdge, LocalCanvasItem, LocalFlashcard, LocalInk, LocalNote,
+  LocalNotebook, LocalReview, OutboxEntry, SyncMetaRow,
 } from './records';
 
 export class LocalDb extends Dexie {
@@ -17,6 +18,10 @@ export class LocalDb extends Dexie {
   notes!: EntityTable<LocalNote, 'id'>;
   flashcards!: EntityTable<LocalFlashcard, 'id'>;
   reviews!: EntityTable<LocalReview, 'id'>;
+  canvasItems!: EntityTable<LocalCanvasItem, 'id'>;
+  canvasEdges!: EntityTable<LocalCanvasEdge, 'id'>;
+  ink!: EntityTable<LocalInk, 'id'>;
+  blobs!: EntityTable<LocalBlob, 'id'>;
   outbox!: EntityTable<OutboxEntry, 'seq'>;
   meta!: EntityTable<SyncMetaRow, 'key'>;
 
@@ -38,6 +43,40 @@ export class LocalDb extends Dexie {
       outbox: '++seq, [entity+recordId], entity',
       meta: 'key',
     });
+
+    // Version 2 - Stage 2. Boards, ink and the bytes of an image inserted offline.
+    //
+    // Canvas items and ink are indexed by noteId because that is the only read the
+    // app ever makes of them: a board or an ink overlay is always loaded for one
+    // note. Ink additionally carries createdAt, because strokes render in the order
+    // they were drawn and the server's own GET orders by it.
+    this.version(2)
+      .stores({
+        canvasItems: 'id, noteId, updatedAt',
+        canvasEdges: 'id, noteId, updatedAt',
+        ink: 'id, noteId, createdAt',
+        blobs: 'id, noteId',
+      })
+      .upgrade(async (tx) => {
+        // THE ONE THING THIS UPGRADE IS REALLY FOR.
+        //
+        // Until this version the sync engine mirrored notebooks, notes and
+        // flashcards only, and engine.ts SKIPPED canvas and ink records rather
+        // than failing on them - but skipping still advanced the cursor past
+        // them. So every board and every stroke this account already owns sits
+        // BEHIND the cursor this browser holds, and a delta pull would never
+        // mention them again.
+        //
+        // Clearing the cursor forces a full re-pull. Dropping initialSyncDone
+        // with it keeps reads honest while that runs: a half-filled mirror must
+        // not be presented as the whole library.
+        //
+        // Without this the tables would simply be born empty on every existing
+        // install, permanently, with nothing in the UI to suggest anything was
+        // missing.
+        await tx.table('meta').delete('cursor');
+        await tx.table('meta').delete('initialSyncDone');
+      });
   }
 }
 

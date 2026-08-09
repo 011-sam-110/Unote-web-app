@@ -16,6 +16,12 @@
 //
 // Anything absent from the table below is BLOCKED by default (see lib/api.ts), which is
 // the safe direction: a new endpoint is unavailable until someone decides otherwise.
+//
+// A NAMED ENTRY BEATS A LOCAL IMPLEMENTATION. That precedence became load-bearing when
+// the offline desktop app taught the local store to hold boards, ink and image bytes:
+// those all exist locally now, and without the table winning, guest mode would silently
+// have gained three features nobody decided to give it. The table is the decision; the
+// machinery merely being present is not.
 
 /**
  * A feature that genuinely needs a server, refused in words a student can act on.
@@ -84,4 +90,10 @@ const DEFAULT_BLOCKED = 'Make an account to use this. It needs a server, and not
 
 export function guestBlockedMessage(method: string): string {
   return BLOCKED[method] ?? DEFAULT_BLOCKED;
+}
+
+/** Named in the table above, and therefore refused for a guest even if the local
+ *  store could answer it. See the header for why that direction is the right one. */
+export function isGuestBlocked(method: string): boolean {
+  return method in BLOCKED;
 }

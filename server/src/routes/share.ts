@@ -512,8 +512,12 @@ router.post('/share/:token/ink', requireShareAccess, async (req, res) => {
   for (const s of strokes) {
     const id = newId();
     await db
-      .prepare('INSERT INTO note_ink (id, note_id, stroke, author_id, created_at) VALUES (?, ?, ?, ?, ?)')
-      .run(id, noteId, JSON.stringify(s), null, now);
+      // updated_at written explicitly rather than left to the column default. The
+      // default is the DATABASE clock and `now` is the APP clock; the delta feed
+      // pages on updated_at, so a guest's stroke stamped by the wrong clock can land
+      // BEHIND the owner's cursor and never reach their offline copy of the note.
+      .prepare('INSERT INTO note_ink (id, note_id, stroke, author_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(id, noteId, JSON.stringify(s), null, now, now);
     ids.push(id);
   }
   if (ids.length) {
@@ -527,7 +531,7 @@ router.post('/share/:token/ink', requireShareAccess, async (req, res) => {
 router.get('/share/:token/ink', requireShareAccess, async (req, res) => {
   const { noteId } = ctx(req);
   const rows = await db
-    .prepare('SELECT id, stroke FROM note_ink WHERE note_id = ? ORDER BY created_at ASC')
+    .prepare('SELECT id, stroke FROM note_ink WHERE note_id = ? AND deleted_at IS NULL ORDER BY created_at ASC')
     .all<{ id: string; stroke: string }>(noteId);
   res.json({
     strokes: rows.map((r) => {

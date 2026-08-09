@@ -201,6 +201,184 @@ describe('localApi', () => {
     expect((await localApi.studyCards()).cards).toHaveLength(0);
     expect((await localDb.flashcards.get(card.id))?.deletedAt).not.toBeNull();
   });
+
+  // --- boards and ink: Stage 2, and new code rather than a port ---------------------
+
+  /** A board plus two stickies on it, which most of the cases below start from. */
+  async function makeBoard(): Promise<{ noteId: string; a: string; b: string }> {
+    const { notebook } = await localApi.createNotebook({ name: 'N' });
+    const { note } = await localApi.createNote({ notebookId: notebook.id, title: 'Board', kind: 'canvas' });
+    const { item: a } = await localApi.createCanvasItem(note.id, { kind: 'sticky', x: 0, y: 0, width: 220, height: 160, data: { text: 'A' } });
+    const { item: b } = await localApi.createCanvasItem(note.id, { kind: 'sticky', x: 400, y: 0, width: 220, height: 160, data: { text: 'B' } });
+    return { noteId: note.id, a: a.id, b: b.id };
+  }
+
+  it('creates a board offline, which guest mode refuses', async () => {
+    // The refusal moved: localApi now allows kind='canvas' for anyone who is not a
+    // guest, because a signed-in user on a train is exactly who Stage 2 is for.
+    const { notebook } = await localApi.createNotebook({ name: 'N' });
+    const { note } = await localApi.createNote({ notebookId: notebook.id, title: 'Board', kind: 'canvas' });
+    expect(note.kind).toBe('canvas');
+    expect((await localApi.note(note.id)).note.kind).toBe('canvas');
+    expect((await drainOrder()).find((e) => e.entity === 'note')?.payload.kind).toBe('canvas');
+  });
+
+  it('a board item keeps the id its connectors use, and carries its note in the payload', async () => {
+    const { noteId, a, b } = await makeBoard();
+    const { edge } = await localApi.createCanvasEdge(noteId, { from: a, to: b });
+
+    const entries = await drainOrder();
+    // Dependency order: the note before its items, and the items before the connector
+    // that names them. A connector pushed first is a 400 the server cannot resolve.
+    expect(entries.map((e) => e.entity)).toEqual(['notebook', 'note', 'canvasItem', 'canvasItem', 'canvasEdge']);
+
+    const created = entries.find((e) => e.entity === 'canvasEdge');
+    expect(created?.recordId).toBe(edge.id);
+    // The push builds /api/canvas/:noteId/... out of this, and the outbox knows only
+    // the record's own id - so a payload without it cannot be sent anywhere.
+    expect(created?.payload).toMatchObject({ noteId, from: a, to: b });
+    expect(entries.filter((e) => e.entity === 'canvasItem').every((e) => e.payload.noteId === noteId)).toBe(true);
+  });
+
+  it('a long drag collapses to one queued write per item', async () => {
+    const { noteId, a } = await makeBoard();
+    await localDb.outbox.clear();
+
+    for (let i = 0; i < 200; i++) await localApi.updateCanvasItems(noteId, [{ id: a, x: i, y: i * 2 }]);
+
+    const entries = await drainOrder();
+    expect(entries).toHaveLength(1);
+    expect(entries[0].payload).toMatchObject({ x: 199, y: 398 });
+    expect((await localApi.canvas(noteId)).items.find((i) => i.id === a)).toMatchObject({ x: 199, y: 398 });
+  });
+
+  it('deleting an item takes its connectors with it', async () => {
+    const { noteId, a, b } = await makeBoard();
+    await localApi.createCanvasEdge(noteId, { from: a, to: b });
+    await localDb.outbox.clear();
+
+    await localApi.deleteCanvasItem(noteId, a);
+
+    const board = await localApi.canvas(noteId);
+    expect(board.items.map((i) => i.id)).toEqual([b]);
+    // A connector left behind renders as a stub pointing at a card that is gone.
+    expect(board.edges).toHaveLength(0);
+    expect((await drainOrder()).map((e) => `${e.entity}:${e.op}`))
+      .toEqual(['canvasItem:delete', 'canvasEdge:delete']);
+  });
+
+  it('refuses a connector between anything but two distinct live cards', async () => {
+    const { noteId, a, b } = await makeBoard();
+    await expect(localApi.createCanvasEdge(noteId, { from: a, to: a })).rejects.toThrow(/two different/i);
+    await localApi.deleteCanvasItem(noteId, b);
+    await expect(localApi.createCanvasEdge(noteId, { from: a, to: b })).rejects.toThrow(/two different/i);
+  });
+
+  it('appends ink and hands the ids back in the order the strokes were drawn', async () => {
+    const { notebook } = await localApi.createNotebook({ name: 'N' });
+    const { note } = await localApi.createNote({ notebookId: notebook.id, title: 'Lecture' });
+    await localDb.outbox.clear();
+
+    const { ids } = await localApi.addInk(note.id, [
+      { points: [[0, 0, 0.5]], color: '#111', width: 3, tool: 'pen' },
+      { points: [[9, 9, 0.5]], color: '#ff0', width: 12, tool: 'highlighter' },
+    ]);
+
+    // useInkLayer maps ids[i] onto batch[i] to replace its temporary ids, so the
+    // order is load-bearing rather than incidental.
+    expect(ids).toHaveLength(2);
+    const { strokes } = await localApi.ink(note.id);
+    expect(strokes.map((s) => s.id)).toEqual(ids);
+    expect(strokes[1]).toMatchObject({ color: '#ff0', width: 12, tool: 'highlighter' });
+
+    // One entry per stroke, because that is the unit the server accepts an id for.
+    expect((await drainOrder()).map((e) => `${e.entity}:${e.op}`)).toEqual(['ink:create', 'ink:create']);
+  });
+
+  it('erasing a stroke tombstones it rather than removing the row', async () => {
+    const { notebook } = await localApi.createNotebook({ name: 'N' });
+    const { note } = await localApi.createNote({ notebookId: notebook.id, title: 'Lecture' });
+    const { ids } = await localApi.addInk(note.id, [{ points: [[0, 0, 1]], color: '#111', width: 3, tool: 'pen' }]);
+    // Pretend the stroke has been pushed, so the delete has something to tell the
+    // server about rather than cancelling a create that never left.
+    await localDb.ink.update(ids[0], { baseUpdatedAt: '2026-01-01T00:00:00.000Z' });
+    await localDb.outbox.clear();
+
+    await localApi.deleteInk(note.id, ids[0]);
+    expect((await localApi.ink(note.id)).strokes).toHaveLength(0);
+    expect((await localDb.ink.get(ids[0]))?.deletedAt).not.toBeNull();
+    expect((await drainOrder()).map((e) => `${e.entity}:${e.op}`)).toEqual(['ink:delete']);
+  });
+
+  it('clearing a layer queues ONE entry, not one per stroke', async () => {
+    const { notebook } = await localApi.createNotebook({ name: 'N' });
+    const { note } = await localApi.createNote({ notebookId: notebook.id, title: 'Lecture' });
+    const strokes = Array.from({ length: 40 }, (_, i) => ({
+      points: [[i, i, 0.5]] as Array<[number, number, number]>, color: '#111', width: 3, tool: 'pen' as const,
+    }));
+    await localApi.addInk(note.id, strokes);
+    await localDb.outbox.clear();
+    // A second batch, so there are per-stroke entries for the clear to supersede.
+    await localApi.addInk(note.id, strokes);
+
+    const { removed } = await localApi.clearInk(note.id);
+    expect(removed).toBe(80);
+    expect((await localApi.ink(note.id)).strokes).toHaveLength(0);
+
+    // Forty queued creates plus forty deletes would be eighty requests to reproduce
+    // one the API already expresses in a single call.
+    const entries = await drainOrder();
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({ entity: 'ink', op: 'delete', recordId: `layer:${note.id}` });
+  });
+
+  it('deleting a note drops the board and ink writes queued against it', async () => {
+    // Every canvas route is scoped through the note and answers 404 once it is a
+    // tombstone, and the note delete is pushed FIRST. Anything left queued here would
+    // be refused and retried on every sync from then on.
+    const { noteId, a, b } = await makeBoard();
+    await localApi.createCanvasEdge(noteId, { from: a, to: b });
+    await localApi.addInk(noteId, [{ points: [[0, 0, 1]], color: '#111', width: 3, tool: 'pen' }]);
+    await localDb.notes.update(noteId, { baseUpdatedAt: '2026-01-01T00:00:00.000Z' });
+    await localDb.outbox.clear();
+
+    await localApi.deleteNote(noteId);
+    expect((await drainOrder()).map((e) => `${e.entity}:${e.op}`)).toEqual(['note:delete']);
+  });
+
+  it('a board pulled from the server reads back through the same DTOs', async () => {
+    // The feed writes rows directly, with `data` and `stroke` as the JSON TEXT the
+    // server's columns hold. Every read has to survive that shape.
+    const noteId = 'dddddddddddddd';
+    await localDb.notes.put({
+      id: noteId, notebookId: 'nb', title: 'Pulled board', contentJson: '{}', contentText: '',
+      kind: 'canvas', pinned: 0, archived: 0, createdAt: '2026-08-01T00:00:00.000Z',
+      updatedAt: '2026-08-01T00:00:00.000Z', deletedAt: null, baseUpdatedAt: '2026-08-01T00:00:00.000Z',
+    } as never);
+    await localDb.canvasItems.bulkPut([
+      {
+        id: 'eeeeeeeeeeeeee', noteId, kind: 'sticky', x: 1, y: 2, width: 3, height: 4, rotation: 0, z: 2,
+        data: '{"text":"top"}', createdAt: '2026-08-01T00:00:00.000Z', updatedAt: '2026-08-01T00:00:00.000Z',
+        deletedAt: null, baseUpdatedAt: '2026-08-01T00:00:00.000Z',
+      },
+      {
+        id: 'ffffffffffffff', noteId, kind: 'sticky', x: 1, y: 2, width: 3, height: 4, rotation: 0, z: 1,
+        data: 'not json at all', createdAt: '2026-08-01T00:00:00.000Z', updatedAt: '2026-08-01T00:00:00.000Z',
+        deletedAt: '2026-08-02T00:00:00.000Z', baseUpdatedAt: '2026-08-01T00:00:00.000Z',
+      },
+    ]);
+    await localDb.ink.put({
+      id: 'gggggggggggggg', noteId, stroke: '{"points":[[1,1,0.5]],"color":"#abc","width":5,"tool":"pen"}',
+      createdAt: '2026-08-01T00:00:00.000Z', updatedAt: '2026-08-01T00:00:00.000Z',
+      deletedAt: null, baseUpdatedAt: '2026-08-01T00:00:00.000Z',
+    });
+
+    const board = await localApi.canvas(noteId);
+    // The tombstoned item is filtered in code: IndexedDB cannot index a null check.
+    expect(board.items.map((i) => i.id)).toEqual(['eeeeeeeeeeeeee']);
+    expect(board.items[0].data).toEqual({ text: 'top' });
+    expect((await localApi.ink(noteId)).strokes[0]).toMatchObject({ color: '#abc', width: 5 });
+  });
 });
 
 // --- the one-time localStorage import --------------------------------------------

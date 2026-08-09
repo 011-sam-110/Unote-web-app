@@ -116,7 +116,7 @@ async function loadCanvasItems(uid: string): Promise<Map<string, Array<{ kind: s
     .prepare(
       `SELECT c.note_id, c.kind, c.data FROM canvas_items c
        JOIN notes n ON n.id = c.note_id
-       WHERE n.user_id = ? AND n.kind = 'canvas' AND n.deleted_at IS NULL
+       WHERE n.user_id = ? AND n.kind = 'canvas' AND n.deleted_at IS NULL AND c.deleted_at IS NULL
        ORDER BY c.z ASC`,
     )
     .all<{ note_id: string; kind: string; data: string }>(uid);

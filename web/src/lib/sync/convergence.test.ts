@@ -120,7 +120,11 @@ class FakeServer {
     const conflicted = args.baseUpdatedAt != null && args.baseUpdatedAt !== existing.updatedAt;
     const clientWins = !conflicted || edited > existing.updatedAt;
 
-    if (conflicted) {
+    // Notes only, matching demoteToVersion in server/src/lib/conflict.ts: note_versions
+    // is the sole history table, so a canvas item or a stroke that loses a conflict is
+    // simply gone. That is the spec's accepted limitation, and the harness has to model
+    // it rather than quietly being safer than the thing it stands in for.
+    if (conflicted && args.entity === 'note') {
       this.history.push({ id: args.id, cause: 'conflict', data: clientWins ? existing.data : args.data });
     }
     if (!clientWins) return { conflicted: true, row: existing };
@@ -138,8 +142,14 @@ class FakeServer {
 
 // --- a client ---------------------------------------------------------------
 
-const TABLE_OF: Record<string, 'notebooks' | 'notes' | 'flashcards'> = {
+/**
+ * Mirrors engine.ts's MIRRORED. Kept in the same shape deliberately: the harness
+ * exercising a different set of tables from the engine would let a table drop out of
+ * one of them without a single test noticing.
+ */
+const TABLE_OF: Record<string, 'notebooks' | 'notes' | 'flashcards' | 'canvasItems' | 'canvasEdges' | 'ink'> = {
   notebook: 'notebooks', note: 'notes', flashcard: 'flashcards',
+  canvasItem: 'canvasItems', canvasEdge: 'canvasEdges', ink: 'ink',
 };
 
 /**
@@ -399,6 +409,171 @@ describe('two-client convergence', () => {
     await slow.sync();
 
     expect(server.rows.get(`note:${id}`)?.data.title).toBe('Slow edited SECOND');
+  });
+
+  // --- Stage 2: boards and ink -----------------------------------------------------
+
+  it('two clients moving two different cards on one board both keep their move', async () => {
+    // Per-item last-write-wins is only tolerable because items carry their own ids.
+    // This is the case that makes it so: two people rearranging one board touch
+    // different rows, so nothing collides and nothing is lost.
+    const a = await makeClient('a', server);
+    const b = await makeClient('b', server);
+    const noteId = newLocalId();
+    const left = newLocalId();
+    const right = newLocalId();
+    server.seed('note', noteId, { kind: 'canvas', title: 'Revision map', createdAt: server.now() });
+    server.seed('canvasItem', left, { noteId, kind: 'sticky', x: 0, y: 0, createdAt: server.now() });
+    server.seed('canvasItem', right, { noteId, kind: 'sticky', x: 500, y: 0, createdAt: server.now() });
+
+    await a.pull();
+    await b.pull();
+
+    await a.edit('canvasItem', left, { x: 40, y: 40 });
+    await b.edit('canvasItem', right, { x: 560, y: 90 });
+
+    await a.sync();
+    await b.sync();
+    await a.sync();
+
+    for (const client of [a, b]) {
+      expect((await client.get('canvasItem', left))?.x).toBe(40);
+      expect((await client.get('canvasItem', right))?.x).toBe(560);
+    }
+    expect(server.rows.get(`canvasItem:${left}`)?.data.y).toBe(40);
+    expect(server.rows.get(`canvasItem:${right}`)?.data.y).toBe(90);
+  });
+
+  it('the same card dragged on both clients: the later drag wins, and it is silent', async () => {
+    // The accepted limitation, pinned so it is a decision rather than a surprise.
+    // Canvas items have no history table, so the losing position is simply gone -
+    // which is why the spec says per-item last-write-wins is rare, not safe.
+    const a = await makeClient('a', server);
+    const b = await makeClient('b', server);
+    const noteId = newLocalId();
+    const item = newLocalId();
+    server.seed('note', noteId, { kind: 'canvas', createdAt: server.now() });
+    server.seed('canvasItem', item, { noteId, kind: 'sticky', x: 0, createdAt: server.now() });
+
+    await a.pull();
+    await b.pull();
+    await a.edit('canvasItem', item, { x: 111 });
+    await b.edit('canvasItem', item, { x: 222 });
+
+    await a.sync();
+    await b.sync();
+    await a.sync();
+
+    expect((await a.get('canvasItem', item))?.x).toBe(222);
+    expect((await b.get('canvasItem', item))?.x).toBe(222);
+    // Nothing was written to history, because there is no history for this table.
+    expect(server.history.filter((h) => h.id === item)).toHaveLength(0);
+  });
+
+  it('both clients drawing on one note keep every stroke', async () => {
+    // The append-only case, and the reason ink needs no conflict resolution at all: a
+    // stroke is written once and never edited, so two devices produce two sets of
+    // rows and both survive. The same property that made review_log free in Stage 1.
+    const a = await makeClient('a', server);
+    const b = await makeClient('b', server);
+    const noteId = newLocalId();
+    server.seed('note', noteId, { title: 'Lecture 4', createdAt: server.now() });
+    await a.pull();
+    await b.pull();
+
+    const fromA = [newLocalId(), newLocalId()];
+    const fromB = [newLocalId(), newLocalId(), newLocalId()];
+    for (const id of fromA) await a.edit('ink', id, { noteId, stroke: '{"tool":"pen"}', createdAt: server.now() });
+    for (const id of fromB) await b.edit('ink', id, { noteId, stroke: '{"tool":"highlighter"}', createdAt: server.now() });
+
+    await a.sync();
+    await b.sync();
+    await a.sync();
+
+    for (const client of [a, b]) {
+      const ids = (await client.live('ink')).map((s) => (s as { id: string }).id).sort();
+      expect(ids).toEqual([...fromA, ...fromB].sort());
+    }
+    expect([...server.rows.values()].filter((r) => r.entity === 'ink')).toHaveLength(5);
+  });
+
+  it('a stroke erased on one client stays erased after the other pushes more ink', async () => {
+    // The resurrection case for ink. The eraser is the only write that ever touches
+    // an existing stroke, so this is the one place ink can lose data - and a hard
+    // delete rather than a tombstone is exactly how it would.
+    const a = await makeClient('a', server);
+    const b = await makeClient('b', server);
+    const noteId = newLocalId();
+    const erased = newLocalId();
+    server.seed('note', noteId, { createdAt: server.now() });
+    server.seed('ink', erased, { noteId, stroke: '{"tool":"pen"}', createdAt: server.now() });
+
+    await a.pull();
+    await b.pull();
+
+    await b.remove('ink', erased);
+    await a.edit('ink', newLocalId(), { noteId, stroke: '{"tool":"pen"}', createdAt: server.now() });
+
+    await b.sync();
+    await a.sync();
+    await b.pull();
+
+    expect(server.rows.get(`ink:${erased}`)?.deletedAt).not.toBeNull();
+    expect(await a.live('ink')).toHaveLength(1);
+    expect(await b.live('ink')).toHaveLength(1);
+  });
+
+  it('a card deleted on one client stays deleted after the other drags it', async () => {
+    const a = await makeClient('a', server);
+    const b = await makeClient('b', server);
+    const noteId = newLocalId();
+    const item = newLocalId();
+    server.seed('note', noteId, { kind: 'canvas', createdAt: server.now() });
+    server.seed('canvasItem', item, { noteId, kind: 'sticky', x: 0, createdAt: server.now() });
+
+    await a.pull();
+    await b.pull();
+
+    await a.edit('canvasItem', item, { x: 999 });
+    await b.remove('canvasItem', item);
+
+    await b.sync();
+    await a.sync();
+    await a.pull();
+
+    expect(server.rows.get(`canvasItem:${item}`)?.deletedAt).not.toBeNull();
+    expect(await a.live('canvasItem')).toHaveLength(0);
+    expect(await b.live('canvasItem')).toHaveLength(0);
+  });
+
+  it('a board built entirely offline arrives with its connectors still attached', async () => {
+    // The identity case. If the server re-minted the item ids on first push, this
+    // connector would name two rows that do not exist - which is why the canvas
+    // creates accept a client-supplied id at all.
+    const a = await makeClient('a', server);
+    const nbId = newLocalId();
+    const noteId = newLocalId();
+    const left = newLocalId();
+    const right = newLocalId();
+    const edgeId = newLocalId();
+
+    await a.edit('canvasEdge', edgeId, { noteId, from: left, to: right, createdAt: server.now() });
+    await a.edit('ink', newLocalId(), { noteId, stroke: '{"tool":"pen"}', createdAt: server.now() });
+    await a.edit('canvasItem', left, { noteId, kind: 'sticky', createdAt: server.now() });
+    await a.edit('canvasItem', right, { noteId, kind: 'sticky', createdAt: server.now() });
+    await a.edit('note', noteId, { notebookId: nbId, kind: 'canvas', createdAt: server.now() });
+    await a.edit('notebook', nbId, { name: 'Offline board', createdAt: server.now() });
+
+    // Written in the wrong order on purpose: the push order comes from OUTBOX_ORDER,
+    // and the server rejects a connector whose endpoints it has never seen.
+    expect((await drainOrder(a.db)).map((e) => e.entity)).toEqual([
+      'notebook', 'note', 'canvasItem', 'canvasItem', 'canvasEdge', 'ink',
+    ]);
+
+    await a.sync();
+    expect(server.rows.get(`canvasEdge:${edgeId}`)?.data).toMatchObject({ from: left, to: right });
+    expect(server.rows.get(`canvasItem:${left}`)).toBeDefined();
+    expect(server.rows.get(`canvasItem:${right}`)).toBeDefined();
   });
 
   it('an interrupted first sync resumes without duplicating or dropping records', async () => {

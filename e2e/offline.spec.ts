@@ -12,15 +12,21 @@
 // the DATA layer offline, via client-side navigation, which is the part this project
 // actually built. Offline shell delivery is the service worker's job and is verified
 // separately by asserting the generated sw.js precaches the shell.
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { expect, test } from './auth.fixture';
 import {
   createNoteViaButton,
   createNotebookViaSidebar,
+  editorBody,
   openNotebook,
   setNoteTitle,
+  TESTIDS,
   uniqueName,
   waitForSaved,
 } from './utils';
+
+const FIXTURES_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures');
 
 /**
  * Read a value out of the app's IndexedDB WITHOUT creating it.
@@ -169,5 +175,88 @@ test.describe('Offline notes', () => {
         { timeout: 45_000, message: 'the queued edit never reached the server' },
       )
       .toBe(offlineTitle);
+  });
+
+  test('an image inserted with the network cut renders, survives a remount, and ends up on the server', async ({ page, context, request }) => {
+    // Longer than the file's default because this spec waits on the sync POLL. There
+    // is no push channel, so a reconnect that does not coincide with a connectivity
+    // event is up to a minute away from the next cycle.
+    test.setTimeout(150_000);
+    // A note that cannot take a screenshot is not offline, so this is the whole of
+    // §9 end to end: bytes to IndexedDB, a `local-blob:` reference in the document,
+    // and on reconnect an upload followed by a rewrite of the note's content - which
+    // goes through the outbox like any other edit.
+    //
+    // "Reload" in the plan is a client-side remount here rather than a browser
+    // reload, for the reason at the top of this file: the e2e web server is Vite in
+    // dev mode, there is no service worker, and a real reload while offline would
+    // fail to fetch the app shell. Navigating away and back re-runs the load path
+    // and rebuilds the image's node view from the store, which is the part this
+    // stage actually built.
+    const notebookName = uniqueName('Image notebook');
+    const noteTitle = uniqueName('With a screenshot');
+
+    await page.goto('/');
+    await createNotebookViaSidebar(page, notebookName);
+    await openNotebook(page, notebookName);
+    await createNoteViaButton(page);
+    await setNoteTitle(page, noteTitle);
+    await waitForSaved(page);
+
+    const noteId = page.url().split('/note/')[1]?.split(/[?#]/)[0];
+    expect(noteId, 'the URL should carry the note id').toBeTruthy();
+    await waitForFirstSync(page);
+
+    await context.setOffline(true);
+
+    const body = editorBody(page);
+    await body.click();
+    await page.keyboard.type('/', { delay: 10 });
+    const slashMenu = page.getByTestId(TESTIDS.slashMenu);
+    await expect(slashMenu).toBeVisible({ timeout: 5_000 });
+    const chooser = page.waitForEvent('filechooser');
+    await slashMenu.getByTestId(TESTIDS.slashMenuItem).filter({ hasText: /^image/i }).first().click();
+    await (await chooser).setFiles(path.join(FIXTURES_DIR, 'note-photo.png'));
+
+    // A blob: src is the node view having resolved the reference out of IndexedDB.
+    // The DOCUMENT holds `local-blob:<id>`; an object URL in there would be dead the
+    // next time this note was opened.
+    const image = body.locator('img.folio-image').first();
+    await expect(image).toBeVisible({ timeout: 15_000 });
+    await expect.poll(() => image.getAttribute('src'), { timeout: 10_000 }).toMatch(/^blob:/);
+
+    // Away and back, so the note is loaded from the mirror and the node view is
+    // rebuilt from scratch.
+    await page.getByRole('link', { name: 'Home' }).click();
+    await openNotebook(page, notebookName);
+    await page.getByText(noteTitle, { exact: false }).first().click();
+    const reopened = editorBody(page).locator('img.folio-image').first();
+    await expect(reopened).toBeVisible({ timeout: 15_000 });
+    await expect.poll(() => reopened.getAttribute('src'), { timeout: 10_000 }).toMatch(/^blob:/);
+
+    await context.setOffline(false);
+
+    // Asking the API rather than the UI is what makes this a claim about the
+    // server's data: the note it holds must point at the server's own copy of the
+    // image, with no trace of the local reference left in it.
+    await expect
+      .poll(
+        async () => {
+          const res = await request.get(`/api/notes/${noteId}`);
+          if (!res.ok()) return null;
+          return JSON.stringify((await res.json()).note?.contentJson ?? null);
+        },
+        { timeout: 90_000, message: 'the note never came to point at an uploaded image' },
+      )
+      .toMatch(/\/uploads\//);
+
+    const serverCopy = JSON.stringify((await (await request.get(`/api/notes/${noteId}`)).json()).note.contentJson);
+    expect(serverCopy).not.toContain('local-blob:');
+
+    // And it still renders - from the server's URL now rather than from the bytes.
+    await page.reload();
+    const afterSync = editorBody(page).locator('img.folio-image').first();
+    await expect(afterSync).toBeVisible({ timeout: 20_000 });
+    await expect.poll(() => afterSync.getAttribute('src'), { timeout: 15_000 }).toMatch(/\/uploads\//);
   });
 });

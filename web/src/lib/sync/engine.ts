@@ -11,6 +11,8 @@
 // closed.
 import { localDb, readMeta, writeMeta } from '../local/db';
 import { setClockOffset } from '../local/clock';
+import { sweepBlobs, type BlobSyncResult } from '../local/blobs';
+import { localApi } from '../local/localApi';
 import { drainOrder, settle, fail } from '../local/outbox';
 import { noteRequestOutcome, isOnline, subscribeConnectivity } from './connectivity';
 import { setMirrorWarm } from './mirrorState';
@@ -32,21 +34,29 @@ export interface SyncOutcome {
 const CURSOR_KEY = 'cursor';
 const INITIAL_DONE_KEY = 'initialSyncDone';
 
+type MirroredTable = 'notebooks' | 'notes' | 'flashcards' | 'canvasItems' | 'canvasEdges' | 'ink';
+
 /**
- * Entities this build mirrors. The server's feed covers more than this - canvas
- * items, edges and ink are in the wire contract for Stage 2 - and records for an
- * entity absent here are DELIBERATELY skipped rather than treated as an error.
+ * Entities this build mirrors, and the table each one lands in.
  *
- * The consequence matters for whoever builds Stage 2: skipping still advances the
- * cursor past those records, so adding the ink and canvas tables must also CLEAR
- * the cursor and re-pull from the beginning. Bumping the Dexie schema version
- * without clearing the cursor would leave every pre-existing stroke unsynced, on
- * every existing install, with nothing in the UI to suggest anything is missing.
+ * Records for an entity absent here are DELIBERATELY skipped rather than treated as
+ * an error. `review` is the only one left out: the server's review log is an
+ * identity-keyed append-only table with nothing for a client to reconcile.
+ *
+ * SKIPPING STILL ADVANCES THE CURSOR PAST THOSE RECORDS, and that is why adding the
+ * canvas and ink tables here had to come with a Dexie upgrade that CLEARS the cursor
+ * (db.ts, version 2). Without it every board and every stroke an account already
+ * owned would sit behind the cursor this browser holds, permanently, with nothing in
+ * the UI to suggest anything was missing. Anyone adding a seventh entity here
+ * inherits the same obligation.
  */
-const MIRRORED: Partial<Record<SyncEntity, 'notebooks' | 'notes' | 'flashcards'>> = {
+const MIRRORED: Partial<Record<SyncEntity, MirroredTable>> = {
   notebook: 'notebooks',
   note: 'notes',
   flashcard: 'flashcards',
+  canvasItem: 'canvasItems',
+  canvasEdge: 'canvasEdges',
+  ink: 'ink',
 };
 
 /** Has this browser finished its first full pull? Decides whether reads may trust the mirror. */
@@ -66,39 +76,48 @@ export async function isMirrorWarm(): Promise<boolean> {
 async function applyPage(response: SyncChangesResponse): Promise<number> {
   let applied = 0;
 
-  await localDb.transaction('rw', localDb.notebooks, localDb.notes, localDb.flashcards, localDb.meta, async () => {
-    for (const [entity, records] of Object.entries(response.changes)) {
-      const tableName = MIRRORED[entity as SyncEntity];
-      if (!tableName || !records) continue; // Stage 2 entity - see MIRRORED
-      const table = localDb[tableName];
+  // The table list is an array rather than Dexie's varargs form: the overloads stop
+  // at five tables and this page can touch seven.
+  await localDb.transaction(
+    'rw',
+    [
+      localDb.notebooks, localDb.notes, localDb.flashcards,
+      localDb.canvasItems, localDb.canvasEdges, localDb.ink, localDb.meta,
+    ],
+    async () => {
+      for (const [entity, records] of Object.entries(response.changes)) {
+        const tableName = MIRRORED[entity as SyncEntity];
+        if (!tableName || !records) continue; // an entity this build does not hold - see MIRRORED
+        const table = localDb[tableName];
 
-      for (const incoming of records as Array<SyncedRecord & Record<string, unknown>>) {
-        const local = await table.get(incoming.id);
-        if (local && String(local.updatedAt) >= incoming.updatedAt) continue;
+        for (const incoming of records as Array<SyncedRecord & Record<string, unknown>>) {
+          const local = await table.get(incoming.id);
+          if (local && String(local.updatedAt) >= incoming.updatedAt) continue;
 
-        // Merge onto the local row rather than replacing it: the server's feed
-        // carries the synced columns, while client-side fields live only here. A
-        // blind put would drop them.
-        //
-        // `tags` is defaulted explicitly because a server that predates the tags
-        // column in this feed sends notes without one, and the note read paths call
-        // .some()/.map() on it - so the FIRST arrival of any note would throw for
-        // every signed-in user on a fresh install.
-        await table.put({
-          ...(local ?? {}),
-          ...(tableName === 'notes' ? { tags: (local as { tags?: string[] } | undefined)?.tags ?? [] } : {}),
-          ...incoming,
-          // The base is what the SERVER just showed us. Setting it from anything
-          // else makes the next push claim a version this client never saw, and
-          // every subsequent write then reads as a conflict.
-          baseUpdatedAt: incoming.updatedAt,
-        } as never);
-        applied += 1;
+          // Merge onto the local row rather than replacing it: the server's feed
+          // carries the synced columns, while client-side fields live only here. A
+          // blind put would drop them.
+          //
+          // `tags` is defaulted explicitly because a server that predates the tags
+          // column in this feed sends notes without one, and the note read paths call
+          // .some()/.map() on it - so the FIRST arrival of any note would throw for
+          // every signed-in user on a fresh install.
+          await table.put({
+            ...(local ?? {}),
+            ...(tableName === 'notes' ? { tags: (local as { tags?: string[] } | undefined)?.tags ?? [] } : {}),
+            ...incoming,
+            // The base is what the SERVER just showed us. Setting it from anything
+            // else makes the next push claim a version this client never saw, and
+            // every subsequent write then reads as a conflict.
+            baseUpdatedAt: incoming.updatedAt,
+          } as never);
+          applied += 1;
+        }
       }
-    }
 
-    if (response.cursor) await localDb.meta.put({ key: CURSOR_KEY, value: response.cursor });
-  });
+      if (response.cursor) await localDb.meta.put({ key: CURSOR_KEY, value: response.cursor });
+    },
+  );
 
   return applied;
 }
@@ -170,6 +189,50 @@ async function sendEntry(entry: Awaited<ReturnType<typeof drainOrder>>[number]):
       await serverOnlyApi.deleteCard(entry.recordId);
       return { conflicted: false };
 
+    // Boards. The note id rides in the PAYLOAD rather than being derivable from the
+    // entry, because every canvas route is addressed as /api/canvas/:noteId/... and
+    // the outbox only knows the record's own id.
+    case 'canvasItem:create':
+      // `id` is sent so the item keeps the identity the board's connectors already
+      // use. A server-minted replacement would orphan every connector drawn to it.
+      await serverOnlyApi.createCanvasItem(noteOf(entry), { ...p, id: entry.recordId } as never);
+      return { conflicted: false };
+    case 'canvasItem:update':
+      // The bulk route, with one item in it. Per-item last-write-wins and no
+      // history, so there is no conflict for the server to report.
+      await serverOnlyApi.updateCanvasItems(noteOf(entry), [{ ...p, id: entry.recordId }] as never);
+      return { conflicted: false };
+    case 'canvasItem:delete':
+      await serverOnlyApi.deleteCanvasItem(noteOf(entry), entry.recordId);
+      return { conflicted: false };
+
+    case 'canvasEdge:create':
+      await serverOnlyApi.createCanvasEdge(noteOf(entry), { ...p, id: entry.recordId } as never);
+      return { conflicted: false };
+    case 'canvasEdge:delete':
+      await serverOnlyApi.deleteCanvasEdge(noteOf(entry), entry.recordId);
+      return { conflicted: false };
+
+    case 'ink:create': {
+      // One stroke per entry, sent as a batch of one. Strokes are immutable, so the
+      // server treats a re-sent id as a no-op and there is nothing to reconcile -
+      // the same property that makes review:create free.
+      const stroke = entry.payload.stroke as Record<string, unknown>;
+      await serverOnlyApi.addInk(noteOf(entry), [{ ...stroke, id: entry.recordId }] as never);
+      return { conflicted: false };
+    }
+    case 'ink:delete':
+      // `layer:<noteId>` is localApi.clearInk's whole-layer erase, queued as ONE
+      // entry rather than one per stroke: a page of handwriting is thousands of rows
+      // and reproducing a request the API expresses in one call would turn a single
+      // tap into minutes of reconnect traffic.
+      if (entry.recordId.startsWith('layer:')) {
+        await serverOnlyApi.clearInk(noteOf(entry));
+        return { conflicted: false };
+      }
+      await serverOnlyApi.deleteInk(noteOf(entry), entry.recordId);
+      return { conflicted: false };
+
     case 'review:create':
       // Append-only on both sides, so there is nothing to reconcile: two devices
       // reviewing the same card produce two log rows and both survive. Only the
@@ -179,10 +242,23 @@ async function sendEntry(entry: Awaited<ReturnType<typeof drainOrder>>[number]):
       return { conflicted: false };
 
     default:
-      // An entity this build does not push (Stage 2). Drop it rather than
-      // retrying forever - it was never queued by any Stage 1 code path.
+      // An entity/op pair nothing in this build queues. Dropped rather than retried
+      // forever - there is no request that would satisfy it.
       return { conflicted: false };
   }
+}
+
+/**
+ * The board or note a canvas/ink entry belongs to.
+ *
+ * Every one of those routes is scoped by a note the caller owns, so a payload that
+ * lost its noteId cannot be sent anywhere. Returning the empty string makes the URL
+ * obviously wrong and the request a 404 the entry records, rather than a plausible
+ * request against whatever id happened to be nearby.
+ */
+function noteOf(entry: { payload: Record<string, unknown> }): string {
+  const id = entry.payload.noteId;
+  return typeof id === 'string' ? id : '';
 }
 
 interface PushResult {
@@ -213,6 +289,18 @@ async function push(): Promise<PushResult> {
         continue;
       }
 
+      // 404 on a delete is the same shape of problem from the other end: the row is
+      // already gone, which is exactly what this entry was asking for. It is
+      // reachable whenever a delete cascades - a note taken away takes its board and
+      // its ink with it, and every canvas route then answers 404 for a note that is
+      // a tombstone. Retrying that would wedge the queue on a request no server can
+      // ever satisfy.
+      if (status === 404 && entry.op === 'delete') {
+        await settle(entry.seq!);
+        pushed += 1;
+        continue;
+      }
+
       const message = err instanceof Error ? err.message : 'push failed';
       await fail(entry.seq!, message);
 
@@ -232,6 +320,41 @@ async function push(): Promise<PushResult> {
   return { pushed, conflicts };
 }
 
+// --- staged image bytes ------------------------------------------------------
+
+/**
+ * Get the images inserted offline onto the server, and only then let go of the bytes.
+ *
+ * Run between the push and the pull, which is not arbitrary. The push has just
+ * emptied the outbox of everything it could send, so "is there still a note update
+ * queued for this note" - the question that decides whether a rewrite has actually
+ * reached the server - is being asked at the one moment its answer is freshest.
+ *
+ * The rewrite itself goes back INTO the outbox, so the note reaches the server on the
+ * NEXT cycle rather than this one. That is deliberate: it is an ordinary note update
+ * and gets the same conflict handling, clamping and coalescing as any other, instead
+ * of a second write path that would need all of it reimplemented.
+ */
+async function pushBlobs(): Promise<BlobSyncResult> {
+  return sweepBlobs({
+    upload: async (blob) => {
+      const form = new FormData();
+      form.append('file', blob.bytes, blob.name);
+      const { url } = await serverOnlyApi.uploadImage(form);
+      return url;
+    },
+    rewrite: async (noteId, from, to) => {
+      const row = await localDb.notes.get(noteId);
+      if (!row) return;
+      const contentJson = JSON.parse(row.contentJson.split(from).join(to)) as unknown;
+      // Through localApi, so this is indistinguishable from the user having edited
+      // the note: one Dexie transaction covering the row and its outbox entry, the
+      // corrected clock, and baseUpdatedAt left alone.
+      await localApi.updateNote(noteId, { contentJson });
+    },
+  });
+}
+
 // --- the loop ---------------------------------------------------------------
 
 let running: Promise<SyncOutcome> | null = null;
@@ -249,9 +372,24 @@ export function syncNow(): Promise<SyncOutcome> {
       if (pushResult.error) {
         return { pulled: 0, pushed: pushResult.pushed, conflicts: pushResult.conflicts, error: pushResult.error };
       }
+
+      // Image bytes go up here, and any note rewrite they produce lands back in the
+      // outbox - so the queue has to be drained a SECOND time. Without it the server
+      // keeps a note pointing at `local-blob:<id>` until the next poll a minute
+      // later, and anyone reading that note on another device sees nothing where the
+      // image should be.
+      let pushed = pushResult.pushed;
+      let conflicts = pushResult.conflicts;
+      if ((await pushBlobs()).rewritten > 0) {
+        const again = await push();
+        pushed += again.pushed;
+        conflicts += again.conflicts;
+        if (again.error) return { pulled: 0, pushed, conflicts, error: again.error };
+      }
+
       const pulled = await pull();
       noteRequestOutcome(true);
-      return { pulled, pushed: pushResult.pushed, conflicts: pushResult.conflicts };
+      return { pulled, pushed, conflicts };
     } catch (err) {
       const message = err instanceof Error ? err.message : 'sync failed';
       if ((err as { status?: number }).status === undefined) noteRequestOutcome(false);

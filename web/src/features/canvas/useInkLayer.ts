@@ -11,7 +11,7 @@
 // is a write-behind cache.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { api } from '../../lib/api';
+import { api, getMode } from '../../lib/api';
 import { toast } from '../../components/Toast';
 import type { InkStroke } from '../../lib/types';
 import type { LocalStroke } from './strokes';
@@ -157,15 +157,24 @@ export function useInkLayer(noteId: string, enabled: boolean): InkLayer {
       if (queueRef.current.length === 0) return;
       const batch = queueRef.current;
       queueRef.current = [];
+      const body = batch.map((s) => ({ points: s.points, color: s.color, width: s.width, tool: s.tool }));
+
+      // A beacon aimed at the server is worse than useless with no connection: it
+      // fails silently and these strokes are gone. Offline the write goes to the
+      // local store instead, which is not guaranteed to finish before the page does
+      // - an IndexedDB write during pagehide is best-effort - but a chance of
+      // keeping them beats a certainty of losing them.
+      if (getMode() !== 'online') {
+        void api.addInk(noteId, body).catch(() => {});
+        return;
+      }
+
       // keepalive lets the request outlive the page; fetch directly because the
       // api helper's response handling is pointless once we're unloading.
       try {
         navigator.sendBeacon?.(
           `/api/canvas/${noteId}/ink`,
-          new Blob(
-            [JSON.stringify({ strokes: batch.map((s) => ({ points: s.points, color: s.color, width: s.width, tool: s.tool })) })],
-            { type: 'application/json' },
-          ),
+          new Blob([JSON.stringify({ strokes: body })], { type: 'application/json' }),
         );
       } catch {
         // Nothing more we can do while the page is going away.

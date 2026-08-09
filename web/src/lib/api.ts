@@ -10,7 +10,7 @@ import type {
   ImportBatch, ImportItem, ImportSource, ImportLabelSpace, ImportSuggestionInput, ImportGroupInput, ImportCommitResult,
 } from './types';
 import { isGuest } from '../features/guest/guestMode';
-import { GuestFeatureError, guestBlockedMessage } from '../features/guest/guestErrors';
+import { GuestFeatureError, guestBlockedMessage, isGuestBlocked } from '../features/guest/guestErrors';
 import { localApi } from './local/localApi';
 import { noteRequestOutcome, isOnline } from './sync/connectivity';
 import { isWrite, isMirroredRead } from './sync/methods';
@@ -31,13 +31,10 @@ function offlineBlockedMessage(method: string): string {
     aiChat: 'The assistant needs a connection - it runs on the server.',
     aiSuggest: 'AI review needs a connection.',
     import: 'Importing needs a connection - the file is read on the server.',
-    uploadImage: 'Adding an image needs a connection, so the file has somewhere to live.',
     createShare: 'Sharing needs a connection - a share link has to be served from somewhere.',
     versions: 'Note history is kept on the server, so it needs a connection.',
     restore: 'Restoring an old version needs a connection.',
     comments: 'Comments need a connection.',
-    canvas: 'Boards need a connection for now.',
-    ink: 'Handwriting needs a connection for now.',
     qr: 'Pairing your phone needs a connection.',
   };
   return NEEDS_NET[method] ?? 'That needs a connection. Your notes are still here and still saving.';
@@ -264,7 +261,11 @@ const serverApi = {
 
   // canvas boards - spatial children of a note with kind='canvas'.
   canvas: (noteId: string) => http<{ items: CanvasItem[]; edges: CanvasEdge[] }>(`/api/canvas/${noteId}`),
-  createCanvasItem: (noteId: string, b: { kind: CanvasItemKind; x: number; y: number; width: number; height: number; data?: CanvasItemData }) =>
+  /** `id` is optional and is only ever sent for an item created offline: the board's
+   *  connectors address items by id, so a server-minted replacement would orphan
+   *  every one of them. The server accepts only newId()'s shape and mints its own
+   *  for anything else. */
+  createCanvasItem: (noteId: string, b: { id?: string; kind: CanvasItemKind; x: number; y: number; width: number; height: number; z?: number; rotation?: number; data?: CanvasItemData }) =>
     http<{ item: CanvasItem }>(`/api/canvas/${noteId}/items`, json('POST', b)),
   /** BULK and atomic. Every drag/resize/z-order commit goes through here as ONE
    *  request - never one per item and never one per pointermove frame. */
@@ -272,7 +273,7 @@ const serverApi = {
     http<{ items: CanvasItem[] }>(`/api/canvas/${noteId}/items`, json('PATCH', { items })),
   deleteCanvasItem: (noteId: string, itemId: string) =>
     http<{ ok: true }>(`/api/canvas/${noteId}/items/${itemId}`, { method: 'DELETE' }),
-  createCanvasEdge: (noteId: string, b: { from: string; to: string; label?: string; style?: string }) =>
+  createCanvasEdge: (noteId: string, b: { id?: string; from: string; to: string; label?: string; style?: string }) =>
     http<{ edge: CanvasEdge }>(`/api/canvas/${noteId}/edges`, json('POST', b)),
   deleteCanvasEdge: (noteId: string, edgeId: string) =>
     http<{ ok: true }>(`/api/canvas/${noteId}/edges/${edgeId}`, { method: 'DELETE' }),
@@ -280,8 +281,10 @@ const serverApi = {
   // ink - works on ANY note id, not just canvases, which is what lets the same
   // layer annotate a normal document note.
   ink: (noteId: string) => http<{ strokes: InkStroke[] }>(`/api/canvas/${noteId}/ink`),
-  /** Append-only, and batched: one request per stroke-flush, never per point. */
-  addInk: (noteId: string, strokes: Array<Omit<InkStroke, 'id'>>) =>
+  /** Append-only, and batched: one request per stroke-flush, never per point.
+   *  A stroke drawn offline carries the id its local copy already has, so the
+   *  eraser still addresses the same row after the push. */
+  addInk: (noteId: string, strokes: Array<Omit<InkStroke, 'id'> & { id?: string }>) =>
     http<{ ids: string[] }>(`/api/canvas/${noteId}/ink`, json('POST', { strokes })),
   deleteInk: (noteId: string, inkId: string) =>
     http<{ ok: true }>(`/api/canvas/${noteId}/ink/${inkId}`, { method: 'DELETE' }),
@@ -479,8 +482,14 @@ export const api: Api = new Proxy(serverApi, {
     const mode = getMode();
 
     if (mode === 'guest') {
-      // Exactly the previous behaviour: local, or a sentence explaining why not.
-      if (hasLocal) return local;
+      // Local, or a sentence explaining why not - with the refusal table winning.
+      //
+      // The precedence matters now that the local store holds boards, ink and image
+      // bytes for the offline desktop app. Those implementations exist for a
+      // SIGNED-IN user on a train; guest mode is still the capped trial it always
+      // was, and "there is a local function for it" is not a decision to hand a
+      // visitor three features nobody offered them.
+      if (hasLocal && !isGuestBlocked(key)) return local;
       return () => Promise.reject(new GuestFeatureError(guestBlockedMessage(key)));
     }
 
