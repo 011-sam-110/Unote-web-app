@@ -1,0 +1,57 @@
+/* Connection and sync status strip.
+ *
+ * Deliberately quieter than .guest-banner. That banner warns about work that will be
+ * LOST; this one reports work that is safe but not yet copied elsewhere. Giving them
+ * the same visual weight would teach people to read both as alarms, and then to
+ * ignore both. Colours come from the existing token set rather than new literals so
+ * it follows the warm-paper theme in light and dark without a second definition.
+ */
+
+.conn-status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.85rem;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-subtle, var(--bg-elevated));
+  color: var(--text-muted);
+}
+
+.conn-status svg {
+  flex: none;
+}
+
+.conn-status__text {
+  min-width: 0;
+}
+
+.conn-status__text strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+/* Offline is information, not an error - so a neutral surface with a warm accent
+   rule, not a red one. */
+.conn-status--offline {
+  border-left: 3px solid var(--accent, currentColor);
+}
+
+/* Syncing is transient. The spin is the only motion in the component, and it stops
+   existing along with the element the moment the queue empties. */
+.conn-status--syncing svg {
+  animation: conn-status-spin 1.4s linear infinite;
+}
+
+@keyframes conn-status-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .conn-status--syncing svg {
+    animation: none;
+  }
+}

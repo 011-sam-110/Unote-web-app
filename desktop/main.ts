@@ -10,7 +10,14 @@
 // once installed. The one case it cannot cover is a first launch with no network -
 // nothing is cached yet - and that is what offline.html is for.
 import { app, BrowserWindow, shell, session } from 'electron';
-import { autoUpdater } from 'electron-updater';
+// electron-updater is CommonJS, and this main process is ESM ("type": "module" at the
+// repo root). A named import therefore throws at load:
+//   SyntaxError: Named export 'autoUpdater' not found.
+// The typecheck does NOT catch it - skipLibCheck plus esModuleInterop make the named
+// form look fine - so the only thing that finds this is launching the app.
+import electronUpdater from 'electron-updater';
+
+const { autoUpdater } = electronUpdater;
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
