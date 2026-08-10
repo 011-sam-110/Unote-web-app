@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Outlet, useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { NotebooksProvider, useNotebooks } from './components/NotebooksContext';
 import Sidebar from './components/Sidebar';
 import QuickSwitcher from './components/QuickSwitcher';
@@ -18,6 +18,9 @@ import ImportWizardHost from './features/import/wizard/ImportWizardHost';
 import GuestBanner from './features/guest/GuestBanner';
 import ConnectionStatus from './components/ConnectionStatus';
 import SyncRunner from './lib/sync/SyncRunner';
+import { TabsProvider } from './features/tabs/TabsContext';
+import TabStrip from './features/tabs/TabStrip';
+import TabHost from './features/tabs/TabHost';
 
 const COLLAPSE_KEY = 'folio:sidebarCollapsed';
 
@@ -41,10 +44,15 @@ function useIsMobile(breakpoint = 899): boolean {
   return isMobile;
 }
 
+// TabsProvider sits INSIDE NotebooksProvider: a notebook tab takes its name and colour
+// from the notebook list, and a tab has to be able to name itself before the page inside
+// it has loaded.
 export default function App() {
   return (
     <NotebooksProvider>
-      <AppShell />
+      <TabsProvider>
+        <AppShell />
+      </TabsProvider>
     </NotebooksProvider>
   );
 }
@@ -257,16 +265,31 @@ function AppShell() {
           </Tooltip>
         )}
 
-        <main className="app-main" id="folio-main" tabIndex={-1}>
-          {/* Above the outlet, so it is on every route a guest can reach - the editor
-              included, which is the one that matters. Renders nothing when signed in. */}
+        {/* The content column: session-wide chrome, the tab strip, then the pages.
+            A flex column that does not itself scroll - each tab pane owns its own
+            scrolling, which is what carries a scroll position across a switch and what
+            stops the strip and the note's sticky action bar fighting over `top: 0`. */}
+        <div className="app-content">
+          {/* Above the tabs, not inside them: both of these are true of the whole session
+              rather than of one open page, and a guest must see the banner on every route
+              including the editor. Each renders nothing when it has nothing to say. */}
           <GuestBanner />
-          {/* Beside the guest banner for the same reason: it has to be true on every
-              route including the editor, which is the one that matters. Renders
-              nothing when online with an empty queue. */}
           <ConnectionStatus />
-          <Outlet />
-        </main>
+
+          {/* OUTSIDE <main>, deliberately. The strip chooses which document you are
+              looking at, which makes it navigation chrome rather than the document - and
+              <main> is supposed to be the dominant CONTENT. Keeping it inside also made
+              every tab's label and close button part of <main> for anything querying by
+              role, which is not a theoretical problem: an e2e spec looking for the
+              notebook page's "Import" button found the close button of a tab whose
+              notebook was named "E2E Import Transcript Notebook", clicked it, and closed
+              the tab it was trying to use. */}
+          <TabStrip />
+
+          <main className="app-main" id="folio-main" tabIndex={-1}>
+            <TabHost />
+          </main>
+        </div>
       </div>
 
       <SyncRunner />

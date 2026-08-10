@@ -552,6 +552,12 @@
    serif everywhere it appears (card, search hit, tag row, backlink) so that scanning a
    grid of cards feels like scanning your own notes rather than a file listing. */
 .note-card__title {
+  /* Explicit, because this is a <a> now and was a <button>. A button is inline-block by
+     default and an anchor is inline, and inline boxes ignore width and overflow - which is
+     exactly what the compact variant below sets to truncate a long title. It happens to
+     survive there anyway (a flex item is blockified whatever its display says), but only
+     by accident of that one layout. Stating it means the element type stops mattering. */
+  display: inline-block;
   font-family: var(--font-display);
   font-size: 17px;
   font-weight: 500;

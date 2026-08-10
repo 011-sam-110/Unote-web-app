@@ -16,6 +16,7 @@ import { resolveFilingNotebook } from '../lib/notebookContext';
 import { openImportModal } from './importModalBus';
 import { openImportWizard } from '../features/import/importWizardBus';
 import { flushActiveNote } from '../features/editor/autosaveBus';
+import { useTabsOptional } from '../features/tabs/TabsContext';
 import { toast } from './Toast';
 import Icon from './Icon';
 import Spinner from './Spinner';
@@ -52,6 +53,9 @@ export default function CommandPalette({
   const params = useParams<{ noteId?: string; notebookId?: string }>();
   const { notebooks, createNotebook } = useNotebooks();
   const [theme] = useTheme();
+  // Optional: the palette also renders for a guest and inside the shell only, but it is
+  // cheaper to tolerate its absence than to assert a provider it does not own.
+  const tabs = useTabsOptional();
   const staticCommands = useCommands();
 
   useEffect(() => {
@@ -182,6 +186,40 @@ export default function CommandPalette({
       run: () => onToggleSidebar(),
     });
 
+    if (tabs) {
+      cmds.push({
+        ...paletteDoc('tab-close'),
+        keywords: ['tab', 'close', 'shut'],
+        icon: 'x',
+        run: () => tabs.close(tabs.activeId),
+      });
+      // Offered only when there is a second tab to move to or close. A palette listing
+      // three commands that do nothing is the same failure as a cheatsheet listing a key
+      // that does not fire.
+      if (tabs.tabs.length > 1) {
+        cmds.push(
+          {
+            ...paletteDoc('tab-close-others'),
+            keywords: ['tab', 'close', 'only', 'tidy'],
+            icon: 'x',
+            run: () => tabs.closeOthers(tabs.activeId),
+          },
+          {
+            ...paletteDoc('tab-next'),
+            keywords: ['tab', 'next', 'switch', 'cycle'],
+            icon: 'arrow-right',
+            run: () => tabs.stepBy(1),
+          },
+          {
+            ...paletteDoc('tab-prev'),
+            keywords: ['tab', 'previous', 'back', 'switch', 'cycle'],
+            icon: 'arrow-right',
+            run: () => tabs.stepBy(-1),
+          },
+        );
+      }
+    }
+
     if (noteId) {
       cmds.push({
         ...paletteDoc('note-snapshot'),
@@ -209,7 +247,7 @@ export default function CommandPalette({
 
     return cmds;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [notebooks, filingNotebookId, filingNotebook, contextNotebook, noteId, onToggleSidebar, onOpenPhoneCapture]);
+  }, [notebooks, filingNotebookId, filingNotebook, contextNotebook, noteId, tabs, onToggleSidebar, onOpenPhoneCapture]);
 
   const allCommands = useMemo(() => [...staticCommands, ...dynamicCommands], [staticCommands, dynamicCommands]);
   const q = query.trim();

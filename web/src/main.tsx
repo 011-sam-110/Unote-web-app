@@ -6,14 +6,8 @@ import { createBrowserRouter, Navigate, Outlet, RouterProvider, useLocation } fr
 // up from the History API, so one mount at the root covers every page.
 import { Analytics } from '@vercel/analytics/react'
 import App from './App'
-import DashboardPage from './pages/DashboardPage'
-import NotebookPage from './pages/NotebookPage'
-import NotePage from './features/editor/NotePage'
-import StudyPage from './features/study/StudyPage'
-import AskPage from './features/ask/AskPage'
+import { tabRouterChildren } from './features/tabs/tabRoutes'
 import CaptureRoute from './features/import/CaptureRoute'
-import SearchPage from './pages/SearchPage'
-import TagsPage from './pages/TagsPage'
 import { AuthProvider, useAuth } from './features/auth/AuthContext'
 import RequireAuth from './features/auth/RequireAuth'
 import LandingPage from './features/marketing/LandingPage'
@@ -137,15 +131,16 @@ const router = createBrowserRouter([
       {
         path: '/',
         element: <RootRoute />,
-        children: [
-          { index: true, element: <DashboardPage /> },
-          { path: 'notebook/:notebookId', element: <NotebookPage /> },
-          { path: 'note/:noteId', element: <NotePage /> },
-          { path: 'study', element: <StudyPage /> },
-          { path: 'ask', element: <AskPage /> },
-          { path: 'search', element: <SearchPage /> },
-          { path: 'tags', element: <TagsPage /> },
-        ],
+        // Derived from features/tabs/tabRoutes.tsx rather than declared here, and carrying
+        // no elements of their own. Several of these pages are mounted at once now - one
+        // per open tab - which is the one thing <Outlet/> cannot do, so App renders
+        // <TabHost/> in its place and TabHost matches against that same list.
+        //
+        // These entries still matter: they are what resolves a URL into this layout route,
+        // what keeps <RequireAuth> in front of all of them, and what feeds useParams in
+        // App. Generating them is what makes it impossible for the router's idea of which
+        // paths exist and TabHost's to drift apart.
+        children: tabRouterChildren(),
       },
     ],
   },

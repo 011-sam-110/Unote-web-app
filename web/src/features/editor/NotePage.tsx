@@ -10,7 +10,7 @@ import {
   type ChangeEvent,
   type KeyboardEvent,
 } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import type { Editor } from '@tiptap/core';
 import { api, ApiError } from '../../lib/api';
 import type { AiSuggestResult, Note, NoteLite, Attachment } from '../../lib/types';
@@ -35,7 +35,9 @@ import { useAiAvailable } from '../../lib/aiStatus';
 import { isGuest } from '../guest/guestMode';
 import { downloadGuestNote } from '../guest/guestExport';
 import { useAutosave } from './useAutosave';
-import { setActiveFlush } from './autosaveBus';
+import { clearActiveFlushKey, registerFlush, setActiveFlushKey, SOLO_KEY } from './autosaveBus';
+import { useIsActiveTab, useTabPane, useTabParams } from '../tabs/tabLocation';
+import { useTabsOptional } from '../tabs/TabsContext';
 import { markdownToSafeHtml } from './markdown';
 import type { OutlineItem } from './outline';
 import CommentsPanel from '../comments/CommentsPanel';
@@ -54,7 +56,11 @@ import './notePage.css';
 const WIDTH_KEY = 'folio.noteWidth';
 
 export default function NotePage() {
-  const { noteId } = useParams<{ noteId: string }>();
+  // Not useParams: several note pages are mounted at once, one per open tab, and the
+  // router answers for the URL - which belongs to whichever tab is on screen. A hidden
+  // note asking the router for its id would be handed the VISIBLE note's id and quietly
+  // refetch itself into a second copy of it.
+  const { noteId } = useTabParams<{ noteId: string }>('/note/:noteId');
   const [state, setState] = useState<{ note: Note; backlinks: NoteLite[] } | null>(null);
   const [status, setStatus] = useState<'loading' | 'ready' | 'notfound' | 'error'>('loading');
   const [errorMsg, setErrorMsg] = useState('');
@@ -179,6 +185,15 @@ function splitTags(tags: readonly string[], contentText: string) {
 
 function NoteWorkspace({ initialNote, initialBacklinks }: NoteWorkspaceProps) {
   const navigate = useNavigate();
+  // Everything this page does to the world OUTSIDE itself is guarded on being the visible
+  // tab: the document title, the "which notebook am I in" pointer, the window key
+  // listener, the drawer inset. Each of those is singular, and up to four note pages are
+  // mounted at once, so an unguarded one means three background notes writing over the
+  // one being read.
+  const pane = useTabPane();
+  const isActive = useIsActiveTab();
+  const tabKey = pane?.tabId ?? SOLO_KEY;
+  const tabs = useTabsOptional();
   const [note, setNote] = useState(initialNote);
   const [backlinks, setBacklinks] = useState(initialBacklinks);
   const [unlinked, setUnlinked] = useState<NoteLite[] | null>(null);
@@ -300,18 +315,37 @@ function NoteWorkspace({ initialNote, initialBacklinks }: NoteWorkspaceProps) {
   );
 
   // Expose this note's flush so in-editor navigation (wikilink clicks) can persist
-  // pending edits before leaving.
+  // pending edits before leaving. Registered whether or not this tab is on screen: a
+  // background note is still autosaving, and closing its tab has to be able to flush it.
   useEffect(() => {
-    setActiveFlush(autosave.flush);
-    return () => setActiveFlush(null);
-  }, [autosave.flush]);
+    registerFlush(tabKey, autosave.flush);
+    return () => registerFlush(tabKey, null);
+  }, [tabKey, autosave.flush]);
+
+  // Which of the registered flushers a wikilink click means. Only the visible one.
+  useEffect(() => {
+    if (!isActive) return;
+    setActiveFlushKey(tabKey);
+    return () => clearActiveFlushKey(tabKey);
+  }, [isActive, tabKey]);
 
   // Publish this note's notebook so Ctrl+N / '+' / quick-switcher-create file new notes
-  // into the notebook you're actually reading (fix 14).
+  // into the notebook you're actually reading (fix 14) - which is the notebook of the note
+  // on SCREEN, not of any of the three that happen to be mounted behind it.
   useEffect(() => {
+    if (!isActive) return;
     setActiveNotebook(initialNote.notebookId);
     return () => clearActiveNotebook();
-  }, [initialNote.notebookId]);
+  }, [isActive, initialNote.notebookId]);
+
+  // Name this note's tab, and colour it with its notebook. The title follows the field as
+  // it is typed, so the strip renames itself live.
+  const notebookColor = note.notebook?.color;
+  const tabId = pane?.tabId;
+  useEffect(() => {
+    if (!tabId) return;
+    tabs?.setIdentity(tabId, { label: title.trim() || 'Untitled', dot: notebookColor });
+  }, [tabId, tabs, title, notebookColor]);
 
   /**
    * Put the caret in the title of a brand-new note.
@@ -330,13 +364,16 @@ function NoteWorkspace({ initialNote, initialBacklinks }: NoteWorkspaceProps) {
   const focusedNoteRef = useRef<string | null>(null);
   useEffect(() => {
     if (focusedNoteRef.current === initialNote.id) return; // don't re-grab on re-render
+    // Never from a background tab. An empty note reloaded into an evicted pane would
+    // otherwise pull the caret out of whatever the user is actually typing in.
+    if (!isActive) return;
     const isUntouched = !initialNote.title.trim() && !initialNote.contentText?.trim();
     if (!isUntouched) return;
     focusedNoteRef.current = initialNote.id;
     // After paint, so the input exists and TipTap has finished claiming focus itself.
     const raf = requestAnimationFrame(() => titleInputRef.current?.focus());
     return () => cancelAnimationFrame(raf);
-  }, [initialNote.id, initialNote.title, initialNote.contentText]);
+  }, [isActive, initialNote.id, initialNote.title, initialNote.contentText]);
 
   /* Auto-grow the title. A textarea has no intrinsic height, so it is reset to one row and
      re-measured on every change - and on width changes too, since opening the AI drawer
@@ -411,11 +448,17 @@ function NoteWorkspace({ initialNote, initialBacklinks }: NoteWorkspaceProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [note.id]);
 
+  // There is one document title and up to four mounted notes. The one on screen names it.
   useEffect(() => {
+    if (!isActive) return;
     document.title = `${title || 'Untitled'} · Unote`;
-  }, [title]);
+  }, [isActive, title]);
 
   useEffect(() => {
+    // A window listener is global by definition, so an unguarded one meant Ctrl+F opening
+    // Find in every mounted note at once - three of them invisible, all three decorating
+    // their documents with match highlights nobody asked for.
+    if (!isActive) return;
     function onKeyDown(e: globalThis.KeyboardEvent) {
       // Esc closes the find bar even when focus isn't inside its own input (e.g. the user
       // clicked back into the editor while it was open).
@@ -450,7 +493,7 @@ function NoteWorkspace({ initialNote, initialBacklinks }: NoteWorkspaceProps) {
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [isActive]);
 
   async function manualSnapshot() {
     await autosave.flush();
@@ -974,7 +1017,7 @@ function NoteWorkspace({ initialNote, initialBacklinks }: NoteWorkspaceProps) {
             ) : (
               <div className="folio-links-grid">
                 {backlinks.map((n) => (
-                  <NoteCard key={n.id} note={n} onClick={() => navigate(`/note/${n.id}`)} />
+                  <NoteCard key={n.id} note={n} href={`/note/${n.id}`} />
                 ))}
               </div>
             )}
@@ -985,7 +1028,7 @@ function NoteWorkspace({ initialNote, initialBacklinks }: NoteWorkspaceProps) {
               <h4>Unlinked mentions</h4>
               <div className="folio-links-grid">
                 {unlinked.map((n) => (
-                  <NoteCard key={n.id} note={n} onClick={() => navigate(`/note/${n.id}`)} />
+                  <NoteCard key={n.id} note={n} href={`/note/${n.id}`} />
                 ))}
               </div>
             </section>

@@ -16,6 +16,7 @@
  */
 import { expect, test } from './auth.fixture';
 import {
+  activePane,
   createNoteViaButton,
   createNotebookViaSidebar,
   exact,
@@ -219,7 +220,11 @@ test.describe('Tags are usable once authored', () => {
     await waitForSaved(page);
 
     await page.goto(notebookUrl);
-    const main = page.getByRole('main');
+    // The visible pane, not the whole of <main>. Both notes were opened above, so both
+    // still have a TAB in the strip carrying their title - which is correct, and which
+    // would let every assertion below pass on the strip rather than on the list it is
+    // actually about. The last one would fail outright.
+    const main = activePane(page);
     await expect(main.getByText(exact(taggedTitle)).first()).toBeVisible({ timeout: 10_000 });
     await expect(main.getByText(exact(untaggedTitle)).first()).toBeVisible();
 

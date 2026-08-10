@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useTabSearchParams } from '../tabs/tabLocation';
 import { api, ApiError } from '../../lib/api';
 import type { StudyStats } from '../../lib/types';
 import { toast } from '../../components/Toast';
@@ -18,7 +18,7 @@ export default function StudyPage() {
      had nothing to review - the one state where the button is offered is the one state
      where its destination is empty. Read once, as the initial value: after that the tabs
      own the state, so switching tabs does not rewrite the URL. */
-  const [searchParams] = useSearchParams();
+  const [searchParams] = useTabSearchParams();
   const [tab, setTab] = useState<Tab>(searchParams.get('tab') === 'browse' ? 'browse' : 'review');
   const [stats, setStats] = useState<StudyStats | null>(null);
   // Cram-one-module filter: scopes the review queue to a single notebook (fix 24).

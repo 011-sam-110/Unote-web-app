@@ -16,6 +16,7 @@
 // The width is live, so dragging the drawer's grip reflows the note as you drag rather than
 // on release.
 import { useEffect } from 'react';
+import { useIsActiveTab, useTabPane } from '../tabs/tabLocation';
 
 const openWidths = new Map<string, number>();
 
@@ -51,8 +52,17 @@ function publish(): void {
  * open releases the space, so a route change cannot leave the page permanently indented.
  */
 export function useDrawerInset(key: string, width: number, isOpen: boolean): void {
+  // `--folio-drawer-inset` is one custom property on one document, and up to four note
+  // pages are mounted at once. A background tab left with its AI panel open would indent
+  // the note the user is actually reading, by the width of a drawer that is not on screen.
+  // The key is scoped per pane too, so two tabs with the same drawer open are two entries
+  // rather than one overwriting the other.
+  const isActive = useIsActiveTab();
+  const pane = useTabPane();
+  const scoped = pane ? `${pane.tabId}:${key}` : key;
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen || !isActive) return;
+    const key = scoped;
     openWidths.set(key, width);
     publish();
     // Whether the rail still fits depends on the window as well as the drawer, so a resize
@@ -64,5 +74,5 @@ export function useDrawerInset(key: string, width: number, isOpen: boolean): voi
       window.removeEventListener('resize', publish);
       publish();
     };
-  }, [key, width, isOpen]);
+  }, [scoped, width, isOpen, isActive]);
 }

@@ -223,10 +223,11 @@ test('a guest returning to /try lands on their own work, not the guide', async (
   await expect(page.getByLabel('Note title')).toHaveValue('README');
 
   // The blank note seeded alongside the README (guestStore.ts's seedGuestWorkspace) has no
-  // title, which NoteCard falls back to labelling "Untitled" - rendered as a <button> (the
-  // card's own click target), not a link, so it is found by role=button, not role=link.
+  // title, which NoteCard falls back to labelling "Untitled". Its card title is a LINK -
+  // it became one with tabs, so that Ctrl/middle-clicking a note opens it in a new tab the
+  // way every other link in the app can be opened.
   await page.goto('/');
-  await page.getByRole('button', { name: 'Untitled', exact: true }).click();
+  await page.getByRole('link', { name: 'Untitled', exact: true }).click();
   await page.getByTestId('note-editor').click();
   await page.keyboard.type('my own note');
 

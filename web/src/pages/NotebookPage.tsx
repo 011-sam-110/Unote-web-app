@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { useTabParams } from '../features/tabs/tabLocation';
 import { api } from '../lib/api';
 import type { NoteLite } from '../lib/types';
 import { errorMessage, plural } from '../lib/format';
@@ -22,7 +23,9 @@ import type { Template } from '../lib/types';
 type Sort = 'updated' | 'created' | 'title';
 
 export default function NotebookPage() {
-  const { notebookId } = useParams<{ notebookId: string }>();
+  // Not useParams - see features/tabs/tabLocation.tsx. Several pages are mounted at
+  // once and the router answers for the URL, which belongs to the visible tab.
+  const { notebookId } = useTabParams<{ notebookId: string }>('/notebook/:notebookId');
   const navigate = useNavigate();
   const { notebooks, loading: notebooksLoading, updateNotebook } = useNotebooks();
   const notebook = notebooks.find((n) => n.id === notebookId);
@@ -247,7 +250,7 @@ export default function NotebookPage() {
         note={note}
         compact
         testId="note-row"
-        onClick={() => navigate(`/note/${note.id}`)}
+        href={`/note/${note.id}`}
         controls={
           <>
             <Tooltip content={note.pinned ? 'Unpin' : 'Pin'}>

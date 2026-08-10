@@ -9,7 +9,8 @@
 // Each pill also carries a manage affordance: rename across all notes, merge into
 // another tag, or remove from all notes.
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { useTabSearchParams } from '../features/tabs/tabLocation';
 import { api } from '../lib/api';
 import type { NoteLite } from '../lib/types';
 import { errorMessage, plural } from '../lib/format';
@@ -29,7 +30,8 @@ interface TagCount {
 
 export default function TagsPage() {
   const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
+  // This tab's query, not the browser's - see features/tabs/tabLocation.tsx.
+  const [searchParams, setSearchParams] = useTabSearchParams();
 
   const [tags, setTags] = useState<TagCount[] | null>(null);
   const [tagsLoading, setTagsLoading] = useState(true);
@@ -269,7 +271,7 @@ export default function TagsPage() {
             ) : (
               <div className="note-list">
                 {notes.map((n) => (
-                  <NoteCard key={n.id} note={n} compact testId="note-row" onClick={() => navigate(`/note/${n.id}`)} />
+                  <NoteCard key={n.id} note={n} compact testId="note-row" href={`/note/${n.id}`} />
                 ))}
               </div>
             )}

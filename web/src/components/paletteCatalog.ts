@@ -34,6 +34,16 @@ export const PALETTE_CATALOG: PaletteDoc[] = [
   { id: 'create-phone-capture', title: 'Open phone capture QR', hint: 'Scan with your phone to capture a page', section: 'Create', needs: 'qr' },
   { id: 'note-snapshot', title: 'Snapshot now', hint: 'Save a named version of this note', section: 'Note', needs: 'snapshot' },
   { id: 'view-sidebar', title: 'Toggle sidebar', hint: 'Collapse or expand the sidebar', section: 'View', shortcut: '⌘\\' },
+  // The tab commands carry no `shortcut`, and that is the whole reason they are here.
+  // Every chord that would suit them is already the browser's - Ctrl+W, Ctrl+Tab and
+  // Ctrl+1-9 in Chrome, Alt+1-9 in Firefox on Windows, Cmd+Shift+[ in Chrome on macOS -
+  // and shortcutData.ts sets the rule that a listed shortcut which does not fire is worse
+  // than none at all. The palette is where they live until the desktop build, which owns
+  // its own accelerators, can bind them for real.
+  { id: 'tab-close', title: 'Close tab', hint: 'Close the tab you are looking at', section: 'View' },
+  { id: 'tab-close-others', title: 'Close other tabs', hint: 'Leave only this one open', section: 'View' },
+  { id: 'tab-next', title: 'Next tab', hint: 'Move one to the right, wrapping at the end', section: 'View' },
+  { id: 'tab-prev', title: 'Previous tab', hint: 'Move one to the left, wrapping at the start', section: 'View' },
   { id: 'study-notebook', title: 'Study this notebook', hint: 'Review just these flashcards', section: 'Study' },
 ];
 

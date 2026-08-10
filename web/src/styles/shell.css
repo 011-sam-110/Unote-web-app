@@ -32,11 +32,31 @@
   flex-direction: column;
 }
 
-.app-main {
+/* The content column: the guest banner and connection status, the tab strip, then <main>.
+   Neither this nor <main> scrolls - each tab pane owns its own scrolling
+   (features/tabs/tabs.css), which is what carries a scroll offset across a switch for free
+   and what keeps the note's sticky action bar sticking to the top of its own note rather
+   than competing with the strip for the same offset. */
+.app-content {
   flex: 1;
   min-width: 0;
   height: 100%;
-  overflow-y: auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+}
+
+/* Just the pages now. The strip is a sibling above it rather than a child - it is
+   navigation, not content (App.tsx). */
+.app-main {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   position: relative;
 }
 
@@ -99,7 +119,9 @@
   .app-topbar {
     display: flex;
   }
-  .app-main {
+  /* On the column, not on <main>: the strip is a sibling above <main> now and has to
+     clear the fixed topbar too. */
+  .app-content {
     padding-top: calc(var(--topbar-h) + env(safe-area-inset-top, 0px));
     /* Home-indicator clearance, so the last row of content is not under the bar. */
     padding-bottom: env(safe-area-inset-bottom, 0px);

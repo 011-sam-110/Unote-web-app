@@ -1,7 +1,8 @@
 // search-tags agent - full-text search results page (Ctrl+Shift+F / navbar Search,
 // and the destination for every "search notes →" link on the Tags page).
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { useTabSearchParams } from '../features/tabs/tabLocation';
 import { api, getMode } from '../lib/api';
 import type { SearchResult } from '../lib/types';
 import { errorMessage, parseSnippetHtml, plural, relativeTime } from '../lib/format';
@@ -45,7 +46,8 @@ function isTypingTarget(target: EventTarget | null): boolean {
 
 export default function SearchPage() {
   const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
+  // This tab's query, not the browser's - an inactive Search tab keeps its own terms.
+  const [searchParams, setSearchParams] = useTabSearchParams();
   const initialQ = searchParams.get('q') ?? '';
 
   const [query, setQuery] = useState(initialQ);

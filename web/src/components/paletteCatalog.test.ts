@@ -3,11 +3,11 @@ import { PALETTE_CATALOG, paletteDoc } from './paletteCatalog';
 import { guestBlockedMessage } from '../features/guest/guestApi';
 
 describe('paletteCatalog', () => {
-  it('documents all eleven context commands', () => {
+  it('documents all fifteen context commands', () => {
     // The one count assertion worth keeping: it guards a ONE-TIME extraction. Eleven
-    // commands are being lifted out of CommandPalette.tsx and a dropped one would be
-    // silent. If a twelfth command is added later, update this number with it.
-    expect(PALETTE_CATALOG).toHaveLength(11);
+    // commands were lifted out of CommandPalette.tsx and a dropped one would be silent.
+    // The four tab commands brought it to fifteen. Update this number when you add one.
+    expect(PALETTE_CATALOG).toHaveLength(15);
   });
 
   it('has no duplicate ids', () => {

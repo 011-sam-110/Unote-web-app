@@ -31,7 +31,10 @@ export default function OutlinePane({ items, editor }: { items: OutlineItem[]; e
      Throttled to one measurement per frame - scroll fires far more often than that. */
   useEffect(() => {
     if (!editor || items.length === 0) return;
-    const scroller = navRef.current?.closest<HTMLElement>('.app-main') ?? null;
+    // `.tab-pane` first - it is the scroll container now that a tab owns its own
+    // scrolling, and `.app-main` no longer emits a scroll event at all. Listening to the
+    // old one left the outline's active heading frozen on the first entry.
+    const scroller = navRef.current?.closest<HTMLElement>('.tab-pane, .app-main') ?? null;
     const target: HTMLElement | Window = scroller ?? window;
 
     let frame = 0;

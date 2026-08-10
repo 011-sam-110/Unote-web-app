@@ -182,7 +182,7 @@ export default function DashboardPage() {
           ) : (
             <div className="note-grid" data-testid="recent-notes">
               {data.recent.map((n) => (
-                <NoteCard key={n.id} note={n} onClick={() => navigate(`/note/${n.id}`)} />
+                <NoteCard key={n.id} note={n} href={`/note/${n.id}`} />
               ))}
             </div>
           )}
@@ -195,7 +195,7 @@ export default function DashboardPage() {
             </div>
             <div className="note-strip" data-testid="pinned-strip">
               {data.pinned.map((n) => (
-                <NoteCard key={n.id} note={n} onClick={() => navigate(`/note/${n.id}`)} />
+                <NoteCard key={n.id} note={n} href={`/note/${n.id}`} />
               ))}
             </div>
           </section>

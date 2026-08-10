@@ -60,7 +60,12 @@ export default function NoteInkOverlay({ noteId, anchorRef, open, onClose }: Not
     rafRef.current = null;
     const anchor = anchorRef.current;
     if (!anchor) return;
-    const scroller = (anchor.closest('.app-main') as HTMLElement | null) ?? document.documentElement;
+    // `.tab-pane` first: with tabs, each open page owns its own scrolling and `.app-main`
+    // is a flex column that never scrolls, so resolving to it would leave the ink layer
+    // measuring a box whose scrollTop is permanently 0 - the ink would sit still while the
+    // note moved under it. `.app-main` stays as the fallback for anywhere a page renders
+    // outside a pane.
+    const scroller = (anchor.closest('.tab-pane, .app-main') as HTMLElement | null) ?? document.documentElement;
     const sRect =
       scroller === document.documentElement
         ? { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight }
@@ -97,7 +102,9 @@ export default function NoteInkOverlay({ noteId, anchorRef, open, onClose }: Not
     if (!open) return;
     measure();
     const anchor = anchorRef.current;
-    const scroller = anchor?.closest('.app-main') as HTMLElement | null;
+    // Same resolution as measure() above: the pane is what scrolls, so it is what has a
+    // scroll event to listen to.
+    const scroller = anchor?.closest('.tab-pane, .app-main') as HTMLElement | null;
     scroller?.addEventListener('scroll', scheduleMeasure, { passive: true });
     window.addEventListener('resize', scheduleMeasure);
     const ro = anchor ? new ResizeObserver(scheduleMeasure) : null;

@@ -153,8 +153,17 @@ export async function createNoteViaButton(page: Page): Promise<void> {
   await expect(page.getByTestId(TESTIDS.noteEditor)).toBeVisible({ timeout: 10_000 });
 }
 
+/**
+ * The note editor the user can see.
+ *
+ * Filtered to the visible one, because several note pages can be mounted at once now - one
+ * per open tab, all but the active one hidden - and an unscoped testid resolves to every
+ * one of them, which fails strict mode rather than picking wrongly. Visibility rather than
+ * `.tab-pane[data-active]` so this keeps working on the surfaces that render a note
+ * outside the tabbed shell, like a share link.
+ */
 export function editorBody(page: Page): Locator {
-  return page.getByTestId(TESTIDS.noteEditor);
+  return page.getByTestId(TESTIDS.noteEditor).filter({ visible: true });
 }
 
 export function titleInput(page: Page): Locator {
@@ -243,14 +252,27 @@ export async function selectOptionMatching(select: Locator, pattern: RegExp): Pr
 }
 
 /**
- * Note list rows. web/src/components/NoteCard.tsx (real, already-built) renders
- * `role="button"` cards with class `note-card`, and its own docstring says
- * NotebookPage reuses it with a `controls` prop - so `.note-card` is the primary
- * selector, with the `note-row` testid as a fallback in case that inference is
- * wrong once NotebookPage.tsx actually lands.
+ * Note list rows, class `note-card`, with the `note-row` testid as a fallback.
+ *
+ * The card's TITLE is a role=link, not the role=button this comment used to claim. It
+ * changed with tabs: the commonest way to open a note in the whole app was the one way
+ * that could not be Ctrl-clicked, middle-clicked or opened in a new tab from the
+ * browser's own menu, and none of those are behaviours a button can be given.
  */
 export function noteCards(page: Page): Locator {
   return page.locator('.note-card').or(page.getByTestId(TESTIDS.noteRow));
+}
+
+/**
+ * The tab pane currently on screen.
+ *
+ * <main> holds SEVERAL pages now - one per mounted tab, all but one hidden - plus the tab
+ * strip itself. So an assertion like "this title is not in <main>" no longer means what it
+ * used to: it can match a background pane, or a tab's own label in the strip. Scope to
+ * this when a spec means "what the user is looking at".
+ */
+export function activePane(page: Page): Locator {
+  return page.locator('.tab-pane[data-active]');
 }
 
 /** Extracts the note id from the current /note/:id URL. */
