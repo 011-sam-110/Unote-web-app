@@ -15,6 +15,7 @@ import QuickCardModal from './QuickCardModal';
 import CommentIcon from '../comments/CommentIcon';
 import { notifyCommentAdded } from '../comments/commentsBus';
 import { markdownToSafeHtml } from './markdown';
+import { useNativeMenuSuppressed } from './nativeMenuSuppression';
 
 /** Closes `close()` on outside click or Escape while `active` - used for the AI dropdown and
  *  the comment composer popover (the AI dropdown previously only closed on mouse-leave, which
@@ -72,6 +73,8 @@ export default function SelectionToolbar({ editor }: { editor: Editor }) {
   const [commentSaving, setCommentSaving] = useState(false);
   const [quickCardOpen, setQuickCardOpen] = useState(false);
   const [quickCardAnswer, setQuickCardAnswer] = useState('');
+
+  const isNativeMenuOpen = useNativeMenuSuppressed(editor.view.dom);
 
   const aiTriggerRef = useRef<HTMLDivElement>(null);
   const commentTriggerRef = useRef<HTMLDivElement>(null);
@@ -209,6 +212,11 @@ export default function SelectionToolbar({ editor }: { editor: Editor }) {
         // line); shift keeps it inside the viewport horizontally.
         options={{ placement: 'top', offset: 8, flip: { fallbackPlacements: ['bottom'], padding: 8 }, shift: { padding: 8 } }}
         shouldShow={({ editor, state }) => {
+          // Deliberately selection-type-agnostic: it asks "did the user just invoke the
+          // browser's menu here", not "what kind of selection is this". A right-clicked
+          // inline atom produces a NodeSelection, which is also non-empty, so anything that
+          // owns its own context menu is covered by the same predicate.
+          if (isNativeMenuOpen()) return false;
           const { empty } = state.selection;
           if (empty) return false;
           if (editor.isActive('table') || editor.isActive('image') || editor.isActive('codeBlock')) return false;
