@@ -633,12 +633,13 @@ git commit -m "feat(references): close SSRF on user-supplied URLs before any res
 DOIs return **native CSL-JSON** by content negotiation at `doi.org` — measured, not assumed. That means no mapping layer for any DOI-bearing source, and it covers DataCite and mEDRA as well as Crossref because the negotiation happens at the resolver rather than at one registry. The payload carries no `id`, so we must set one.
 
 **Files:**
+- Create: `server/src/lib/references/resolveResult.ts` (the shared contract)
 - Create: `server/src/lib/references/resolvers/doi.ts`
 - Test: `server/test/resolveDoi.test.ts`
 
 **Interfaces:**
 - Consumes: `userAgent()` from Task 3.
-- Produces: `resolveDoi(doi: string): Promise<ResolveResult>` and the shared type `ResolveResult` (defined here, imported by Tasks 5–7):
+- Produces, from `resolveResult.ts` — every resolver returns this shape, and Tasks 5, 6 and 7 import it from **here, not from a sibling resolver**:
   ```ts
   interface ResolveResult {
     found: boolean;
@@ -647,7 +648,14 @@ DOIs return **native CSL-JSON** by content negotiation at `doi.org` — measured
     missing: string[];               // CSL variables the registry did not supply
     reason?: string;                 // when found === false
   }
+  function missingFrom(csl: Record<string, unknown>): string[];
   ```
+- Produces, from `resolvers/doi.ts`: `resolveDoi(doi: string): Promise<ResolveResult>`.
+
+> **Why the contract is its own module.** The ISBN and webpage resolvers need the same
+> return type. Importing it from `resolvers/doi.ts` would make every resolver depend on
+> the DOI one for a type it does not otherwise use — a dependency that is invisible until
+> someone deletes or moves the DOI resolver and three unrelated files stop compiling.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -716,7 +724,44 @@ describe('resolveDoi', () => {
 Run: `npx vitest run test/resolveDoi.test.ts --root server`
 Expected: FAIL — module not found
 
-- [ ] **Step 3: Write the implementation**
+- [ ] **Step 3a: Write the shared resolver contract**
+
+```ts
+// server/src/lib/references/resolveResult.ts
+/**
+ * What every resolver returns.
+ *
+ * Its own module rather than a re-export from one of the resolvers: the ISBN and webpage
+ * resolvers need this shape too, and importing it from `resolvers/doi.ts` would make them
+ * depend on the DOI resolver for a type they otherwise have nothing to do with.
+ *
+ * `missing` is the honest half of the contract. A registry that does not supply a publisher
+ * gets that field LISTED here, never guessed - which is the whole premise of the feature,
+ * expressed as a return type rather than as a convention someone has to remember.
+ */
+export interface ResolveResult {
+  found: boolean;
+  /** CSL-JSON. Carries no `id` - doi.org does not supply one and citeproc needs it set. */
+  csl?: Record<string, unknown>;
+  registry: string;
+  /** CSL variables the registry did not supply. Reported, never filled in. */
+  missing: string[];
+  /** Present only when found === false. Safe to show; never contains a response body. */
+  reason?: string;
+}
+
+/** What a usable reference generally needs. Absent fields are REPORTED, never filled in. */
+const WANTED = ['title', 'author', 'issued', 'container-title', 'publisher'];
+
+export function missingFrom(csl: Record<string, unknown>): string[] {
+  return WANTED.filter((k) => {
+    const v = csl[k];
+    return v === undefined || v === null || (Array.isArray(v) && v.length === 0) || v === '';
+  });
+}
+```
+
+- [ ] **Step 3b: Write the DOI resolver**
 
 ```ts
 // server/src/lib/references/resolvers/doi.ts
@@ -734,24 +779,7 @@ Expected: FAIL — module not found
  * The payload carries no `id`, which citeproc requires - the caller assigns one.
  */
 import { userAgent } from '../safeFetch.js';
-
-export interface ResolveResult {
-  found: boolean;
-  csl?: Record<string, unknown>;
-  registry: string;
-  missing: string[];
-  reason?: string;
-}
-
-/** What a usable reference generally needs. Absent fields are REPORTED, never filled in. */
-const WANTED = ['title', 'author', 'issued', 'container-title', 'publisher'];
-
-export function missingFrom(csl: Record<string, unknown>): string[] {
-  return WANTED.filter((k) => {
-    const v = csl[k];
-    return v === undefined || v === null || (Array.isArray(v) && v.length === 0) || v === '';
-  });
-}
+import { missingFrom, type ResolveResult } from '../resolveResult.js';
 
 export async function resolveDoi(doi: string): Promise<ResolveResult> {
   const url = `https://doi.org/${doi}`;
@@ -791,7 +819,7 @@ Expected: PASS, 4 tests
 - [ ] **Step 5: Commit**
 
 ```bash
-git add server/src/lib/references/resolvers/doi.ts server/test/resolveDoi.test.ts
+git add server/src/lib/references/resolveResult.ts server/src/lib/references/resolvers/doi.ts server/test/resolveDoi.test.ts
 git commit -m "feat(references): resolve DOIs to native CSL-JSON, no mapping layer"
 ```
 
@@ -806,7 +834,7 @@ OpenLibrary does **not** return author names — it returns a key. Every book co
 - Test: `server/test/resolveIsbn.test.ts`
 
 **Interfaces:**
-- Consumes: `ResolveResult`, `missingFrom` (Task 4); `userAgent()` (Task 3).
+- Consumes: `ResolveResult`, `missingFrom` from `../resolveResult.js` (Task 4); `userAgent()` (Task 3).
 - Produces: `resolveIsbn(isbn: string): Promise<ResolveResult>`.
 
 - [ ] **Step 1: Write the failing test**
@@ -921,7 +949,7 @@ Expected: FAIL — module not found
  * `missing` rather than filled in.
  */
 import { userAgent } from '../safeFetch.js';
-import { missingFrom, type ResolveResult } from './doi.js';
+import { missingFrom, type ResolveResult } from '../resolveResult.js';
 
 interface OlBook {
   title?: string;
@@ -1148,7 +1176,7 @@ The type most students cite and the only one with no registry behind it. Metadat
 - Test: `server/test/resolveWebpage.test.ts`
 
 **Interfaces:**
-- Consumes: `safeFetch`, `SsrfBlocked` (Task 3); `ResolveResult`, `missingFrom` (Task 4).
+- Consumes: `safeFetch`, `SsrfBlocked` (Task 3); `ResolveResult`, `missingFrom` from `../resolveResult.js` (Task 4).
 - Produces: `resolveWebpage(url: string, now?: Date): Promise<ResolveResult>`.
 
 - [ ] **Step 1: Write the failing test**
@@ -1241,7 +1269,7 @@ Expected: FAIL — module not found
  * URL is user-supplied by definition, and this is the one resolver where that is true.
  */
 import { safeFetch, SsrfBlocked } from '../safeFetch.js';
-import { missingFrom, type ResolveResult } from './doi.js';
+import { missingFrom, type ResolveResult } from '../resolveResult.js';
 
 function meta(html: string, attr: 'property' | 'name', key: string): string | undefined {
   const re = new RegExp(`<meta[^>]+${attr}=["']${key}["'][^>]*content=["']([^"']+)["']`, 'i');
@@ -2073,7 +2101,7 @@ git commit -m "feat(references): the source library API"
 
 **Placeholders.** None: every step carries runnable code or an exact command.
 
-**Type consistency.** `ResolveResult` and `missingFrom` are defined once in Task 4 and imported by Tasks 5 and 7. `Verdict`/`VerdictState` are defined in Task 8 and consumed in Task 10. `userAgent()` is defined in Task 3 (`safeFetch.ts`) and used in Tasks 4, 5, 6. `sourceTypeById` from Task 1 is used in Task 10.
+**Type consistency.** `ResolveResult` and `missingFrom` live in `server/src/lib/references/resolveResult.ts` (Task 4) and are imported from there by Tasks 5, 6 and 7 - never from a sibling resolver. `Verdict`/`VerdictState` are defined in Task 8 and consumed in Task 10. `userAgent()` is defined in Task 3 (`safeFetch.ts`) and used in Tasks 4, 5, 6. `sourceTypeById` from Task 1 is used in Task 10.
 
 **One deliberate deviation from the spec**, worth a reviewer's attention: the spec's §6.3 cadence table includes a 7-day staleness sweep. That sweep is a **client** behaviour (it fires on note open) and so belongs in Part 2. The server endpoint it calls — `POST /api/references/sources/:id/verify` — is built here, and `checked_at` is stored, so Part 2 has everything it needs.
 
