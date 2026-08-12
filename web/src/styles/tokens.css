@@ -99,6 +99,13 @@
 
   --focus-ring: 0 0 0 3px var(--accent-soft), 0 0 0 1px var(--accent);
 
+  /* ---- spell check ---- */
+  /* Its own token rather than --danger: a possible typo is an ambient observation, not an
+     error, and sharing the error colour would make it assert more than it knows. Red wavy
+     under prose is the platform's own spelling signal on every browser and both desktop
+     OSes, so this deliberately matches that vocabulary rather than inventing one. */
+  --spell-underline: #d2342a;
+
   color-scheme: light;
 }
 
@@ -160,6 +167,11 @@
   --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.3);
   --shadow-2: 0 4px 20px rgba(0, 0, 0, 0.45);
   --ring-subtle: rgba(255, 255, 255, 0.16);
+
+  /* ---- spell check ---- */
+  /* Lifted off the light value: #d2342a on this ground is close to vibrating, and a
+     squiggle the eye has to fight is worse than no squiggle. */
+  --spell-underline: #f0705f;
 
   color-scheme: dark;
 }

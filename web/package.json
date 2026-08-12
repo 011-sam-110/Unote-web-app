@@ -43,6 +43,7 @@
     "dexie": "^4.4.4",
     "dompurify": "^3.4.12",
     "fflate": "^0.8.2",
+    "harper.js": "^2.7.0",
     "katex": "^0.17.0",
     "lowlight": "^3.3.0",
     "marked": "^18.0.6",
