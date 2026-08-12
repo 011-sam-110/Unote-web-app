@@ -84,6 +84,15 @@ const BLOCKED: Record<string, string> = {
   meta: 'Make an account to see server details.',
   qr: 'Make an account to capture notes from your phone. The phone has to reach your account, not this browser.',
   unlinkedMentions: 'Make an account to see unlinked mentions.',
+  // Referencing. A source library is a list that has to still be there next term, and
+  // checking a source means asking a registry - neither survives a browser with no account.
+  referenceTypes: 'Make an account to build a source library.',
+  resolveReference: 'Make an account to look up a source. The lookup asks a registry from the server.',
+  referenceSources: 'Make an account to keep a source library. It has to outlive this browser.',
+  createReferenceSource: 'Make an account to save a source.',
+  updateReferenceSource: 'Make an account to save a source.',
+  deleteReferenceSource: 'Make an account to save a source.',
+  verifyReferenceSource: 'Make an account to check a source against a registry.',
 };
 
 const DEFAULT_BLOCKED = 'Make an account to use this. It needs a server, and nothing here is saved to one.';
