@@ -12,10 +12,22 @@
 import { safeFetch, SsrfBlocked } from '../safeFetch.js';
 import { missingFrom, type ResolveResult } from '../resolveResult.js';
 
+// The closing quote must match whichever quote opened the attribute: a naive `["']` close
+// class accepts EITHER quote character, so a double-quoted value containing an apostrophe
+// (`content="McDonald's earnings..."`) gets cut at the apostrophe. Matching each quote style
+// as its own alternative - rather than a shared character class - keeps a `"`-delimited value
+// running until its own `"`, and likewise for `'`, so both delimiters stay supported without
+// either one bleeding into the other's content.
+function quoted(name: string): string {
+  return `${name}=(?:"([^"]*)"|'([^']*)')`;
+}
+
 function meta(html: string, attr: 'property' | 'name', key: string): string | undefined {
-  const re = new RegExp(`<meta[^>]+${attr}=["']${key}["'][^>]*content=["']([^"']+)["']`, 'i');
-  const alt = new RegExp(`<meta[^>]+content=["']([^"']+)["'][^>]*${attr}=["']${key}["']`, 'i');
-  return re.exec(html)?.[1] ?? alt.exec(html)?.[1];
+  const attrMatch = `(?:${attr}="${key}"|${attr}='${key}')`;
+  const re = new RegExp(`<meta[^>]+${attrMatch}[^>]*${quoted('content')}`, 'i');
+  const alt = new RegExp(`<meta[^>]+${quoted('content')}[^>]*${attrMatch}`, 'i');
+  const m = re.exec(html) ?? alt.exec(html);
+  return m ? (m[1] ?? m[2]) : undefined;
 }
 
 function decodeEntities(s: string): string {

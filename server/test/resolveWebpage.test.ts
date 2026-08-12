@@ -60,4 +60,35 @@ describe('resolveWebpage', () => {
     expect(out.found).toBe(false);
     expect(out.reason).toMatch(/404/);
   });
+
+  it('does not truncate a double-quoted meta value at an apostrophe', async () => {
+    const html = `<!doctype html><html><head>
+      <meta property="og:title" content="McDonald's earnings beat forecasts">
+      <meta property="og:site_name" content="Nation's Report Card released">
+      <meta name="author" content="Conor O'Brien">
+    </head><body></body></html>`;
+    safeFetchMock.mockResolvedValue({ ok: true, status: 200, finalUrl: 'https://x.com/', body: html, contentType: 'text/html' });
+    const out = await resolveWebpage('https://x.com/');
+    expect(out.csl?.title).toBe("McDonald's earnings beat forecasts");
+    expect(out.csl?.['container-title']).toBe("Nation's Report Card released");
+    expect(out.csl?.author).toEqual([{ literal: "Conor O'Brien" }]);
+  });
+
+  it('still extracts meta values delimited by single quotes', async () => {
+    const html = `<!doctype html><html><head>
+      <meta property='og:title' content='Single-quoted title'>
+    </head><body></body></html>`;
+    safeFetchMock.mockResolvedValue({ ok: true, status: 200, finalUrl: 'https://x.com/', body: html, contentType: 'text/html' });
+    const out = await resolveWebpage('https://x.com/');
+    expect(out.csl?.title).toBe('Single-quoted title');
+  });
+
+  it('decodes HTML entities in extracted text', async () => {
+    const html = `<!doctype html><html><head>
+      <meta property="og:title" content="Rock &amp; Roll Hall of Fame&#39;s new inductees">
+    </head><body></body></html>`;
+    safeFetchMock.mockResolvedValue({ ok: true, status: 200, finalUrl: 'https://x.com/', body: html, contentType: 'text/html' });
+    const out = await resolveWebpage('https://x.com/');
+    expect(out.csl?.title).toBe("Rock & Roll Hall of Fame's new inductees");
+  });
 });
