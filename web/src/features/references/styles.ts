@@ -404,6 +404,30 @@ const REQUIRED: Record<Shape, { csl: string; label: string }[]> = {
  * more use than none. But it must not LOOK finished when it is not, and a student reading
  * a tidy-looking line has no way to tell. This is what the UI says next to it.
  */
+/**
+ * Names stored as ONE string, which no style can invert.
+ *
+ * OpenLibrary has no split name to give: an ISBN lookup returns "Fyodor Mikhaylovich
+ * Dostoyevsky" as a single value, so it is stored as a CSL `literal`. A literal is written
+ * out exactly as it is - which is correct and required for "World Health Organization", and
+ * wrong for a person, who every style here wants filed as "Dostoyevsky, F.M.".
+ *
+ * The tempting fix is to guess: split on the last space when it looks like a person. That
+ * guess is confidently wrong on "Penguin Random House" and on every mononym and every name
+ * whose family part comes first, and a citation tool being confidently wrong about an
+ * author's name is the exact failure mode this feature exists to refuse. So it is REPORTED
+ * instead, next to the reference, where the student - who knows whether their source was
+ * written by a person - can fix it in one edit.
+ */
+export function unsplitNames(csl: Csl): string[] {
+  const from = (v: unknown) =>
+    (Array.isArray(v) ? v : [])
+      .map((n) => (n && typeof n === 'object' ? (n as { literal?: string }).literal : undefined))
+      // A single word cannot be inverted anyway, so there is nothing to report.
+      .filter((s): s is string => Boolean(s && s.trim().includes(' ')));
+  return [...from(csl.author), ...from(csl.editor)];
+}
+
 export function missingFor(csl: Csl): string[] {
   const shape = shapeOf(csl);
   return REQUIRED[shape]

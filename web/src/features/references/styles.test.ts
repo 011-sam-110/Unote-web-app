@@ -5,7 +5,7 @@
 // fails here rather than in somebody's coursework. Snapshots would have recorded whatever
 // the code did on the day it was written, including the mistakes.
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_STYLE, formatInText, formatReference, missingFor, renderNames, shapeOf, STYLES } from './styles';
+import { DEFAULT_STYLE, formatInText, formatReference, missingFor, renderNames, shapeOf, STYLES, unsplitNames } from './styles';
 import type { Csl } from './types';
 
 /** Real record, as doi.org returns it for 10.1038/nature12373 (trimmed). */
@@ -209,6 +209,37 @@ describe('in-text citations', () => {
     expect(formatInText({ title: 'Untitled report', issued: { 'date-parts': [[2020]] } }, 'harvard')).toBe(
       '(Untitled report, 2020)',
     );
+  });
+});
+
+describe('unsplitNames', () => {
+  it('reports a name a registry could only give as one string', () => {
+    // The ISBN path stores "Fyodor Mikhaylovich Dostoyevsky" as a CSL literal, because
+    // OpenLibrary has no split name to give. No style can invert it to "Dostoyevsky, F.M."
+    expect(unsplitNames({ author: [{ literal: 'Fyodor Mikhaylovich Dostoyevsky' }] })).toEqual([
+      'Fyodor Mikhaylovich Dostoyevsky',
+    ]);
+  });
+
+  it('says nothing about a properly split name', () => {
+    expect(unsplitNames({ author: [{ family: 'Watson', given: 'James D.' }] })).toEqual([]);
+  });
+
+  it('says nothing about a one-word literal, which could not be inverted anyway', () => {
+    expect(unsplitNames({ author: [{ literal: 'Aristotle' }] })).toEqual([]);
+  });
+
+  it('reports an organisation too, rather than guessing it is not a person', () => {
+    // Deliberate. Deciding "World Health Organization" is an organisation and "Penguin
+    // Random House" is a person - or the reverse - is the guess this refuses to make. The
+    // wording next to it says an organisation is already correct.
+    expect(unsplitNames({ author: [{ literal: 'World Health Organization' }] })).toEqual([
+      'World Health Organization',
+    ]);
+  });
+
+  it('covers editors as well as authors', () => {
+    expect(unsplitNames({ editor: [{ literal: 'Ada Lovelace' }] })).toEqual(['Ada Lovelace']);
   });
 });
 

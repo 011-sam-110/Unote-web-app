@@ -7,7 +7,7 @@
 import { useState } from 'react';
 import Icon from '../../components/Icon';
 import { toast } from '../../components/Toast';
-import { formatInText, formatReference, missingFor, type StyleId } from './styles';
+import { formatInText, formatReference, missingFor, unsplitNames, type StyleId } from './styles';
 import type { Csl } from './types';
 
 async function copy(text: string, what: string) {
@@ -33,6 +33,7 @@ export default function ReferenceText({
   const reference = formatReference(csl, style);
   const inText = formatInText(csl, style, number);
   const missing = missingFor(csl);
+  const unsplit = unsplitNames(csl);
 
   return (
     <div className="rf-ref">
@@ -54,6 +55,15 @@ export default function ReferenceText({
         <p className="rf-ref__missing">
           Still short of {missing.join(', ')} - the reference will read as incomplete until
           you add {missing.length === 1 ? 'it' : 'them'}.
+        </p>
+      )}
+
+      {unsplit.length > 0 && (
+        <p className="rf-ref__note">
+          {unsplit.length === 1 ? `“${unsplit[0]}” is` : `${unsplit.length} names are`} stored as
+          one string, so {unsplit.length === 1 ? 'it' : 'they'} cannot be shortened to initials.
+          If that is a person, edit it to <em>Surname, First names</em> and it will file
+          correctly. If it is an organisation, it is already right.
         </p>
       )}
 
