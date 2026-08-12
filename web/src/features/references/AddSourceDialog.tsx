@@ -19,7 +19,8 @@ import Icon from '../../components/Icon';
 import { api } from '../../lib/api';
 import { errorMessage } from '../../lib/format';
 import SourceForm from './SourceForm';
-import { extraFacts, readField, splitFields, typeById, typeForCsl } from './csl';
+import { extraFacts, readField, splitFields, titleOf, typeById, typeForCsl } from './csl';
+import { bulkCounts, MAX_BULK_LINES, parseBulkInput, rowFromResponse, type BulkRow } from './bulk';
 import type { Candidate, Csl, ResolveResponse, SourceRecord, SourceType } from './types';
 
 type Stage =
@@ -27,7 +28,9 @@ type Stage =
   | { at: 'found'; res: ResolveResponse; kind: string; csl: Csl }
   | { at: 'candidates'; res: ResolveResponse; query: string }
   | { at: 'nothing'; res: ResolveResponse; query: string }
-  | { at: 'manual'; kind: string; csl: Csl; from?: string };
+  | { at: 'manual'; kind: string; csl: Csl; from?: string }
+  | { at: 'bulk' }
+  | { at: 'bulkResults'; rows: BulkRow[] };
 
 /** What the server decided the query was, said back in the student's words. Sniffing lives
  *  on the server - this only names the answer it already gave us. */
@@ -43,17 +46,21 @@ export default function AddSourceDialog({
   types,
   onClose,
   onSaved,
+  onSavedMany,
 }: {
   open: boolean;
   types: SourceType[];
   onClose: () => void;
   onSaved: (source: SourceRecord) => void;
+  onSavedMany: (sources: SourceRecord[]) => void;
 }) {
   const [query, setQuery] = useState('');
   const [stage, setStage] = useState<Stage>({ at: 'ask' });
   const [busy, setBusy] = useState<null | 'resolve' | 'save'>(null);
   const [error, setError] = useState<string | null>(null);
   const [editingFound, setEditingFound] = useState(false);
+  const [bulkText, setBulkText] = useState('');
+  const [bulkProgress, setBulkProgress] = useState<string | null>(null);
 
   // Reopening starts over. A dialog that reopens onto the last lookup's answer is one of
   // the ways a student ends up saving somebody else's source.
@@ -64,6 +71,8 @@ export default function AddSourceDialog({
     setBusy(null);
     setError(null);
     setEditingFound(false);
+    setBulkText('');
+    setBulkProgress(null);
   }, [open]);
 
   async function lookUp(text: string) {
@@ -129,6 +138,68 @@ export default function AddSourceDialog({
     }
   }
 
+  /**
+   * Resolve a pasted list, ONE AT A TIME.
+   *
+   * Sequential rather than Promise.all on purpose. These calls each make an outbound fetch
+   * to a public registry that is doing us a favour by answering, and firing twenty at once
+   * from one account is how a polite-pool User-Agent stops being welcome. It also lets the
+   * dialog show real progress instead of a spinner that means nothing.
+   */
+  async function resolveBulk(lines: string[]) {
+    const rows: BulkRow[] = lines.map((query, i) => ({ id: i, query, status: 'pending', missing: [], selected: false }));
+    setStage({ at: 'bulkResults', rows });
+    setBusy('resolve');
+    setError(null);
+    for (let i = 0; i < rows.length; i++) {
+      setBulkProgress(`Looking up ${i + 1} of ${rows.length}…`);
+      setStage({ at: 'bulkResults', rows: rows.map((r, j) => (j === i ? { ...r, status: 'resolving' } : r)) });
+      try {
+        rows[i] = rowFromResponse(rows[i], await api.resolveReference(rows[i].query));
+      } catch (e) {
+        rows[i] = { ...rows[i], status: 'error', reason: errorMessage(e, 'that lookup did not work'), selected: false };
+      }
+      setStage({ at: 'bulkResults', rows: [...rows] });
+    }
+    setBulkProgress(null);
+    setBusy(null);
+  }
+
+  /** Save every selected row, then check each - the same two acts the single-source path
+   *  performs, in the same order, so a bulk-added source is not a second-class record. */
+  async function saveBulk(rows: BulkRow[]) {
+    const chosen = rows.filter((r) => r.selected && r.status === 'found' && r.csl);
+    if (!chosen.length) return;
+    setBusy('save');
+    setError(null);
+    const saved: SourceRecord[] = [];
+    try {
+      for (let i = 0; i < chosen.length; i++) {
+        const row = chosen[i];
+        setBulkProgress(`Saving ${i + 1} of ${chosen.length}…`);
+        const { source } = await api.createReferenceSource({ kind: typeForCsl(row.csl!, types), csl: row.csl! });
+        let record = source;
+        try {
+          const { verdict } = await api.verifyReferenceSource(source.id);
+          record = { ...source, verdict };
+        } catch {
+          // Saved; unchecked is the true state, and the row's own Check button remains.
+        }
+        saved.push(record);
+      }
+      onSavedMany(saved);
+      onClose();
+    } catch (e) {
+      // Whatever landed before the failure IS saved, so it must reach the list rather than
+      // being dropped because a later one failed.
+      if (saved.length) onSavedMany(saved);
+      setError(errorMessage(e, `Saved ${saved.length} of ${chosen.length}. The rest did not save.`));
+    } finally {
+      setBulkProgress(null);
+      setBusy(null);
+    }
+  }
+
   return (
     <Modal open={open} onClose={onClose} title="Add a source" width={620}>
       <div className="rf-add">
@@ -139,6 +210,36 @@ export default function AddSourceDialog({
             busy={busy === 'resolve'}
             onLookUp={() => void lookUp(query)}
             onManual={() => startManual('website')}
+            onBulk={() => setStage({ at: 'bulk' })}
+          />
+        )}
+
+        {stage.at === 'bulk' && (
+          <BulkStage
+            text={bulkText}
+            setText={setBulkText}
+            onBack={() => setStage({ at: 'ask' })}
+            onResolve={() => void resolveBulk(parseBulkInput(bulkText))}
+          />
+        )}
+
+        {stage.at === 'bulkResults' && (
+          <BulkResultsStage
+            rows={stage.rows}
+            busy={busy !== null}
+            progress={bulkProgress}
+            onToggle={(id) =>
+              setStage({
+                ...stage,
+                rows: stage.rows.map((r) => (r.id === id && r.status === 'found' ? { ...r, selected: !r.selected } : r)),
+              })
+            }
+            onOpenOne={(q) => {
+              setQuery(q);
+              void lookUp(q);
+            }}
+            onBack={() => setStage({ at: 'bulk' })}
+            onSave={() => void saveBulk(stage.rows)}
           />
         )}
 
@@ -220,12 +321,14 @@ function AskStage({
   busy,
   onLookUp,
   onManual,
+  onBulk,
 }: {
   query: string;
   setQuery: (s: string) => void;
   busy: boolean;
   onLookUp: () => void;
   onManual: () => void;
+  onBulk: () => void;
 }) {
   return (
     <>
@@ -263,14 +366,157 @@ function AskStage({
         <span>or</span>
         <div className="rf-add__alt-line" />
       </div>
-      <button type="button" className="btn btn-secondary rf-add__manual" onClick={onManual}>
-        <Icon name="pencil" size={13} />
-        Type a source in yourself
-      </button>
+      <div className="rf-add__paths">
+        <button type="button" className="btn btn-secondary" onClick={onManual}>
+          <Icon name="pencil" size={13} />
+          Type a source in yourself
+        </button>
+        <button type="button" className="btn btn-secondary" onClick={onBulk}>
+          <Icon name="layers" size={13} />
+          Paste a whole list
+        </button>
+      </div>
       <p className="rf-add__note">
-        Nothing is looked up on this path, so nothing is filled in for you - which is the
-        point when the source is a lecture, an interview or a book with no ISBN.
+        Typing one in looks nothing up, so nothing is filled in for you - which is the point
+        when the source is a lecture, an interview or a book with no ISBN. Pasting a list
+        takes a reading list a line at a time.
       </p>
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+
+function BulkStage({
+  text,
+  setText,
+  onBack,
+  onResolve,
+}: {
+  text: string;
+  setText: (s: string) => void;
+  onBack: () => void;
+  onResolve: () => void;
+}) {
+  const lines = parseBulkInput(text);
+  const raw = text.split('\n').filter((l) => l.trim()).length;
+  return (
+    <>
+      <p className="rf-add__lead">
+        One source per line - DOIs, ISBNs and links. Numbering pasted out of a reading list
+        is stripped, and repeated lines are only looked up once.
+      </p>
+      <textarea
+        className="text-input rf-add__bulk"
+        rows={8}
+        value={text}
+        autoFocus
+        spellCheck={false}
+        placeholder={'10.1038/nature12373\n9780140449136\nhttps://www.bbc.co.uk/news/…'}
+        aria-label="One source per line"
+        onChange={(e) => setText(e.target.value)}
+      />
+      <p className="rf-add__note">
+        {lines.length > 0
+          ? `${lines.length} to look up${raw > lines.length ? ` (${raw - lines.length} skipped as blank or repeated)` : ''}. Each is one request to a registry, so they go one at a time.`
+          : `Up to ${MAX_BULK_LINES} at once.`}
+        {' '}A line that is a TITLE rather than an identifier will be flagged for you to pick
+        from - nothing is chosen on your behalf.
+      </p>
+      <div className="rf-add__actions">
+        <button type="button" className="btn btn-secondary" onClick={onBack}>
+          Back
+        </button>
+        <button type="button" className="btn btn-primary" disabled={lines.length === 0} onClick={onResolve}>
+          Look up {lines.length || ''}
+        </button>
+      </div>
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+
+const BULK_STATUS_WORD: Record<string, string> = {
+  pending: 'waiting',
+  resolving: 'looking…',
+  found: 'found',
+  nothing: 'nothing found',
+  choose: 'needs you to pick',
+  error: 'lookup failed',
+};
+
+function BulkResultsStage({
+  rows,
+  busy,
+  progress,
+  onToggle,
+  onOpenOne,
+  onBack,
+  onSave,
+}: {
+  rows: BulkRow[];
+  busy: boolean;
+  progress: string | null;
+  onToggle: (id: number) => void;
+  onOpenOne: (query: string) => void;
+  onBack: () => void;
+  onSave: () => void;
+}) {
+  const counts = bulkCounts(rows);
+  return (
+    <>
+      <p className="rf-add__lead">
+        {progress ?? (
+          <>
+            <strong>{counts.found}</strong> found, <strong>{counts.choose}</strong> need you
+            to pick, <strong>{counts.nothing}</strong> came back with nothing.
+          </>
+        )}
+      </p>
+
+      <ul className="rf-bulk">
+        {rows.map((row) => (
+          <li key={row.id} className="rf-bulk__row" data-status={row.status}>
+            <label className="rf-bulk__pick">
+              <input
+                type="checkbox"
+                checked={row.selected}
+                disabled={row.status !== 'found' || busy}
+                onChange={() => onToggle(row.id)}
+                aria-label={`Save ${row.query}`}
+              />
+            </label>
+            <div className="rf-bulk__body">
+              <span className="rf-bulk__title">
+                {row.status === 'found' && row.csl ? titleOf(row.csl) : row.query}
+              </span>
+              <span className="rf-bulk__meta">
+                <span className="rf-bulk__status">{BULK_STATUS_WORD[row.status]}</span>
+                {row.registry && ` · ${row.registry}`}
+                {row.reason && ` · ${row.reason}`}
+                {row.status === 'found' && row.missing.length > 0 && ` · ${row.missing.length} field(s) not supplied`}
+              </span>
+            </div>
+            {/* The one honest way out of an ambiguous line: open it on its own and choose.
+                Bulk never picks a candidate for you. */}
+            {row.status === 'choose' && (
+              <button type="button" className="btn btn-ghost btn-sm" disabled={busy} onClick={() => onOpenOne(row.query)}>
+                Pick
+              </button>
+            )}
+          </li>
+        ))}
+      </ul>
+
+      <div className="rf-add__actions">
+        <button type="button" className="btn btn-secondary" onClick={onBack} disabled={busy}>
+          Back
+        </button>
+        <button type="button" className="btn btn-primary" onClick={onSave} disabled={busy || counts.selected === 0}>
+          {busy ? progress ?? 'Working…' : `Save and check ${counts.selected}`}
+        </button>
+      </div>
     </>
   );
 }
