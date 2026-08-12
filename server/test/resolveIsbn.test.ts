@@ -64,6 +64,23 @@ describe('resolveIsbn', () => {
     const out = await resolveIsbn('9780000000001');
     expect(out.found).toBe(false);
     expect(out.reason).toMatch(/no book/i);
+    expect(out.reason).not.toMatch(/could not reach/i);
+  });
+
+  it('reports a thrown network error as unreachable, not as a nonexistent book', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      throw new TypeError('fetch failed');
+    }));
+    const out = await resolveIsbn('9780140449136');
+    expect(out.found).toBe(false);
+    expect(out.reason).toMatch(/could not reach/i);
+  });
+
+  it('reports a registry 500 as unreachable, not as a nonexistent book', async () => {
+    vi.stubGlobal('fetch', stub({ 'https://openlibrary.org/isbn/9780140449136.json': BOOK }, 500));
+    const out = await resolveIsbn('9780140449136');
+    expect(out.found).toBe(false);
+    expect(out.reason).toMatch(/could not reach/i);
   });
 
   it('maps publish_date to a CSL issued date-part', async () => {

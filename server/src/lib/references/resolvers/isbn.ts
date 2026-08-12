@@ -30,6 +30,8 @@ interface OlBook {
   authors?: { key: string }[];
 }
 
+/** Forgiving lookup for the author round trip: any failure - network, non-2xx, unparseable
+ *  body - collapses to `undefined` so a bad author record only costs `author`, never the book. */
 async function getJson<T>(url: string): Promise<T | undefined> {
   try {
     const res = await registryFetch(url, { accept: 'application/json' });
@@ -50,9 +52,30 @@ function issuedFrom(raw?: string): { 'date-parts': number[][] } | undefined {
 
 export async function resolveIsbn(isbn: string): Promise<ResolveResult> {
   const registry = 'openlibrary.org';
-  const book = await getJson<OlBook>(`https://openlibrary.org/isbn/${isbn}.json`);
-  if (!book) {
+
+  // Book lookup, unlike the author lookup below, distinguishes WHY it failed: a thrown
+  // network/timeout error and a non-404 status both mean the registry could not be reached
+  // and say nothing about whether the book exists. Only a genuine 404 means the ISBN is
+  // unknown to OpenLibrary. Mirrors doi.ts's shape for the same reason doi.ts has it.
+  let res: Response;
+  try {
+    res = await registryFetch(`https://openlibrary.org/isbn/${isbn}.json`, { accept: 'application/json' });
+  } catch {
+    return { found: false, registry, missing: [], reason: 'could not reach openlibrary.org' };
+  }
+
+  if (res.status === 404) {
     return { found: false, registry, missing: [], reason: 'no book with this ISBN' };
+  }
+  if (!res.ok) {
+    return { found: false, registry, missing: [], reason: `could not reach openlibrary.org (${res.status})` };
+  }
+
+  let book: OlBook;
+  try {
+    book = (await res.json()) as OlBook;
+  } catch {
+    return { found: false, registry, missing: [], reason: 'openlibrary.org returned something unreadable' };
   }
 
   // One request per author. Sequential would be N round trips on a multi-author book.
