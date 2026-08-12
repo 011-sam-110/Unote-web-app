@@ -290,6 +290,15 @@ describe('identify', () => {
   it('trims surrounding whitespace before deciding', () => {
     expect(identify('   10.1038/nature12373  ').kind).toBe('doi');
   });
+
+  it("keeps a DOI's own parentheses, including a trailing one", () => {
+    expect(identify('10.1000/abc(1)').value).toBe('10.1000/abc(1)');
+  });
+
+  it('drops sentence punctuation and an unbalanced closing paren', () => {
+    expect(identify('see 10.1038/nature12373.').value).toBe('10.1038/nature12373');
+    expect(identify('(see 10.1000/abc)').value).toBe('10.1000/abc');
+  });
 });
 ```
 
@@ -319,8 +328,30 @@ export interface Identified {
 }
 
 /** A DOI is "10." then a registrant code, a slash, and a suffix. Deliberately permissive
- *  on the suffix - DOIs legitimately contain almost anything. */
-const DOI_RE = /\b(10\.\d{4,9}\/[-._;()/:a-z0-9]+)\b/i;
+ *  on the suffix - DOIs legitimately contain almost anything, including parentheses (older
+ *  SICI-style suffixes especially).
+ *
+ *  Deliberately NO trailing \b. With one, a suffix ending in ')' fails the boundary - both
+ *  ')' and end-of-string are non-word, so there is no transition - the engine backtracks one
+ *  character, and a corrupted DOI is returned with no error: '10.1000/abc(1)' comes back as
+ *  '10.1000/abc(1'. Trim explicitly instead, where the rule can be stated and tested. */
+const DOI_RE = /\b(10\.\d{4,9}\/[-._;()/:a-z0-9]+)/i;
+
+/** Trim what the character class allows but which, trailing the match, is sentence
+ *  punctuation rather than part of the identifier. A trailing ')' is stripped ONLY when it is
+ *  unbalanced - more ')' than '(' - because a DOI may legitimately end in a matched
+ *  parenthesis and that has to survive. Counts are recomputed against the current string on
+ *  each pass, so peeling one character off cannot leave the balance stale. */
+function trimDoiSuffix(value: string): string {
+  let out = value.replace(/[.,;:]+$/, '');
+  while (out.endsWith(')')) {
+    const opens = (out.match(/\(/g) ?? []).length;
+    const closes = (out.match(/\)/g) ?? []).length;
+    if (closes <= opens) break;
+    out = out.slice(0, -1).replace(/[.,;:]+$/, '');
+  }
+  return out;
+}
 
 /** ISBN-10 check: weighted 10..1 mod 11, where 'X' is 10. */
 function isbn10Valid(s: string): boolean {
@@ -347,7 +378,7 @@ export function identify(raw: string): Identified {
   // DOI first: a doi.org URL is a DOI, not a webpage, and resolving it as a DOI gets us
   // CSL-JSON directly instead of scraping a landing page.
   const doi = DOI_RE.exec(s);
-  if (doi) return { kind: 'doi', value: doi[1].replace(/[.,;]+$/, '') };
+  if (doi) return { kind: 'doi', value: trimDoiSuffix(doi[1]) };
 
   // ISBN: only when the check digit actually validates. A 13-digit number that fails the
   // checksum is far more likely to be a phone number or an ID than a mistyped ISBN, and
