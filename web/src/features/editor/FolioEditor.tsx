@@ -8,6 +8,7 @@ import type { Node as PMNode } from '@tiptap/pm/model';
 import DragHandle from '@tiptap/extension-drag-handle-react';
 import { createFolioExtensions } from './buildExtensions';
 import SelectionToolbar from './SelectionToolbar';
+import SpellContextMenu from './spell/SpellContextMenu';
 import TableToolbar from './TableToolbar';
 import InsertMenuPopover from './InsertMenuPopover';
 import Icon from '../../components/Icon';
@@ -163,6 +164,7 @@ export default function FolioEditor({ content, notebookId, onReady, onDestroy, o
   return (
     <div className="folio-editor">
       <SelectionToolbar editor={editor} />
+      <SpellContextMenu editor={editor} />
       <TableToolbar editor={editor} />
       <DragHandle editor={editor} onNodeChange={handleNodeChange}>
         <div className="folio-block-gutter">
