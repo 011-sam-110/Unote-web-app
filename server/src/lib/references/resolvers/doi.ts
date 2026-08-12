@@ -11,17 +11,26 @@
  *
  * The payload carries no `id`, which citeproc requires - the caller assigns one.
  */
-import { userAgent } from '../safeFetch.js';
+import { registryFetch } from '../registryFetch.js';
 import { missingFrom, type ResolveResult } from '../resolveResult.js';
 
+/**
+ * A DOI legitimately contains `/` - that's the separator between prefix and suffix, and it
+ * must reach doi.org unescaped or the lookup breaks. What it must NOT contain unescaped is
+ * anything that changes how the URL parses: `#` starts a fragment, `?` starts a query string,
+ * `%` starts a percent-escape. Encoding the whole DOI with `encodeURIComponent` would also
+ * escape the `/` and turn a well-formed multi-segment DOI into a malformed lookup, so encode
+ * each segment on its own and rejoin with the separator instead.
+ */
+function encodeDoiPath(doi: string): string {
+  return doi.split('/').map(encodeURIComponent).join('/');
+}
+
 export async function resolveDoi(doi: string): Promise<ResolveResult> {
-  const url = `https://doi.org/${doi}`;
+  const url = `https://doi.org/${encodeDoiPath(doi)}`;
   let res: Response;
   try {
-    res = await fetch(url, {
-      redirect: 'follow',
-      headers: { Accept: 'application/vnd.citationstyles.csl+json', 'User-Agent': userAgent() },
-    });
+    res = await registryFetch(url, { accept: 'application/vnd.citationstyles.csl+json' });
   } catch {
     return { found: false, registry: 'doi.org', missing: [], reason: 'could not reach doi.org' };
   }

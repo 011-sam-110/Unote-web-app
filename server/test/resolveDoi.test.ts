@@ -12,7 +12,10 @@ const CSL = {
   DOI: '10.1038/nature12373',
 };
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.useRealTimers();
+});
 
 describe('resolveDoi', () => {
   it('asks doi.org for CSL-JSON and returns it unchanged', async () => {
@@ -31,11 +34,24 @@ describe('resolveDoi', () => {
     expect((init.headers as Record<string, string>).Accept).toContain('vnd.citationstyles.csl+json');
   });
 
+  it('sends a User-Agent identifying the app, not the bare runtime default', async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify(CSL), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await resolveDoi('10.1038/nature12373');
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const ua = (init.headers as Record<string, string>)['User-Agent'];
+    expect(ua).toBeTruthy();
+    expect(ua).toMatch(/Unote-Referencing/);
+  });
+
   it('reports a fabricated DOI as not found, with a reason', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('Resource not found.', { status: 404 })));
     const out = await resolveDoi('10.1016/j.cell.2019.99999');
     expect(out.found).toBe(false);
     expect(out.reason).toMatch(/did not resolve/i);
+    expect(out.reason).not.toMatch(/could not reach|cannot be fetched|unreadable/i);
   });
 
   it('lists fields the registry did not supply rather than inventing them', async () => {
@@ -52,5 +68,46 @@ describe('resolveDoi', () => {
     const out = await resolveDoi('10.1/x');
     expect(out.found).toBe(false);
     expect(out.reason).toMatch(/could not reach/i);
+  });
+
+  it('treats a registry 500 as unreachable, not as a refuted DOI', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('Internal Server Error', { status: 500 })));
+    const out = await resolveDoi('10.1/x');
+    expect(out.found).toBe(false);
+    expect(out.reason).toMatch(/could not reach|cannot be fetched|unreadable/i);
+    expect(out.reason).not.toMatch(/did not resolve/i);
+  });
+
+  it('treats a malformed JSON body as unreachable, not as a refuted DOI', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{not json', { status: 200 })));
+    const out = await resolveDoi('10.1/x');
+    expect(out.found).toBe(false);
+    expect(out.reason).toMatch(/could not reach|cannot be fetched|unreadable/i);
+    expect(out.reason).not.toMatch(/did not resolve/i);
+  });
+
+  it('gives up on a hanging registry instead of blocking the function forever', async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn((_url: string, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(new Error('The operation was aborted')));
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const resultPromise = resolveDoi('10.1/x');
+    await vi.advanceTimersByTimeAsync(8_000);
+    const out = await resultPromise;
+
+    expect(out.found).toBe(false);
+    expect(out.reason).toMatch(/could not reach/i);
+  });
+
+  it('encodes characters that would otherwise break URL parsing, without escaping the DOI slash', async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify(CSL), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await resolveDoi('10.1000/abc#frag?query%stray');
+
+    const [url] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('https://doi.org/10.1000/abc%23frag%3Fquery%25stray');
   });
 });

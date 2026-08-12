@@ -11,7 +11,7 @@
  */
 export interface ResolveResult {
   found: boolean;
-  /** CSL-JSON. Carries no `id` - doi.org does not supply one and citeproc needs it set. */
+  /** CSL-JSON. Carries no `id` - registries generally don't supply one, and citeproc needs it set. */
   csl?: Record<string, unknown>;
   registry: string;
   /** CSL variables the registry did not supply. Reported, never filled in. */
