@@ -4,6 +4,7 @@
 import { Extension } from '@tiptap/core';
 import { createSpellPlugin } from './SpellPlugin';
 import { lintText, preloadLinter } from './linter';
+import { primeDictionary } from './dictionary';
 import './spell.css';
 
 export const SpellCheck = Extension.create({
@@ -14,6 +15,10 @@ export const SpellCheck = Extension.create({
     // the user reading their note rather than with their first keystroke. The linter itself
     // is a module singleton, so the second, third and fourth mounted editor are free.
     const view = this.editor.view;
+    // Queued before the engine exists; replayed on load. A word the user taught it last
+    // session must be known on the FIRST lint, or they watch their own name get squiggled
+    // again and reasonably conclude the setting did not stick.
+    void primeDictionary();
     preloadLinter().catch(() => {
       // The engine could not load - offline before it was ever cached, or the asset is gone.
       // WITHOUT this the failure is invisible and reads as success: no engine means no

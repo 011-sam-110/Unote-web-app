@@ -26,3 +26,59 @@
     text-decoration-style: solid;
   }
 }
+
+/* The unified right-click menu. Fixed rather than absolute: it is positioned from pointer
+ * coordinates, and each tab pane is its own scroll container, so an absolutely positioned
+ * menu would drift the moment the pane scrolled underneath it. */
+.folio-spell-menu {
+  position: fixed;
+  z-index: 60;
+  min-width: 210px;
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-2);
+  font-size: 0.875rem;
+}
+
+.folio-spell-menu button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: calc(var(--radius) - 5px);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+}
+
+.folio-spell-menu button:hover {
+  background: var(--bg-hover);
+}
+
+.folio-spell-menu button:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+/* Corrections read as the answer, not as a list of options - they are the reason the menu
+ * opened, so they carry the weight and everything below them is secondary. */
+.folio-spell-suggestion {
+  font-weight: 600;
+}
+
+.folio-spell-empty {
+  padding: 6px 10px;
+  color: var(--ink-3);
+}
+
+.folio-spell-sep {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--line);
+}
