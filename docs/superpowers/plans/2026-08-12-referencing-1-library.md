@@ -414,6 +414,31 @@ git commit -m "feat(references): sniff DOI, ISBN, URL or free text from one box"
 
 ### Task 3: SSRF-safe fetch
 
+> **AS-BUILT CORRECTION — the code below is superseded. Read this before re-running it.**
+>
+> The reference implementation in this task used global `fetch` and pinned the URL's
+> hostname to the resolved IP literal. Review found that **breaks TLS**: the handshake, SNI
+> selection and certificate identity all happen before any HTTP header is sent, and Node
+> omits SNI for IP literals, so certificates are checked against the address. Virtually
+> every real HTTPS fetch would have failed — reported as `SsrfBlocked('request failed')`,
+> indistinguishable from a genuine block. No test caught it because the suite only
+> exercised *blocked* cases; nothing ever performed a successful fetch.
+>
+> As shipped (`8bf71db`, `81c59df`), the request path is built on **`node:https` /
+> `node:http`** instead: `host` is the validated IP (so the connection still cannot be
+> rebound) while `servername` carries the real hostname (so SNI and certificate identity
+> work). `undici` is not an installed dependency, so a custom dispatcher was not available.
+>
+> Four other findings were fixed in the same round: the timeout now covers body streaming
+> rather than stopping at headers; every failure path normalises to `SsrfBlocked`;
+> `isBlockedAddress` decomposes the hex form of IPv4-mapped IPv6 (`::ffff:7f00:1`); and the
+> guards gained real tests via an injected address predicate, since the guard blocks
+> loopback and a local test server is otherwise unreachable. The module is now three files —
+> `safeFetch.ts` (four public names only), `safeFetch.core.ts`, `safeFetch.testing.ts`.
+>
+> The address-classification logic below is unchanged and still correct. It is the
+> **request machinery** that was replaced.
+
 **This is the security gate for the whole feature and must land before any resolver that touches a user-supplied URL.** "Check the link is alive" reads as a UX nicety; it is a server-side request to an attacker-controlled string whose result is reported back to the attacker. On Vercel that reaches the cloud metadata endpoint and any internal address, so an unguarded version turns "verify my source" into an internal port scanner with the verdict text as the exfiltration channel.
 
 **Files:**
