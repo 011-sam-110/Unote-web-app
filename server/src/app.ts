@@ -25,6 +25,7 @@ import metaRouter from './routes/meta.js';
 import uploadsRouter from './routes/uploads.js';
 import exportRouter from './routes/export.js';
 import syncRouter from './routes/sync.js';
+import referencesRouter from './routes/references.js';
 
 /**
  * The app is multi-user and cookie-authenticated, which makes a permissive CORS policy
@@ -177,6 +178,7 @@ export function buildApp(): express.Express {
   app.use('/api/import', requireAuth, importsRouter);
   app.use('/api/study', requireAuth, studyRouter);
   app.use('/api/templates', requireAuth, templatesRouter);
+  app.use('/api/references', requireAuth, referencesRouter);
   app.use('/api/canvas', requireAuth, canvasRouter);
   // The offline client's delta feed. Owner-scoped throughout, like everything above.
   app.use('/api/sync', requireAuth, syncRouter);
