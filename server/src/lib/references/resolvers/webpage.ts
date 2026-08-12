@@ -9,7 +9,7 @@
  * All fetching goes through safeFetch. This module must never call `fetch` directly: the
  * URL is user-supplied by definition, and this is the one resolver where that is true.
  */
-import { safeFetch, SsrfBlocked } from '../safeFetch.js';
+import { safeFetch } from '../safeFetch.js';
 import { missingFrom, type ResolveResult } from '../resolveResult.js';
 
 // The closing quote must match whichever quote opened the attribute: a naive `["']` close
@@ -46,12 +46,11 @@ export async function resolveWebpage(url: string, now: Date = new Date()): Promi
   let res;
   try {
     res = await safeFetch(url);
-  } catch (err) {
+  } catch {
     // Deliberately does NOT include the message: an SSRF reason can name an internal
-    // address, and the verdict text is what an attacker reads back.
-    if (err instanceof SsrfBlocked) {
-      return { found: false, registry, missing: [], reason: 'that link cannot be fetched' };
-    }
+    // address, and the verdict text is what an attacker reads back. Every fetch failure -
+    // an SSRF block or anything else - gets this same flat reason, so nothing about why
+    // the fetch failed leaks into a rail students see.
     return { found: false, registry, missing: [], reason: 'that link cannot be fetched' };
   }
 

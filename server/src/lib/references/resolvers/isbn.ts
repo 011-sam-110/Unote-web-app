@@ -42,6 +42,16 @@ async function getJson<T>(url: string): Promise<T | undefined> {
   }
 }
 
+/** OpenLibrary is a user-editable wiki, so `ref.key` on an author reference is third-party
+ *  data an attacker can influence, not a value we can trust to still be a same-host path.
+ *  This is concatenated onto `https://openlibrary.org` below, and concatenation means a key
+ *  that does not begin with `/` relocates the host entirely: `.evil.com/x` produces the host
+ *  `openlibrary.org.evil.com`, and `@evil.com/x` produces the host `evil.com` (with
+ *  `openlibrary.org` demoted to userinfo). Only a key matching OpenLibrary's documented
+ *  `/authors/<id>` shape is used for the lookup; anything else is treated exactly like a
+ *  failed lookup - `continue` - so the book is still returned with `author` in `missing`. */
+const AUTHOR_KEY_RE = /^\/authors\/[A-Za-z0-9_.-]+$/;
+
 /** OpenLibrary dates are free text ("2003", "March 2003", "2003-03-01"). Only the year is
  *  reliable across the corpus, and a year is what every style needs, so that is all we take. */
 function issuedFrom(raw?: string): { 'date-parts': number[][] } | undefined {
@@ -81,6 +91,7 @@ export async function resolveIsbn(isbn: string): Promise<ResolveResult> {
   // One request per author. Sequential would be N round trips on a multi-author book.
   const authors: { literal: string }[] = [];
   for (const ref of book.authors ?? []) {
+    if (!AUTHOR_KEY_RE.test(ref.key)) continue;
     const rec = await getJson<{ name?: string; personal_name?: string }>(`https://openlibrary.org${ref.key}.json`);
     const name = rec?.personal_name ?? rec?.name;
     if (name) authors.push({ literal: name });

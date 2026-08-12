@@ -59,6 +59,26 @@ describe('resolveIsbn', () => {
     expect(out.missing).toContain('author');
   });
 
+  it('never fetches another host when an author key relocates it via userinfo or a subdomain suffix, and still returns the book', async () => {
+    const fetchMock = stub({
+      'https://openlibrary.org/isbn/9780140449136.json': {
+        ...BOOK,
+        authors: [{ key: '@evil.com/x' }, { key: '.evil.com/x' }],
+      },
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const out = await resolveIsbn('9780140449136');
+
+    expect(out.found).toBe(true);
+    expect(out.csl?.title).toBe('Crime and punishment');
+    expect(out.missing).toContain('author');
+    expect(out.csl?.author).toBeUndefined();
+
+    const hosts = fetchMock.mock.calls.map(([url]) => new URL(url as string).host);
+    expect(hosts).toEqual(['openlibrary.org']);
+  });
+
   it('reports a fabricated ISBN as not found', async () => {
     vi.stubGlobal('fetch', stub({}));
     const out = await resolveIsbn('9780000000001');

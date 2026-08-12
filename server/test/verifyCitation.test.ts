@@ -80,6 +80,37 @@ describe('verifySource', () => {
     expect(v.state).toBe('refuted');
   });
 
+  it('is REFUTED when a URL-only source returns 410 (gone)', async () => {
+    resolveWebpage.mockResolvedValue({ found: false, registry: 'webpage', missing: [], reason: 'the page returned 410' });
+    const v = await verifySource({ URL: 'https://example.com/gone', title: 'Anything' });
+    expect(v.state).toBe('refuted');
+  });
+
+  it('is UNCONFIRMED, never REFUTED, when a fetched webpage title does not match the claimed title, and names the page title found', async () => {
+    resolveWebpage.mockResolvedValue({ found: true, registry: 'webpage', missing: [],
+      csl: { title: 'Section | Site Name', URL: 'https://example.com/article' } });
+    const v = await verifySource({ URL: 'https://example.com/article', title: 'How Glaciers Form' });
+    expect(v.state).toBe('unconfirmed');
+    expect(v.state).not.toBe('refuted');
+    expect(v.evidence).toContain('Section | Site Name');
+  });
+
+  it('is UNCONFIRMED, not VERIFIED, when a webpage is reachable but has no comparable title', async () => {
+    resolveWebpage.mockResolvedValue({ found: true, registry: 'webpage', missing: ['title'],
+      csl: { URL: 'https://example.com/article' } });
+    const v = await verifySource({ URL: 'https://example.com/article', title: 'How Glaciers Form' });
+    expect(v.state).toBe('unconfirmed');
+    expect(v.state).not.toBe('verified');
+  });
+
+  it('is VERIFIED when a fetched webpage title agrees with the claimed title', async () => {
+    resolveWebpage.mockResolvedValue({ found: true, registry: 'webpage', missing: [],
+      csl: { title: 'How Glaciers Form', URL: 'https://example.com/article' } });
+    const v = await verifySource({ URL: 'https://example.com/article', title: 'How Glaciers Form' });
+    expect(v.state).toBe('verified');
+    expect(v.registry).toBe('webpage');
+  });
+
   it('is VERIFIED when an ISBN-only source resolves successfully', async () => {
     resolveIsbn.mockResolvedValue({ found: true, registry: 'openlibrary.org', missing: [],
       csl: { title: 'Category Theory for Programmers' } });

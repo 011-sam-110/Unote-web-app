@@ -108,6 +108,42 @@ export async function verifySource(csl: Record<string, unknown>, now: Date = new
   }
 
   const foundTitle = str(result.csl?.title);
+
+  // Webpages get their own rule below this point. A fetched page is evidence of
+  // reachability, not a registry record that can contradict anything: og:title is often
+  // "Section | Site Name", news sites rewrite headlines after publication, and many pages
+  // have no usable title at all. Treating a mismatch as REFUTED would be a false accusation
+  // on the source type students cite most, and treating a bare 200 (no title on either side
+  // to compare) as VERIFIED would sell mere reachability as a registry's confirmation. Only
+  // an actual title agreement earns VERIFIED here; everything else found is UNCONFIRMED.
+  // DOI/ISBN keep the original rule unchanged: those ARE registry records, so a contradicting
+  // title genuinely means REFUTED, and a resolved identifier with no title to compare is
+  // still a real check, so it stays VERIFIED.
+  if (result.registry === 'webpage') {
+    if (claimedTitle && foundTitle) {
+      if (titlesAgree(claimedTitle, foundTitle)) {
+        return {
+          state: 'verified',
+          registry: result.registry,
+          evidence: `${result.registry} confirms this record: "${foundTitle}".`,
+          checkedAt,
+        };
+      }
+      return {
+        state: 'unconfirmed',
+        registry: result.registry,
+        evidence: `The page at this link is titled "${foundTitle}", which does not match the claimed title. This does not mean the source is fake - only that the title could not be confirmed.`,
+        checkedAt,
+      };
+    }
+    return {
+      state: 'unconfirmed',
+      registry: result.registry,
+      evidence: 'The link is reachable, but there is no comparable title to check it against.',
+      checkedAt,
+    };
+  }
+
   if (claimedTitle && foundTitle && !titlesAgree(claimedTitle, foundTitle)) {
     return {
       state: 'refuted',
