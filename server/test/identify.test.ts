@@ -34,4 +34,29 @@ describe('identify', () => {
   it('trims surrounding whitespace before deciding', () => {
     expect(identify('   10.1038/nature12373  ').kind).toBe('doi');
   });
+
+  it('keeps a DOI whose own suffix ends in a balanced parenthesis (regression)', () => {
+    expect(identify('10.1000/abc(1)')).toEqual({ kind: 'doi', value: '10.1000/abc(1)' });
+  });
+
+  it('strips a trailing full stop from a DOI mentioned in prose', () => {
+    expect(identify('see 10.1038/nature12373.')).toEqual({ kind: 'doi', value: '10.1038/nature12373' });
+  });
+
+  it('strips an unbalanced trailing parenthesis picked up from surrounding prose', () => {
+    expect(identify('(see 10.1038/nature12373)')).toEqual({ kind: 'doi', value: '10.1038/nature12373' });
+  });
+
+  it('does not classify an author-date citation as a URL', () => {
+    expect(identify('Smith, J. 2020').kind).not.toBe('url');
+  });
+
+  it('does not classify a bare full-stop-terminated sentence as a URL', () => {
+    expect(identify('This is not a website.').kind).not.toBe('url');
+  });
+
+  it('treats empty and whitespace-only input as an empty query', () => {
+    expect(identify('')).toEqual({ kind: 'query', value: '' });
+    expect(identify('   ')).toEqual({ kind: 'query', value: '' });
+  });
 });
