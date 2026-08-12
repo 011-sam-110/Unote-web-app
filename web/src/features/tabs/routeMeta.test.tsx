@@ -17,6 +17,7 @@ const SAMPLES: Record<string, string> = {
   '/ask': '/ask',
   '/search': '/search',
   '/tags': '/tags',
+  '/references': '/references',
 };
 
 describe('tabRoutes', () => {

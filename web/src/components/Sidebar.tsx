@@ -253,6 +253,13 @@ export default function Sidebar({
           <HashGlyph size={15} />
           <span>Tags</span>
         </NavLink>
+        {/* The source library. Shown to a guest too, unlike Ask AI above: the page itself
+            explains why it needs an account, which is more use than a link that is simply
+            not there for reasons nobody can see. */}
+        <NavLink to="/references" className={({ isActive }) => `sidebar__nav-link${isActive ? ' active' : ''}`} onClick={onCloseMobile}>
+          <Icon name="link" size={15} />
+          <span>Sources</span>
+        </NavLink>
       </div>
 
       <div className="sidebar__divider" />

@@ -1,0 +1,619 @@
+/* The source library. Tokens only - every colour below is a var() themed in
+   tokens.css, so dark mode is not a second stylesheet to keep in step. The four
+   --verdict-* tokens are defined there in both themes, in one fenced block. */
+
+.rf-page {
+  padding: 44px clamp(20px, 4vw, 40px) 90px;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.rf-page__crumb {
+  font-family: var(--font-mono);
+  font-size: var(--caption-size);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: var(--caption-tracking);
+  color: var(--ink-3);
+  margin-bottom: 8px;
+}
+
+.rf-page__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+
+.rf-page__title {
+  font-family: var(--font-display);
+  font-size: 36px;
+  font-weight: 500;
+  letter-spacing: -0.015em;
+  line-height: 1.1;
+  color: var(--ink);
+  margin: 0;
+}
+
+.rf-page__lead {
+  margin: 0 0 24px;
+  font-size: 13.5px;
+  line-height: 1.6;
+  max-width: 62ch;
+  color: var(--ink-3);
+}
+.rf-page__lead strong {
+  color: var(--ink-2);
+  font-weight: 600;
+}
+
+/* --- verdict badge ------------------------------------------------------- */
+/* Glyph, then word. Both are drawn in the state's own ink; the fill is a wash
+   of the same hue so the badge is legible without relying on the hue to say
+   which state it is. See VerdictBadge.tsx for why the glyph leads. */
+.rf-verdict {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px 3px 7px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+.rf-verdict[data-size='sm'] {
+  font-size: 11px;
+  padding: 2px 8px 2px 6px;
+}
+.rf-verdict__glyph {
+  flex: 0 0 auto;
+}
+
+.rf-verdict[data-state='verified'] {
+  color: var(--verdict-verified);
+  background: var(--verdict-verified-soft);
+  border-color: var(--verdict-verified-soft);
+}
+.rf-verdict[data-state='unconfirmed'] {
+  color: var(--verdict-unconfirmed);
+  background: var(--verdict-unconfirmed-soft);
+  border-color: var(--verdict-unconfirmed-soft);
+}
+.rf-verdict[data-state='refuted'] {
+  color: var(--verdict-refuted);
+  background: var(--verdict-refuted-soft);
+  border-color: var(--verdict-refuted-soft);
+}
+/* The third channel, after glyph and hue: a dashed edge, because "we could not
+   ask" is about the connection rather than about the source. Nothing else in
+   the app is dashed, so it reads as provisional rather than as an accusation. */
+.rf-verdict[data-state='unreachable'] {
+  color: var(--verdict-unreachable);
+  background: var(--verdict-unreachable-soft);
+  border-color: var(--verdict-unreachable);
+  border-style: dashed;
+}
+
+/* --- filters ------------------------------------------------------------- */
+.rf-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 20px;
+  align-items: center;
+}
+.rf-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px 3px 4px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--bg-elevated);
+  cursor: pointer;
+  transition: border-color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
+}
+.rf-filter:hover {
+  border-color: var(--ink-3);
+}
+.rf-filter.is-active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.rf-filter__count {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--ink-3);
+  padding-right: 3px;
+}
+
+/* --- the list ------------------------------------------------------------ */
+.rf-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.rf-row {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--bg-elevated);
+  overflow: hidden;
+  transition: border-color var(--dur-fast) var(--ease-out);
+}
+.rf-row:hover {
+  border-color: var(--ink-3);
+}
+.rf-row--skeleton {
+  padding: 14px 16px;
+}
+
+.rf-row__main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px 12px 8px;
+}
+
+.rf-row__disclose {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
+  text-align: left;
+  background: none;
+  cursor: pointer;
+  padding: 2px 0;
+}
+.rf-row__chev {
+  display: flex;
+  align-items: center;
+  padding-top: 2px;
+  color: var(--ink-3);
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+.rf-row__chev[data-open='true'] {
+  transform: rotate(90deg);
+}
+.rf-row__text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.rf-row__title {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1.3;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.rf-row__summary {
+  font-size: 12px;
+  color: var(--ink-3);
+  overflow-wrap: anywhere;
+}
+
+.rf-row__badges {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+.rf-row__kind {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ink-3);
+  background: var(--tint);
+  border-radius: 999px;
+  padding: 3px 8px;
+}
+
+.rf-row__detail {
+  border-top: 1px solid var(--line);
+  padding: 12px 16px 14px;
+  background: var(--bg-paper);
+}
+/* The registry's own sentence, in the reading voice: it is a quotation of what
+   something else said, not our summary of it. */
+.rf-row__evidence {
+  margin: 0 0 6px;
+  font-family: var(--font-display);
+  font-size: 14.5px;
+  line-height: 1.5;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.rf-row__meaning {
+  margin: 0 0 8px;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--ink-3);
+  max-width: 62ch;
+}
+.rf-row__age {
+  margin: 0 0 12px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-3);
+}
+/* An old verdict must read as old rather than as freshly confirmed. */
+.rf-row__age[data-stale='true'] {
+  color: var(--warn);
+}
+
+.rf-row__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.rf-row__confirm {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--ink-2);
+}
+.rf-row__delete {
+  margin-left: auto;
+  color: var(--danger);
+}
+
+/* --- add dialog ---------------------------------------------------------- */
+.rf-add {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.rf-add__lead {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--ink-2);
+}
+.rf-add__lead strong {
+  color: var(--ink);
+}
+.rf-add__row {
+  display: flex;
+  gap: 8px;
+}
+.rf-add__input {
+  flex: 1 1 auto;
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+.rf-add__alt {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: var(--caption-tracking);
+  color: var(--ink-3);
+  margin: 2px 0;
+}
+.rf-add__alt-line {
+  flex: 1 1 auto;
+  height: 1px;
+  background: var(--line);
+}
+.rf-add__manual {
+  align-self: flex-start;
+}
+.rf-add__note,
+.rf-add__from {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--ink-3);
+  max-width: 62ch;
+}
+.rf-add__from {
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+.rf-add__error {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--danger);
+  background: var(--danger-soft);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+}
+.rf-add__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 4px;
+}
+.rf-add__type {
+  max-width: 280px;
+}
+
+/* --- the found / needed split -------------------------------------------- */
+/* Two groups, never one form. The border and the fill are what stop them
+   reading as one continuous list of fields: what a registry supplied and what
+   it did not are different KINDS of thing, and merging them is exactly the
+   presentation this feature exists to refuse. */
+.rf-group {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: 12px 14px 14px;
+}
+.rf-group--found {
+  background: var(--bg-paper);
+}
+.rf-group--needed {
+  border-color: var(--accent-line);
+  background: var(--accent-wash);
+}
+.rf-group__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.rf-group__title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.rf-group--found .rf-group__title {
+  color: var(--verdict-verified);
+}
+.rf-group--needed .rf-group__title {
+  color: var(--accent);
+}
+.rf-group__count {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-3);
+  background: var(--tint);
+  border-radius: 999px;
+  padding: 1px 7px;
+}
+.rf-group__edit {
+  margin-left: auto;
+}
+.rf-group__note,
+.rf-group__empty {
+  margin: 0 0 12px;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--ink-2);
+  max-width: 62ch;
+}
+.rf-group__empty {
+  margin-bottom: 0;
+}
+
+.rf-facts {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.rf-facts__row {
+  display: grid;
+  grid-template-columns: 128px 1fr;
+  gap: 10px;
+  align-items: baseline;
+}
+.rf-facts__row dt {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ink-3);
+}
+.rf-facts__row dd {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
+
+/* Values the registry supplied that the chosen type has no box for. Set apart by a rule
+   and a note rather than hidden: they ARE saved, and they are usually the sign that the
+   type above is wrong. */
+.rf-facts__extra-note {
+  margin: 12px 0 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--ink-3);
+  max-width: 62ch;
+}
+.rf-facts--extra .rf-facts__row dd {
+  color: var(--ink-2);
+}
+
+/* --- form fields --------------------------------------------------------- */
+.rf-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.rf-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.rf-field__label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.rf-field__rec {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 500;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-radius: 999px;
+  padding: 1px 6px;
+}
+.rf-field__rec--muted {
+  color: var(--ink-3);
+  background: var(--tint);
+}
+.rf-field__area {
+  resize: vertical;
+  min-height: 54px;
+  font-family: var(--font-ui);
+  line-height: 1.5;
+}
+.rf-field__hint {
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--ink-3);
+}
+
+/* --- candidates ---------------------------------------------------------- */
+.rf-candidates {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 46vh;
+  overflow-y: auto;
+}
+.rf-candidate {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  cursor: pointer;
+  transition: border-color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
+}
+.rf-candidate:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: var(--accent-wash);
+}
+.rf-candidate:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+.rf-candidate__title {
+  font-family: var(--font-display);
+  font-size: 15px;
+  line-height: 1.35;
+  color: var(--ink);
+}
+.rf-candidate__meta {
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.rf-candidate__doi {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--ink-3);
+}
+
+/* --- nothing came back --------------------------------------------------- */
+/* Deliberately NOT styled as an error. A lookup that finds nothing is a fact
+   about a registry, not a verdict on the source, and a red panel here would be
+   the same false accusation the `refuted`/`unreachable` split exists to avoid. */
+.rf-nothing {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--bg-paper);
+  padding: 14px 16px;
+}
+.rf-nothing__title {
+  margin: 0 0 6px;
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.rf-nothing__query {
+  margin: 0 0 8px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+}
+.rf-nothing__reason {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+.rf-nothing__meaning {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--ink-3);
+  max-width: 62ch;
+}
+
+/* --- edit ---------------------------------------------------------------- */
+.rf-edit__warn {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: var(--warn-soft);
+  color: var(--ink-2);
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+.rf-edit__warn svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: var(--warn);
+}
+.rf-edit__kind {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--ink-2);
+}
+.rf-edit__kind span {
+  color: var(--ink-3);
+  font-size: 11.5px;
+}
+
+@media (max-width: 640px) {
+  .rf-row__main {
+    flex-wrap: wrap;
+  }
+  .rf-row__badges {
+    padding-left: 20px;
+  }
+  .rf-facts__row {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+}
