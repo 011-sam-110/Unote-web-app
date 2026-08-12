@@ -9,6 +9,8 @@ import type {
 import type {
   ImportBatch, ImportItem, ImportSource, ImportLabelSpace, ImportSuggestionInput, ImportGroupInput, ImportCommitResult,
 } from './types';
+// Type-only, so this adds no runtime edge to the module graph the loadOrder tests pin.
+import type { Csl, ResolveResponse, SourceRecord, SourceType, Verdict } from '../features/references/types';
 import { isGuest } from '../features/guest/guestMode';
 import { GuestFeatureError, guestBlockedMessage, isGuestBlocked } from '../features/guest/guestErrors';
 import { localApi } from './local/localApi';
@@ -36,6 +38,16 @@ function offlineBlockedMessage(method: string): string {
     restore: 'Restoring an old version needs a connection.',
     comments: 'Comments need a connection.',
     qr: 'Pairing your phone needs a connection.',
+    // Two different reasons, worth two different sentences: the library is a server-side
+    // list this device has no mirror of, while a lookup is a question for a registry that
+    // is not on this machine either way.
+    referenceSources: 'Your source library lives on the server, so it needs a connection.',
+    referenceTypes: 'Your source library lives on the server, so it needs a connection.',
+    resolveReference: 'Looking a source up needs a connection - the registry is not on this machine. You can still type one in once you are back.',
+    verifyReferenceSource: 'Checking a source needs a connection - the registry is not on this machine.',
+    createReferenceSource: 'Saving a source needs a connection.',
+    updateReferenceSource: 'Editing a source needs a connection.',
+    deleteReferenceSource: 'Deleting a source needs a connection.',
   };
   return NEEDS_NET[method] ?? 'That needs a connection. Your notes are still here and still saving.';
 }
@@ -357,6 +369,28 @@ const serverApi = {
     http<{ items: ImportItem[]; grouper: string }>(`/api/import/batches/${batchId}/group-ai`, json('POST', {})),
   commitImport: (batchId: string, itemIds: string[]) => http<ImportCommitResult>(`/api/import/batches/${batchId}/commit`, json('POST', { itemIds })),
   discardImportBatch: (batchId: string) => http<{ ok: true }>(`/api/import/batches/${batchId}`, { method: 'DELETE' }),
+
+  // ---- the source library (referencing) ----
+  // No local implementations, deliberately. Every one of these either needs the account's
+  // rows or needs to ask a registry a question, so the Proxy below refuses them in guest
+  // and offline mode with a sentence rather than pretending to answer.
+
+  /** The 27 source types with their field lists. FETCHED, never bundled: a client-side
+   *  copy would let the intake form and the server disagree about what a type needs. */
+  referenceTypes: () => http<{ types: SourceType[] }>('/api/references/types'),
+  /** One box, any identifier. The server sniffs DOI / ISBN / URL / free text. */
+  resolveReference: (query: string) => http<ResolveResponse>('/api/references/resolve', json('POST', { query })),
+  referenceSources: () => http<{ sources: SourceRecord[] }>('/api/references/sources'),
+  createReferenceSource: (b: { kind: string; csl: Csl }) =>
+    http<{ source: SourceRecord }>('/api/references/sources', json('POST', b)),
+  /** Editing the metadata DELETES the stored verdict server-side - what was checked is no
+   *  longer what is stored - so the returned record comes back `unconfirmed`. Callers must
+   *  adopt the response rather than keeping the badge they had. */
+  updateReferenceSource: (id: string, csl: Csl) =>
+    http<{ source: SourceRecord }>(`/api/references/sources/${id}`, json('PATCH', { csl })),
+  deleteReferenceSource: (id: string) => http<void>(`/api/references/sources/${id}`, { method: 'DELETE' }),
+  verifyReferenceSource: (id: string) =>
+    http<{ verdict: Verdict }>(`/api/references/sources/${id}/verify`, { method: 'POST' }),
 
   /**
    * The delta feed the offline mirror pulls. Not routed through the local store for
