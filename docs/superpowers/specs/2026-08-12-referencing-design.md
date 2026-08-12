@@ -1,12 +1,12 @@
-# Referencing — design
+# Referencing - design
 
 **Status:** draft, awaiting Sam's approval. Not yet committed to the repo.
 **Date:** 2026-08-12
-**Scope:** Part A of two. Part B (paged output — title page, running header, footer, page
+**Scope:** Part A of two. Part B (paged output - title page, running header, footer, page
 numbers) is a separate spec, written once the bibliography exists as real content.
 
 Driven by user feedback: students want a built-in referencing tool. The bar Sam set is
-"just as good as a website citing tool", plus two things those tools do not do — the AI
+"just as good as a website citing tool", plus two things those tools do not do - the AI
 can use it, and invalid citations get caught.
 
 ---
@@ -19,7 +19,7 @@ and "Here's what we'll need your help with", and never invents the fields it cou
 retrieve. That pattern is adopted directly.
 
 What it does **not** do is verify. Its "Is your source credible?" page is a prose
-checklist — questions for the student to consider. Nothing is resolved, fetched or
+checklist - questions for the student to consider. Nothing is resolved, fetched or
 compared, so a fabricated reference formats exactly as beautifully as a real one.
 
 That gap is the feature.
@@ -34,7 +34,7 @@ done.**
 
 `checks.ts` states its own execution model: *"One model request per enabled family,
 issued in parallel."* The catalogue is entirely LLM-driven. Asking a language model
-whether a citation exists is asking the fabrication engine to audit its own output — and
+whether a citation exists is asking the fabrication engine to audit its own output - and
 rendering the verdict in a rail students already trust makes it worse than shipping
 nothing. It would clear invented papers and flag real ones, confidently, in both
 directions.
@@ -47,7 +47,7 @@ What is reused from the existing system: the rail as a **rendering and approval 
 its ownership checks, and its metering. What is not reused: the prompt-driven check
 mechanism.
 
-A genuinely model-shaped check — "this claim has no citation at all" — is a judgement
+A genuinely model-shaped check - "this claim has no citation at all" - is a judgement
 call and *would* belong in the catalogue. That is out of scope for this spec.
 
 ---
@@ -60,16 +60,16 @@ available bug: telling a student their real source is fake because a registry ti
 | State | Meaning | Colour | Glyph |
 |---|---|---|---|
 | `VERIFIED` | Resolved against a registry; the student's fields match the record | green | `✓` |
-| `UNCONFIRMED` | Hand-typed or partly found. **Not an error** — merely unchecked | amber | `?` |
+| `UNCONFIRMED` | Hand-typed or partly found. **Not an error** - merely unchecked | amber | `?` |
 | `REFUTED` | The registry contradicts it, or the identifier does not resolve | red | `!` |
-| `UNREACHABLE` | Offline, or the registry is down | neutral grey | `–` |
+| `UNREACHABLE` | Offline, or the registry is down | neutral grey | `-` |
 
 Three rules that are load-bearing rather than cosmetic:
 
 1. **`UNCONFIRMED` is the default and will be the most common state.** It must never
    render as a defect. Most student sources have no DOI or ISBN.
 2. **`UNREACHABLE` must never degrade into `REFUTED`.** It is the absence of a claim, not
-   a claim, and must not borrow the vocabulary of one — hence neutral grey rather than
+   a claim, and must not borrow the vocabulary of one - hence neutral grey rather than
    anything red-adjacent.
 3. **Every verdict carries its evidence and the date it was checked**, so it is
    falsifiable rather than an opinion, and so a cached verdict stays honest instead of
@@ -77,8 +77,8 @@ Three rules that are load-bearing rather than cosmetic:
 
 ### 2.1 Glyph before hue (accessibility, non-negotiable)
 
-`VERIFIED` and `REFUTED` differ on the **red–green axis** — the most common colour vision
-deficiency — on the two states carrying the most consequence. A student with deuteranopia
+`VERIFIED` and `REFUTED` differ on the **red-green axis** - the most common colour vision
+deficiency - on the two states carrying the most consequence. A student with deuteranopia
 could not distinguish a sound source from a fabricated one, and would never report it,
 because the interface still looks confident.
 
@@ -96,7 +96,7 @@ the light block *and* the dark overrides, in the same commit. No literals at the
 
 This is not a style preference. `tokens.css` records that syntax highlighting was
 previously hard-coded light-theme hexes served unchanged in dark mode, where keywords
-measured **2.88:1** and numbers 3.61:1 — well under AA. The exact failure was invisible
+measured **2.88:1** and numbers 3.61:1 - well under AA. The exact failure was invisible
 until someone measured, in this file, and was fixed by tokenising. A future contributor
 argues with a style note; they do not argue with a documented incident.
 
@@ -114,9 +114,9 @@ citations         id, user_id, note_id, source_id, locator, prefix, suffix, posi
 source_verdicts   source_id, state, evidence, registry, checked_at
 ```
 
-Notes reference `source_id`. A note never stores formatted citation text — see §5.
+Notes reference `source_id`. A note never stores formatted citation text - see §5.
 
-### 3.1 Source types — all 27 at launch
+### 3.1 Source types - all 27 at launch
 
 Source *types* are data, not schema. Full parity with the incumbent from day one:
 
@@ -134,10 +134,10 @@ roughly 190 format rules; with CSL the engine already knows them all.
 
 The work per type is therefore the intake form and the CSL type mapping. One registry
 table (`sourceTypes.ts`) drives the picker, the form and the mapping, so the three cannot
-drift — the same structural trick `checks.ts` uses to keep its picker and prompts in sync.
+drift - the same structural trick `checks.ts` uses to keep its picker and prompts in sync.
 
-Contributors are **structured** — role (author/editor/translator/director/…) plus
-given/family/suffix, repeatable — never a free-text author string. This is what makes
+Contributors are **structured** - role (author/editor/translator/director/…) plus
+given/family/suffix, repeatable - never a free-text author string. This is what makes
 verification a real comparison against a registry record rather than a fuzzy match on a
 blob.
 
@@ -145,8 +145,8 @@ blob.
 
 ## 4. Style engine
 
-**CSL (Citation Style Language) via citeproc-js.** "Harvard" is not one style — nearly
-every UK university publishes a variant — and CSL already has them. Styles are data, so
+**CSL (Citation Style Language) via citeproc-js.** "Harvard" is not one style - nearly
+every UK university publishes a variant - and CSL already has them. Styles are data, so
 adding one is not engineering. Hand-rolling ~7 styles across 27 source types would be
 roughly 190 format rules written and tested by hand.
 
@@ -156,14 +156,14 @@ OSCOLA, ASA, AMA.
 **Default: Harvard (Cite Them Right).** Sam had no required variant, so this is a decision
 rather than a requirement: it is the most widely used UK Harvard and the one university
 library guidance generally points at. Because a style is a data file, a module that
-mandates a different variant is a drop-in, not a rewrite — which is the whole reason the
+mandates a different variant is a drop-in, not a rewrite - which is the whole reason the
 uncertainty here was safe to resolve by choosing.
 
 ### 4.1 Styles AND locales compile to `.ts`
 
 **Verified against the citeproc-js documentation, not assumed.** `CSL.Engine` takes a
 `sys` object that must supply `retrieveLocale()` as well as `retrieveItem()`, and
-`retrieveLocale()` returns serialized locale XML for an RFC 4646 tag (`en-GB`) — separate
+`retrieveLocale()` returns serialized locale XML for an RFC 4646 tag (`en-GB`) - separate
 data, shipped in a separate repository from the styles.
 
 Compiling styles but leaving locales as runtime data files would reproduce a failure this
@@ -184,8 +184,8 @@ data files, so `vercel.json` `includeFiles` cannot be got wrong.
 
 | Node | Kind | Content |
 |---|---|---|
-| `citation` | inline atom | none — renders from attrs |
-| `bibliography` | block atom | none — renders from the note's citation set |
+| `citation` | inline atom | none - renders from attrs |
+| `bibliography` | block atom | none - renders from the note's citation set |
 
 Both render entirely from attrs via a node view, with **no text nodes in the document**.
 Two independent reasons, which happen to want the same design:
@@ -202,13 +202,13 @@ Two independent reasons, which happen to want the same design:
 ### 5.1 Marking convention (agreed with the parallel spell-check work)
 
 Three systems want to mark up one document: the existing AI review, spelling, and citation
-flags. **Red wavy underline under running text is reserved by the platform** — Chrome,
+flags. **Red wavy underline under running text is reserved by the platform** - Chrome,
 Firefox, Safari, Windows and macOS all draw it for misspellings, and if browser-native
 spellcheck is used there is no API to restyle it. So separation is by **form**, not
 colour:
 
-- **Spelling** — a line under a text range. Ambient, ignorable.
-- **Citation** — a badge on its own node, carrying its own affordance.
+- **Spelling** - a line under a text range. Ambient, ignorable.
+- **Citation** - a badge on its own node, carrying its own affordance.
 
 Because the two never occupy the same visual channel, a red badge and a red squiggle
 coexist unambiguously.
@@ -233,19 +233,19 @@ Several note editors are mounted at once (`web/src/features/tabs/`, commit `44ab
 
 One box takes a URL, DOI, ISBN, title or keyword; the server sniffs which it is rather
 than making the student classify it first. A **manual entry** path is first-class, not a
-fallback — it is also the offline path, so one mechanism serves both.
+fallback - it is also the offline path, so one mechanism serves both.
 
 After a lookup, retrieved fields and missing fields are shown **separately**, and missing
 fields are handed back as blanks. Nothing is invented.
 
-### 6.1 Resolvers — measured, not assumed
+### 6.1 Resolvers - measured, not assumed
 
 Probed live from this machine on 2026-08-12:
 
 | Probe | Result | Consequence |
 |---|---|---|
 | `api.crossref.org/works/10.1038/nature12373` | 200, 0.67s | Full record incl. structured authors |
-| `doi.org` with `Accept: application/vnd.citationstyles.csl+json` | 200, `csl+json` | **DOIs return native CSL-JSON — no mapping layer needed at all** |
+| `doi.org` with `Accept: application/vnd.citationstyles.csl+json` | 200, `csl+json` | **DOIs return native CSL-JSON - no mapping layer needed at all** |
 | `api.crossref.org/works/10.1016/j.cell.2019.99999` | 404 `Resource not found` | `REFUTED` is backed by an unambiguous signal |
 | `openlibrary.org/isbn/9780140449136.json` | 200 | Title, publisher, date, pages |
 | `openlibrary.org/isbn/<fabricated>.json` | 404 | Same for books |
@@ -259,11 +259,11 @@ be assigned before handing the item to the engine.
 
 - **OpenLibrary does not return author names.** It returns `{"key": "/authors/OL22242A"}`.
   Every book costs an extra round trip per author, or the reference list silently has no
-  authors — a bug a naive implementation ships and nobody notices until a bibliography is
+  authors - a bug a naive implementation ships and nobody notices until a bibliography is
   missing every name.
 - **Two name fields, non-ASCII.** That key resolves to a record with a native-script
   `name` (Cyrillic, in the case tested) and a separate Latin `personal_name`. Choosing
-  wrong puts Cyrillic in an English Harvard reference list — silently wrong output, not a
+  wrong puts Cyrillic in an English Harvard reference list - silently wrong output, not a
   crash. Prefer `personal_name`; carry UTF-8 end to end.
 
 ### 6.2 Fetching a user-typed URL is SSRF
@@ -277,31 +277,31 @@ exfiltration channel. Required before this ships:
 - Scheme allowlist: `http` / `https` only. No `file:`, `gopher:`, `data:`.
 - Resolve the hostname **first**; reject loopback, link-local, private, CGNAT, multicast
   and reserved ranges on the **resolved** address.
-- Re-check after **every** redirect and cap the chain — hop one can be public, hop two
+- Re-check after **every** redirect and cap the chain - hop one can be public, hop two
   internal.
 - Pin the connection to the address that was checked, or a DNS rebind between check and
   fetch walks straight through.
 - Timeout and response-size cap. Never echo raw response bodies into a verdict.
 
-### 6.3 When verification runs — event-driven, never polled
+### 6.3 When verification runs - event-driven, never polled
 
 | Trigger | Scope |
 |---|---|
 | Citation inserted | That source, immediately |
-| A source's fields edited | That source — the metadata changed, so the verdict may have |
+| A source's fields edited | That source - the metadata changed, so the verdict may have |
 | Note opened | Background, batched sweep of verdicts older than **7 days** |
 | "Re-check all" in the rail | Everything in the note, on demand |
 | Idle typing | **Nothing.** No requests. |
 
 Polling on a timer was considered and rejected. A note with 20 citations checked every 15
-seconds is 80 requests/minute — roughly 38,000 over an eight-hour study day, from one user
+seconds is 80 requests/minute - roughly 38,000 over an eight-hour study day, from one user
 on one note. Crossref would throttle us, and the failure lands in the worst possible
 place: every user starts seeing `UNREACHABLE`, a state deliberately designed to be
 unalarming, appearing constantly for a reason unrelated to their sources.
 
 It also re-asks a question built never to change. A DOI is a *persistent* identifier by
 definition; one that resolved ten seconds ago resolves now. The staleness sweep exists for
-the one thing that genuinely does decay — **link rot** on plain URLs — and seven days is
+the one thing that genuinely does decay - **link rot** on plain URLs - and seven days is
 far inside the timescale on which that happens.
 
 Crossref wants a contact `mailto` in the User-Agent for its polite pool, or throttling is
@@ -325,7 +325,7 @@ impossible** rather than discouraged.
 - Write citation metadata itself. It may only select from records a registry returned.
 - Insert anything without passing the existing approve step.
 - Set `VERIFIED`. Only a resolver sets state.
-- Decide unprompted which claims need citing — that is the student's academic judgement,
+- Decide unprompted which claims need citing - that is the student's academic judgement,
   and they are marked on it.
 
 Both tools are added to `server/src/ai/assistantTools.ts`, which is the single catalogue
@@ -347,7 +347,7 @@ train. Referencing being online-core must not regress that.
 
 ## 9. Coordination (parallel spell-check work)
 
-Shared files — ping before touching, append at the end in a fenced comment block naming
+Shared files - ping before touching, append at the end in a fenced comment block naming
 the feature: `buildExtensions.ts`, `insertables.ts`, `SlashItems.ts`, `editor.css`,
 `schema.sql`, `tokens.css`.
 
@@ -358,7 +358,7 @@ Citation slash item will change it. Announce regeneration.
 
 `web/index.html` contains an inline script pinned by sha256 in both `vercel.json` and
 `server/src/lib/csp.ts`. Editing even a comment inside it breaks production CSP. This work
-needs no change there — lookups are proxied through our own server, so no `connect-src`
+needs no change there - lookups are proxied through our own server, so no `connect-src`
 change is required.
 
 ---
@@ -370,7 +370,7 @@ change is required.
   private, CGNAT, redirect-to-internal, rebind).
 - Integration: resolve → review → save → cite → bibliography rebuild → style switch.
 - e2e: insert a citation, switch style, confirm prose is untouched and every citation
-  re-rendered. Run `npm run e2e`, not just unit tests and a build — renaming a button once
+  re-rendered. Run `npm run e2e`, not just unit tests and a build - renaming a button once
   broke 8 specs that nobody caught.
 - Greyscale check: render all four states with colour stripped and confirm they remain
   distinguishable.

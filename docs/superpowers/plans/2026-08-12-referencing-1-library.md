@@ -1,10 +1,10 @@
-# Referencing, Part 1: Source Library and Verification — Implementation Plan
+# Referencing, Part 1: Source Library and Verification - Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build the server-side source library — 27 source types, online resolution of DOIs, ISBNs, titles and URLs into CSL-JSON, and deterministic four-state verification — exposed as an authenticated API.
+**Goal:** Build the server-side source library - 27 source types, online resolution of DOIs, ISBNs, titles and URLs into CSL-JSON, and deterministic four-state verification - exposed as an authenticated API.
 
-**Architecture:** Sources are stored as CSL-JSON, the format the style engine consumes directly, so no internal citation format is invented. Resolution is a set of small single-registry modules behind one `POST /api/references/resolve` endpoint that sniffs which identifier it was given. Verification is deterministic and evidence-bearing — never a language-model call — following the precedent in `server/src/lib/provenance.ts`.
+**Architecture:** Sources are stored as CSL-JSON, the format the style engine consumes directly, so no internal citation format is invented. Resolution is a set of small single-registry modules behind one `POST /api/references/resolve` endpoint that sniffs which identifier it was given. Verification is deterministic and evidence-bearing - never a language-model call - following the precedent in `server/src/lib/provenance.ts`.
 
 **Tech Stack:** TypeScript, Express 5, PostgreSQL via `server/src/db.ts`, Zod for input validation, Vitest + Supertest for tests.
 
@@ -18,14 +18,14 @@
 - **UTF-8 end to end.** Author names are not ASCII.
 - **All outbound fetches of user-supplied URLs go through `safeFetch` (Task 3).** No exceptions, no direct `fetch()` on a user string anywhere in this plan.
 - **`server/src/schema.sql` is a SHARED FILE** with a parallel agent (`spellcheck` on bus channel `proj`). Append at the END, inside a fenced comment block naming the feature. Ping before touching (Task 9, Step 1).
-- **Do not run `npm run test -w server` without pinging the bus first** — it drops the shared local dev database.
+- **Do not run `npm run test -w server` without pinging the bus first** - it drops the shared local dev database.
 - Branch: `feat/referencing`, already created off `main` at `44ab61c`.
 
 ---
 
 ### Task 1: Source type registry
 
-The 27 types Sam asked for. Each maps to a CSL item type so the style engine already knows how to format it, and carries the field list its intake form renders. One table drives the picker, the form and the mapping so the three cannot drift — the same structural trick `server/src/lib/checks.ts` uses.
+The 27 types Sam asked for. Each maps to a CSL item type so the style engine already knows how to format it, and carries the field list its intake form renders. One table drives the picker, the form and the mapping so the three cannot drift - the same structural trick `server/src/lib/checks.ts` uses.
 
 **Files:**
 - Create: `server/src/lib/references/sourceTypes.ts`
@@ -83,7 +83,7 @@ describe('source type registry', () => {
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `npx vitest run test/sourceTypes.test.ts --root server`
-Expected: FAIL — `Cannot find module '../src/lib/references/sourceTypes.js'`
+Expected: FAIL - `Cannot find module '../src/lib/references/sourceTypes.js'`
 
 - [ ] **Step 3: Write the implementation**
 
@@ -240,7 +240,7 @@ git commit -m "feat(references): the 27 source types, mapped onto CSL"
 
 ### Task 2: Identifier sniffing
 
-One input box takes a DOI, ISBN, URL or free text. The server decides which, rather than making the student classify their source before it will help — the one place the incumbent's flow is worse than it needs to be.
+One input box takes a DOI, ISBN, URL or free text. The server decides which, rather than making the student classify their source before it will help - the one place the incumbent's flow is worse than it needs to be.
 
 **Files:**
 - Create: `server/src/lib/references/identify.ts`
@@ -305,7 +305,7 @@ describe('identify', () => {
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `npx vitest run test/identify.test.ts --root server`
-Expected: FAIL — module not found
+Expected: FAIL - module not found
 
 - [ ] **Step 3: Write the implementation**
 
@@ -414,13 +414,13 @@ git commit -m "feat(references): sniff DOI, ISBN, URL or free text from one box"
 
 ### Task 3: SSRF-safe fetch
 
-> **AS-BUILT CORRECTION — the code below is superseded. Read this before re-running it.**
+> **AS-BUILT CORRECTION - the code below is superseded. Read this before re-running it.**
 >
 > The reference implementation in this task used global `fetch` and pinned the URL's
 > hostname to the resolved IP literal. Review found that **breaks TLS**: the handshake, SNI
 > selection and certificate identity all happen before any HTTP header is sent, and Node
 > omits SNI for IP literals, so certificates are checked against the address. Virtually
-> every real HTTPS fetch would have failed — reported as `SsrfBlocked('request failed')`,
+> every real HTTPS fetch would have failed - reported as `SsrfBlocked('request failed')`,
 > indistinguishable from a genuine block. No test caught it because the suite only
 > exercised *blocked* cases; nothing ever performed a successful fetch.
 >
@@ -433,7 +433,7 @@ git commit -m "feat(references): sniff DOI, ISBN, URL or free text from one box"
 > rather than stopping at headers; every failure path normalises to `SsrfBlocked`;
 > `isBlockedAddress` decomposes the hex form of IPv4-mapped IPv6 (`::ffff:7f00:1`); and the
 > guards gained real tests via an injected address predicate, since the guard blocks
-> loopback and a local test server is otherwise unreachable. The module is now three files —
+> loopback and a local test server is otherwise unreachable. The module is now three files -
 > `safeFetch.ts` (four public names only), `safeFetch.core.ts`, `safeFetch.testing.ts`.
 >
 > The address-classification logic below is unchanged and still correct. It is the
@@ -505,7 +505,7 @@ describe('safeFetch', () => {
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `npx vitest run test/safeFetch.test.ts --root server`
-Expected: FAIL — module not found
+Expected: FAIL - module not found
 
 - [ ] **Step 3: Write the implementation**
 
@@ -686,7 +686,7 @@ git commit -m "feat(references): close SSRF on user-supplied URLs before any res
 
 ### Task 4: DOI resolver
 
-DOIs return **native CSL-JSON** by content negotiation at `doi.org` — measured, not assumed. That means no mapping layer for any DOI-bearing source, and it covers DataCite and mEDRA as well as Crossref because the negotiation happens at the resolver rather than at one registry. The payload carries no `id`, so we must set one.
+DOIs return **native CSL-JSON** by content negotiation at `doi.org` - measured, not assumed. That means no mapping layer for any DOI-bearing source, and it covers DataCite and mEDRA as well as Crossref because the negotiation happens at the resolver rather than at one registry. The payload carries no `id`, so we must set one.
 
 **Files:**
 - Create: `server/src/lib/references/resolveResult.ts` (the shared contract)
@@ -695,7 +695,7 @@ DOIs return **native CSL-JSON** by content negotiation at `doi.org` — measured
 
 **Interfaces:**
 - Consumes: `userAgent()` from Task 3.
-- Produces, from `resolveResult.ts` — every resolver returns this shape, and Tasks 5, 6 and 7 import it from **here, not from a sibling resolver**:
+- Produces, from `resolveResult.ts` - every resolver returns this shape, and Tasks 5, 6 and 7 import it from **here, not from a sibling resolver**:
   ```ts
   interface ResolveResult {
     found: boolean;
@@ -710,7 +710,7 @@ DOIs return **native CSL-JSON** by content negotiation at `doi.org` — measured
 
 > **Why the contract is its own module.** The ISBN and webpage resolvers need the same
 > return type. Importing it from `resolvers/doi.ts` would make every resolver depend on
-> the DOI one for a type it does not otherwise use — a dependency that is invisible until
+> the DOI one for a type it does not otherwise use - a dependency that is invisible until
 > someone deletes or moves the DOI resolver and three unrelated files stop compiling.
 
 - [ ] **Step 1: Write the failing test**
@@ -778,7 +778,7 @@ describe('resolveDoi', () => {
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `npx vitest run test/resolveDoi.test.ts --root server`
-Expected: FAIL — module not found
+Expected: FAIL - module not found
 
 - [ ] **Step 3a: Write the shared resolver contract**
 
@@ -883,7 +883,7 @@ git commit -m "feat(references): resolve DOIs to native CSL-JSON, no mapping lay
 
 ### Task 5: ISBN resolver
 
-OpenLibrary does **not** return author names — it returns a key. Every book costs an extra round trip per author, or the bibliography silently has no authors at all: a bug a naive implementation ships and nobody notices until a reference list is missing every name. The author record then carries two name fields, and choosing wrong puts a non-Latin script into an English reference list.
+OpenLibrary does **not** return author names - it returns a key. Every book costs an extra round trip per author, or the bibliography silently has no authors at all: a bug a naive implementation ships and nobody notices until a reference list is missing every name. The author record then carries two name fields, and choosing wrong puts a non-Latin script into an English reference list.
 
 **Files:**
 - Create: `server/src/lib/references/resolvers/isbn.ts`
@@ -979,7 +979,7 @@ describe('resolveIsbn', () => {
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `npx vitest run test/resolveIsbn.test.ts --root server`
-Expected: FAIL — module not found
+Expected: FAIL - module not found
 
 - [ ] **Step 3: Write the implementation**
 
@@ -1080,7 +1080,7 @@ git commit -m "feat(references): resolve ISBNs, including the author names OpenL
 
 ### Task 6: Title search
 
-A student who has only a title still needs a verifiable source. Crossref's bibliographic search returns candidates with their DOIs, so a title search becomes a DOI — which then verifies like any other.
+A student who has only a title still needs a verifiable source. Crossref's bibliographic search returns candidates with their DOIs, so a title search becomes a DOI - which then verifies like any other.
 
 **Files:**
 - Create: `server/src/lib/references/resolvers/search.ts`
@@ -1151,7 +1151,7 @@ describe('searchWorks', () => {
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `npx vitest run test/resolveSearch.test.ts --root server`
-Expected: FAIL — module not found
+Expected: FAIL - module not found
 
 - [ ] **Step 3: Write the implementation**
 
@@ -1225,7 +1225,7 @@ git commit -m "feat(references): title search that only offers candidates with a
 
 ### Task 7: Webpage resolver
 
-The type most students cite and the only one with no registry behind it. Metadata comes from the page itself, through `safeFetch` — never a direct `fetch`.
+The type most students cite and the only one with no registry behind it. Metadata comes from the page itself, through `safeFetch` - never a direct `fetch`.
 
 **Files:**
 - Create: `server/src/lib/references/resolvers/webpage.ts`
@@ -1307,7 +1307,7 @@ describe('resolveWebpage', () => {
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `npx vitest run test/resolveWebpage.test.ts --root server`
-Expected: FAIL — module not found
+Expected: FAIL - module not found
 
 - [ ] **Step 3: Write the implementation**
 
@@ -1497,7 +1497,7 @@ describe('verifySource', () => {
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `npx vitest run test/verifyCitation.test.ts --root server`
-Expected: FAIL — module not found
+Expected: FAIL - module not found
 
 - [ ] **Step 3: Write the implementation**
 
@@ -1705,7 +1705,7 @@ describe('references schema', () => {
 - [ ] **Step 3: Run test to verify it fails**
 
 Run: `npx vitest run test/referencesSchema.test.ts --root server`
-Expected: FAIL — `sources` has no columns (empty array)
+Expected: FAIL - `sources` has no columns (empty array)
 
 - [ ] **Step 4: Append to `server/src/schema.sql`**
 
@@ -1780,7 +1780,7 @@ python "$HOME/.claude/bus/bus.py" --channel proj send --from b --to spellcheck \
 
 ### Task 10: The API
 
-Ties it together: one resolve endpoint that sniffs, library CRUD, and verification. Ownership is filtered on `user_id` in every statement — this router carries a student's entire reading list.
+Ties it together: one resolve endpoint that sniffs, library CRUD, and verification. Ownership is filtered on `user_id` in every statement - this router carries a student's entire reading list.
 
 **Files:**
 - Create: `server/src/routes/references.ts`
@@ -1788,7 +1788,7 @@ Ties it together: one resolve endpoint that sniffs, library CRUD, and verificati
 - Test: `server/test/references.test.ts`
 
 **Interfaces:**
-- Consumes: everything from Tasks 1–9.
+- Consumes: everything from Tasks 1-9.
 - Produces: `POST /api/references/resolve`, `GET /api/references/sources`, `POST /api/references/sources`, `PATCH /api/references/sources/:id`, `DELETE /api/references/sources/:id`, `POST /api/references/sources/:id/verify`, `GET /api/references/types`.
 
 - [ ] **Step 1: Write the failing test**
@@ -1926,7 +1926,7 @@ describe('POST /api/references/sources/:id/verify', () => {
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `npx vitest run test/references.test.ts --root server`
-Expected: FAIL — 404 on every route
+Expected: FAIL - 404 on every route
 
 - [ ] **Step 3: Write the router**
 
@@ -2132,7 +2132,7 @@ Expected: PASS, 12 tests
 
 - [ ] **Step 6: Run the whole server suite**
 
-**Ping the bus first — this drops the shared dev database:**
+**Ping the bus first - this drops the shared dev database:**
 
 ```bash
 python "$HOME/.claude/bus/bus.py" --channel proj send --from b --to spellcheck \
@@ -2153,13 +2153,13 @@ git commit -m "feat(references): the source library API"
 
 ## Self-Review
 
-**Spec coverage.** §2 four states → Task 8. §3 data model → Task 9. §3.1 27 types → Task 1. §6 intake/sniffing → Tasks 2, 10. §6.1 resolvers → Tasks 4–7. §6.2 SSRF → Task 3. §9 coordination → Tasks 9, 10 bus steps. §4 CSL engine, §5 editor nodes, §6.3 cadence, §7 AI tools and §8 offline are **Part 2** — deliberately out of scope here and listed in Next Steps below.
+**Spec coverage.** §2 four states → Task 8. §3 data model → Task 9. §3.1 27 types → Task 1. §6 intake/sniffing → Tasks 2, 10. §6.1 resolvers → Tasks 4-7. §6.2 SSRF → Task 3. §9 coordination → Tasks 9, 10 bus steps. §4 CSL engine, §5 editor nodes, §6.3 cadence, §7 AI tools and §8 offline are **Part 2** - deliberately out of scope here and listed in Next Steps below.
 
 **Placeholders.** None: every step carries runnable code or an exact command.
 
 **Type consistency.** `ResolveResult` and `missingFrom` live in `server/src/lib/references/resolveResult.ts` (Task 4) and are imported from there by Tasks 5, 6 and 7 - never from a sibling resolver. `Verdict`/`VerdictState` are defined in Task 8 and consumed in Task 10. `userAgent()` is defined in Task 3 (`safeFetch.ts`) and used in Tasks 4, 5, 6. `sourceTypeById` from Task 1 is used in Task 10.
 
-**One deliberate deviation from the spec**, worth a reviewer's attention: the spec's §6.3 cadence table includes a 7-day staleness sweep. That sweep is a **client** behaviour (it fires on note open) and so belongs in Part 2. The server endpoint it calls — `POST /api/references/sources/:id/verify` — is built here, and `checked_at` is stored, so Part 2 has everything it needs.
+**One deliberate deviation from the spec**, worth a reviewer's attention: the spec's §6.3 cadence table includes a 7-day staleness sweep. That sweep is a **client** behaviour (it fires on note open) and so belongs in Part 2. The server endpoint it calls - `POST /api/references/sources/:id/verify` - is built here, and `checked_at` is stored, so Part 2 has everything it needs.
 
 ## Next steps (Part 2, separate plan)
 
