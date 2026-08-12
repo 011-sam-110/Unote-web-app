@@ -12,18 +12,25 @@ import { api } from '../../lib/api';
 import { errorMessage } from '../../lib/format';
 import SourceForm from './SourceForm';
 import VerdictBadge from './VerdictBadge';
+import ReferenceText from './ReferenceText';
 import { extraFacts, summaryLine, titleOf, typeById } from './csl';
 import { isStale, presentationFor, relativeAge } from './verdicts';
+import type { StyleId } from './styles';
 import type { Csl, SourceRecord, SourceType } from './types';
 
 export default function SourceRow({
   source,
   types,
+  style,
+  number,
   onChanged,
   onDeleted,
 }: {
   source: SourceRecord;
   types: SourceType[];
+  style: StyleId;
+  /** Position in the reference list, for a numeric style. */
+  number?: number;
   onChanged: (s: SourceRecord) => void;
   onDeleted: (id: string) => void;
 }) {
@@ -90,6 +97,8 @@ export default function SourceRow({
 
       {open && (
         <div className="rf-row__detail">
+          <ReferenceText csl={source.csl} style={style} number={number} />
+
           {/* Evidence first, then what the state means, then how old it is. In that order
               because the student's question is "why does it say that", and the answer is
               the registry's sentence rather than ours. */}

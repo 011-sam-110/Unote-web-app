@@ -18,7 +18,10 @@ import { useGuest } from '../guest/guestMode';
 import AddSourceDialog from './AddSourceDialog';
 import SourceRow from './SourceRow';
 import VerdictBadge from './VerdictBadge';
+import { copyToClipboard } from './ReferenceText';
 import { VERDICTS } from './verdicts';
+import { DEFAULT_STYLE, STYLES, type StyleId } from './styles';
+import { bibliographyText, buildBibliography, isNumericStyle } from './bibliography';
 import type { SourceRecord, SourceType, VerdictState } from './types';
 import './references.css';
 
@@ -37,11 +40,23 @@ export default function ReferencesPage() {
   const [error, setError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
 
+  // Both the filter and the chosen style live in THIS TAB's query, so two library tabs can
+  // sit side by side in two styles - which is exactly what a student with one essay in
+  // Harvard and one in APA needs.
   const filter = searchParams.get('state');
-  const setFilter = useCallback(
-    (next: string | null) => setSearchParams(next ? { state: next } : {}, { replace: true }),
-    [setSearchParams],
+  const styleParam = searchParams.get('style');
+  const style: StyleId = STYLES.some((s) => s.id === styleParam) ? (styleParam as StyleId) : DEFAULT_STYLE;
+
+  const setParam = useCallback(
+    (key: 'state' | 'style', value: string | null) => {
+      const next = new URLSearchParams(searchParams);
+      if (value) next.set(key, value);
+      else next.delete(key);
+      setSearchParams(next, { replace: true });
+    },
+    [searchParams, setSearchParams],
   );
+  const setFilter = useCallback((next: string | null) => setParam('state', next), [setParam]);
 
   const load = useCallback(() => {
     if (guest) {
@@ -93,6 +108,10 @@ export default function ReferencesPage() {
     [sources, filter],
   );
 
+  // Ordered as the STYLE orders a reference list - alphabetically for the author-date
+  // styles, in list order for Vancouver, whose numbers are the citation numbers.
+  const bibliography = useMemo(() => buildBibliography(shown, style), [shown, style]);
+
   return (
     <div className="rf-page">
       <div className="rf-page__crumb">References</div>
@@ -117,6 +136,45 @@ export default function ReferencesPage() {
         title="A source library needs an account"
         detail="A reading list has to still be there next term, and nothing in this browser is. Your notes still work without one."
       />
+
+      {!guest && sources && sources.length > 0 && (
+        <div className="rf-styles">
+          <div className="rf-styles__pick" role="group" aria-label="Referencing style">
+            <span className="rf-styles__label">Style</span>
+            {STYLES.map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                className={`chip${style === s.id ? ' active' : ''}`}
+                aria-pressed={style === s.id}
+                title={s.note}
+                onClick={() => setParam('style', s.id === DEFAULT_STYLE ? null : s.id)}
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            disabled={bibliography.length === 0}
+            onClick={() => void copyToClipboard(bibliographyText(bibliography, style), 'Reference list')}
+          >
+            <Icon name="copy" size={12} />
+            Copy reference list
+          </button>
+        </div>
+      )}
+
+      {!guest && sources && sources.length > 0 && (
+        <p className="rf-styles__note">
+          {STYLES.find((s) => s.id === style)?.note}.{' '}
+          {isNumericStyle(style)
+            ? 'Numbered in the order they appear here, which is the order the numbers in your text follow.'
+            : 'Listed alphabetically, as a reference list is.'}{' '}
+          Open a source to see it written out.
+        </p>
+      )}
 
       {!guest && sources && sources.length > 0 && (
         <div className="rf-filters" role="group" aria-label="Filter by what is known">
@@ -192,11 +250,13 @@ export default function ReferencesPage() {
         />
       ) : (
         <div className="rf-list">
-          {shown.map((s) => (
+          {bibliography.map((entry) => (
             <SourceRow
-              key={s.id}
-              source={s}
+              key={entry.source.id}
+              source={entry.source}
               types={types}
+              style={style}
+              number={entry.number}
               onChanged={(next) => setSources((cur) => (cur ?? []).map((x) => (x.id === next.id ? next : x)))}
               onDeleted={(id) => setSources((cur) => (cur ?? []).filter((x) => x.id !== id))}
             />
@@ -209,6 +269,7 @@ export default function ReferencesPage() {
         types={types}
         onClose={() => setAdding(false)}
         onSaved={(source) => setSources((cur) => [source, ...(cur ?? [])])}
+        onSavedMany={(added) => setSources((cur) => [...added, ...(cur ?? [])])}
       />
     </div>
   );

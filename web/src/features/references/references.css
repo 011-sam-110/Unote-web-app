@@ -99,6 +99,102 @@
   border-style: dashed;
 }
 
+/* --- referencing style --------------------------------------------------- */
+.rf-styles {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.rf-styles__pick {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.rf-styles__label {
+  font-family: var(--font-mono);
+  font-size: var(--caption-size);
+  text-transform: uppercase;
+  letter-spacing: var(--caption-tracking);
+  color: var(--ink-3);
+  margin-right: 2px;
+}
+.rf-styles__note {
+  margin: 0 0 18px;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--ink-3);
+  max-width: 62ch;
+}
+
+/* --- a source written out ------------------------------------------------ */
+/* The reference sits at the top of the detail in the reading voice, because it
+   is the thing the student came to copy. */
+.rf-ref {
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+}
+.rf-ref__row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.rf-ref__text {
+  flex: 1 1 auto;
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 14.5px;
+  line-height: 1.55;
+  color: var(--ink);
+  /* Hanging indent, as a reference list is set. */
+  padding-left: 22px;
+  text-indent: -22px;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+.rf-ref__copy {
+  flex: 0 0 auto;
+}
+/* Named gaps, so a tidy-looking line cannot pass for a finished one. */
+.rf-ref__missing {
+  margin: 6px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--warn);
+  max-width: 62ch;
+}
+.rf-ref__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 8px;
+  padding: 0;
+  background: none;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-3);
+}
+.rf-ref__toggle:hover {
+  color: var(--ink-2);
+}
+.rf-ref__row--intext {
+  margin-top: 6px;
+  align-items: center;
+}
+.rf-ref__intext {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--ink);
+  background: var(--tint);
+  border-radius: var(--radius);
+  padding: 4px 9px;
+  user-select: text;
+}
+
 /* --- filters ------------------------------------------------------------- */
 .rf-filters {
   display: flex;
@@ -310,8 +406,85 @@
   height: 1px;
   background: var(--line);
 }
-.rf-add__manual {
-  align-self: flex-start;
+.rf-add__paths {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.rf-add__bulk {
+  resize: vertical;
+  min-height: 150px;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+/* --- a pasted list ------------------------------------------------------- */
+.rf-bulk {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 44vh;
+  overflow-y: auto;
+}
+.rf-bulk__row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+}
+.rf-bulk__row[data-status='found'] {
+  border-color: var(--verdict-verified-soft);
+  background: var(--verdict-verified-soft);
+}
+/* "Needs you to pick" is a job to do, not a failure - it wears the accent, not a warning. */
+.rf-bulk__row[data-status='choose'] {
+  border-color: var(--accent-line);
+  background: var(--accent-wash);
+}
+.rf-bulk__row[data-status='nothing'],
+.rf-bulk__row[data-status='error'] {
+  background: var(--bg-paper);
+}
+.rf-bulk__pick {
+  display: flex;
+  align-items: center;
+  padding-top: 2px;
+}
+.rf-bulk__body {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.rf-bulk__title {
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.rf-bulk__meta {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--ink-3);
+  overflow-wrap: anywhere;
+}
+.rf-bulk__status {
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.rf-bulk__row[data-status='found'] .rf-bulk__status {
+  color: var(--verdict-verified);
+}
+.rf-bulk__row[data-status='choose'] .rf-bulk__status {
+  color: var(--accent);
 }
 .rf-add__note,
 .rf-add__from {
