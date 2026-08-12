@@ -37,16 +37,31 @@ function isUnreachableReason(reason?: string): boolean {
   return Boolean(reason && /could not reach|cannot be fetched|unreadable/i.test(reason));
 }
 
-/** Compare titles the way a human would: ignore case, punctuation, and a trailing subtitle. */
+/**
+ * Compare titles the way a human would: ignore case, punctuation, and a trailing subtitle -
+ * but word-wise, not character-wise. Character-level prefix matching (`x.startsWith(y)`) has
+ * no word boundary, so "Cat" would match "Category Theory for Programmers", and stripping the
+ * subtitle with `.split(':')[0]` on BOTH titles before comparing hides a substituted subtitle
+ * entirely - "Attention: A Cognitive Perspective" and "Attention: A Fabricated Subtitle" both
+ * reduce to "attention" and would agree. Comparing word arrays fixes both: the shorter array
+ * must be a prefix of the longer ONE WORD AT A TIME, so "attention" alone still matches
+ * "attention a cognitive perspective" (legitimate subtitle omission) but "cat" no longer
+ * matches "category ..." (differs at word 0) and a substituted subtitle diverges at the word
+ * after the shared stem instead of being silently discarded.
+ */
 function titlesAgree(a: string, b: string): boolean {
-  const norm = (s: string) =>
-    s.toLowerCase().split(':')[0].replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
-  const x = norm(a);
-  const y = norm(b);
-  if (!x || !y) return true; // nothing to disagree about
-  if (x === y) return true;
-  // One being a prefix of the other covers "Title" vs "Title: A Subtitle".
-  return x.startsWith(y) || y.startsWith(x);
+  const words = (s: string) =>
+    s
+      .toLowerCase()
+      .replace(/&/g, ' and ') // "Research & Development" vs "Research and Development" is the same title
+      .replace(/[^a-z0-9 ]/g, ' ')
+      .split(/\s+/)
+      .filter(Boolean);
+  const x = words(a);
+  const y = words(b);
+  if (!x.length || !y.length) return true; // nothing to disagree about
+  const [shorter, longer] = x.length <= y.length ? [x, y] : [y, x];
+  return shorter.every((word, i) => word === longer[i]);
 }
 
 function str(v: unknown): string | undefined {

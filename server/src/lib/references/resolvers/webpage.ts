@@ -55,8 +55,15 @@ export async function resolveWebpage(url: string, now: Date = new Date()): Promi
     return { found: false, registry, missing: [], reason: 'that link cannot be fetched' };
   }
 
-  if (!res.ok) {
+  // 404/410 genuinely mean "nothing is at this URL" - that's a real contradiction of the
+  // student's claim. Every other non-OK status (403 from bot protection/paywalls, 429
+  // rate-limiting, 5xx server errors) means we could not ask, not that the answer was no.
+  // Mirrors doi.ts/isbn.ts: only a genuine not-found produces a refuted-shaped reason.
+  if (res.status === 404 || res.status === 410) {
     return { found: false, registry, missing: [], reason: `the page returned ${res.status}` };
+  }
+  if (!res.ok) {
+    return { found: false, registry, missing: [], reason: `could not reach: the page returned ${res.status}` };
   }
 
   const html = res.body;

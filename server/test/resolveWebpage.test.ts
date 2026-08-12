@@ -61,6 +61,13 @@ describe('resolveWebpage', () => {
     expect(out.reason).toMatch(/404/);
   });
 
+  it('treats a 403 as unreachable, not refuted: Cloudflare/bot-protection/paywalls return this to automated fetchers on real, human-readable pages', async () => {
+    safeFetchMock.mockResolvedValue({ ok: false, status: 403, finalUrl: 'https://x.com/', body: '', contentType: 'text/html' });
+    const out = await resolveWebpage('https://x.com/');
+    expect(out.found).toBe(false);
+    expect(out.reason).toMatch(/could not reach/i);
+  });
+
   it('does not truncate a double-quoted meta value at an apostrophe', async () => {
     const html = `<!doctype html><html><head>
       <meta property="og:title" content="McDonald's earnings beat forecasts">

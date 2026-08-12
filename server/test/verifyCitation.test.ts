@@ -66,4 +66,46 @@ describe('verifySource', () => {
     const v = await verifySource({ title: 'no identifier' }, new Date('2026-08-12T09:30:00Z'));
     expect(v.checkedAt).toBe('2026-08-12T09:30:00.000Z');
   });
+
+  it('is UNREACHABLE, never REFUTED, when a URL-only source returns 403 (Cloudflare/bot protection, not a contradiction)', async () => {
+    resolveWebpage.mockResolvedValue({ found: false, registry: 'webpage', missing: [], reason: 'could not reach: the page returned 403' });
+    const v = await verifySource({ URL: 'https://example.com/article', title: 'Anything' });
+    expect(v.state).toBe('unreachable');
+    expect(v.state).not.toBe('refuted');
+  });
+
+  it('is REFUTED when a URL-only source returns 404 (nothing is at this URL)', async () => {
+    resolveWebpage.mockResolvedValue({ found: false, registry: 'webpage', missing: [], reason: 'the page returned 404' });
+    const v = await verifySource({ URL: 'https://example.com/gone', title: 'Anything' });
+    expect(v.state).toBe('refuted');
+  });
+
+  it('is VERIFIED when an ISBN-only source resolves successfully', async () => {
+    resolveIsbn.mockResolvedValue({ found: true, registry: 'openlibrary.org', missing: [],
+      csl: { title: 'Category Theory for Programmers' } });
+    const v = await verifySource({ ISBN: '9780134757599', title: 'Category Theory for Programmers' });
+    expect(v.state).toBe('verified');
+    expect(v.registry).toBe('openlibrary.org');
+  });
+
+  it('is REFUTED when a fabricated subtitle is substituted onto a real DOI', async () => {
+    resolveDoi.mockResolvedValue({ found: true, registry: 'doi.org', missing: [],
+      csl: { title: 'Attention: A Cognitive Perspective' } });
+    const v = await verifySource({ DOI: '10.1/x', title: 'Attention: A Fabricated Subtitle' });
+    expect(v.state).toBe('refuted');
+  });
+
+  it('is REFUTED when the claimed title is a short unrelated word, not a genuine prefix', async () => {
+    resolveDoi.mockResolvedValue({ found: true, registry: 'doi.org', missing: [],
+      csl: { title: 'Category Theory for Programmers' } });
+    const v = await verifySource({ DOI: '10.1/x', title: 'Cat' });
+    expect(v.state).toBe('refuted');
+  });
+
+  it('is VERIFIED when an ampersand in the registry title matches "and" in the claimed title', async () => {
+    resolveDoi.mockResolvedValue({ found: true, registry: 'doi.org', missing: [],
+      csl: { title: 'Research & Development' } });
+    const v = await verifySource({ DOI: '10.1/x', title: 'Research and Development' });
+    expect(v.state).toBe('verified');
+  });
 });
