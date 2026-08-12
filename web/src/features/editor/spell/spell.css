@@ -1,0 +1,28 @@
+/* Spelling decorations.
+ *
+ * Deliberately the platform's own vocabulary - a red wavy underline under running text is
+ * what Chrome, Safari, Firefox, Windows and macOS all draw for a misspelling, so borrowing
+ * it means the feature needs no explaining. It also means no other annotation in this app
+ * may use this form: citation state is a badge on its node, AI review is a range highlight.
+ *
+ * Ambient by design: no background, no weight change, no hover card. A possible typo is an
+ * observation the reader is free to ignore, and it sits at the bottom of the annotation
+ * z-order for that reason. Everything interactive about it lives in the right-click menu. */
+.folio-spell-error {
+  text-decoration-line: underline;
+  text-decoration-style: wavy;
+  text-decoration-color: var(--spell-underline);
+  text-decoration-thickness: 1px;
+  /* Clear of descenders, or the wave cuts through every g and y it passes under. */
+  text-underline-offset: 2px;
+  /* Never let a squiggle stop text being selected or clicked through. */
+  text-decoration-skip-ink: auto;
+}
+
+/* Anyone who has asked for less decoration gets a plain underline instead of a wave: the
+ * signal survives, the motion-adjacent shimmer of a wavy line at small sizes does not. */
+@media (prefers-reduced-motion: reduce) {
+  .folio-spell-error {
+    text-decoration-style: solid;
+  }
+}

@@ -62,7 +62,10 @@ export default function FolioEditor({ content, notebookId, onReady, onDestroy, o
     extensions,
     content: (content ?? '') as JSONContent,
     editorProps: {
-      attributes: { class: 'folio-prosemirror', spellcheck: 'true', 'data-testid': 'note-editor' },
+      // Harper owns spelling now (spell/SpellExtension). Leaving the browser's checker on
+      // would draw a second, unstyleable squiggle under the same words - and its suggestions
+      // are reachable only from Chrome's own menu, which is the reason it is not the engine.
+      attributes: { class: 'folio-prosemirror', spellcheck: 'false', 'data-testid': 'note-editor' },
       handleClick(_view, _pos, event) {
         const target = event.target as HTMLElement;
         const link = target.closest?.('a.folio-link') as HTMLAnchorElement | null;
