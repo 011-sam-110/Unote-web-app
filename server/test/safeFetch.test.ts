@@ -1,8 +1,34 @@
 // server/test/safeFetch.test.ts
 import http from 'node:http';
+import https from 'node:https';
+import { EventEmitter } from 'node:events';
 import type { AddressInfo } from 'node:net';
-import { describe, it, expect } from 'vitest';
-import { isBlockedAddress, safeFetch, safeFetchWithGuard, SsrfBlocked } from '../src/lib/references/safeFetch.js';
+import { describe, it, expect, vi } from 'vitest';
+import { isBlockedAddress, safeFetch, SsrfBlocked } from '../src/lib/references/safeFetch.js';
+import { safeFetchWithGuard } from '../src/lib/references/safeFetch.testing.js';
+
+/**
+ * `dns.lookup` is mocked for exactly one hostname (`safe-fetch-test.example`, used only by the
+ * TLS-options test below) so that test can exercise a real public-address code path without a
+ * real DNS round trip. Every other hostname - `localhost`, `127.0.0.1`, etc. - falls through to
+ * the real resolver, unchanged from before this file started mocking anything.
+ */
+const MOCKED_HOSTNAME = 'safe-fetch-test.example';
+const MOCKED_RESOLVED_IP = '93.184.216.34'; // public, non-blocked (also used in the allow-list test above)
+
+vi.mock('node:dns/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:dns/promises')>();
+  return {
+    ...actual,
+    default: {
+      ...actual.default,
+      lookup: async (hostname: string, opts?: unknown) => {
+        if (hostname === MOCKED_HOSTNAME) return [{ address: MOCKED_RESOLVED_IP, family: 4 }];
+        return (actual.default.lookup as (h: string, o?: unknown) => Promise<unknown>)(hostname, opts);
+      },
+    },
+  };
+});
 
 /**
  * `safeFetch` correctly refuses to connect to 127.0.0.1 - that's the whole point of it. To
@@ -79,6 +105,40 @@ describe('safeFetch', () => {
   it('names the reason without echoing a response body', async () => {
     await expect(safeFetch('http://169.254.169.254/latest/meta-data/'))
       .rejects.toThrow(/blocked address/i);
+  });
+
+  it('pins TLS servername to the original hostname, never to the connected IP, and never disables cert checks', async () => {
+    // Real SNI and certificate verification can only be proven against a real TLS stack and a
+    // real CA-issued cert - a local plaintext server proves nothing about that, and that's an
+    // accepted limit. What IS cheap to lock in, decoupled from any network call: the *options
+    // object* handed to `https.request` sets `servername` to the hostname (never the pinned
+    // IP) and never disables `rejectUnauthorized`. A refactor that silently dropped
+    // `servername` would pass every other test here while breaking every real HTTPS fetch.
+    let captured: (https.RequestOptions & { servername?: string }) | undefined;
+    const requestSpy = vi.spyOn(https, 'request').mockImplementation((options: unknown) => {
+      captured = options as https.RequestOptions & { servername?: string };
+      // No real connection: fail the hop immediately so `safeFetch` settles without ever
+      // touching the network. We only care about the options this call was made with.
+      const req = new EventEmitter() as unknown as ReturnType<typeof https.request>;
+      (req as unknown as { end: () => void }).end = () => {
+        queueMicrotask(() => req.emit('error', new Error('test double: no real network call')));
+      };
+      (req as unknown as { destroy: () => void }).destroy = () => {};
+      return req;
+    });
+
+    try {
+      await expect(safeFetch(`https://${MOCKED_HOSTNAME}/reference`)).rejects.toBeInstanceOf(SsrfBlocked);
+      expect(captured).toBeDefined();
+      // Connects to the pinned (resolved) IP address, not the hostname...
+      expect(captured!.host).toBe(MOCKED_RESOLVED_IP);
+      // ...while SNI/certificate-identity is checked against the ORIGINAL hostname, never the IP.
+      expect(captured!.servername).toBe(MOCKED_HOSTNAME);
+      expect(captured!.servername).not.toBe(MOCKED_RESOLVED_IP);
+      expect(captured!.rejectUnauthorized).toBe(true);
+    } finally {
+      requestSpy.mockRestore();
+    }
   });
 });
 
