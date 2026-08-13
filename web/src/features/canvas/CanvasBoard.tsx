@@ -46,6 +46,7 @@ import InkToolbar from './InkToolbar';
 import SelectionToolbar from './SelectionToolbar';
 import NotePickerModal from './NotePickerModal';
 import ShareButton from '../share/ShareButton';
+import { uploadImageWithProgress } from '../import/uploadImageWithProgress';
 import './canvas.css';
 
 type PlacementMode = 'sticky' | 'text' | 'rect' | 'ellipse' | 'arrow';
@@ -521,9 +522,13 @@ export default function CanvasBoard({ note }: CanvasBoardProps) {
       if (images.length === 0) return;
       for (const [i, file] of images.entries()) {
         try {
-          const form = new FormData();
-          form.append('file', file);
-          const { url } = await api.uploadImage(form);
+          // Downscaled and reported, exactly as the editor's drop is. This used to post the
+          // original bytes with nothing on screen - and a board drop is usually SEVERAL
+          // photos at once, so it was the worst instance of that in the app.
+          const { url } = await uploadImageWithProgress(
+            file,
+            images.length > 1 ? `Adding image ${i + 1} of ${images.length}…` : 'Adding image…',
+          );
           // Probe the natural size so a portrait photo does not land in a
           // landscape box and letterbox itself.
           const size = await naturalSize(url).catch(() => ({ width: DEFAULT_SIZES.image.width, height: DEFAULT_SIZES.image.height }));

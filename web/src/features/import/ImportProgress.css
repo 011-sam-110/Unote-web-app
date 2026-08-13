@@ -33,10 +33,14 @@
   width: 100%;
   border-radius: 999px;
   background: var(--accent);
+  /* Stage changes are discrete jumps; easing them stops the bar from snapping between
+     milestones. Only applies to the determinate case - `is-active` clears it below. */
+  transition: width var(--dur-slow) var(--ease-out);
 }
 
 .im-progress__bar.is-active {
   width: 38%;
+  transition: none;
   animation: im-sweep 1.3s ease-in-out infinite;
 }
 
@@ -52,6 +56,14 @@
   gap: 8px;
   font-size: 14px;
   color: var(--ink-2);
+}
+
+/* The count, not the phase name: quieter and monospaced so it reads as metadata about the
+   label beside it rather than as a second thing happening. */
+.im-progress__stage {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-3);
 }
 
 .im-progress__dot {

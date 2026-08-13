@@ -1,19 +1,22 @@
 // Shared helper: upload an image file to the server and insert it into the editor.
+//
+// The upload itself - shrink, send, report - lives in features/import/uploadImageWithProgress,
+// because the canvas board's image drop needs exactly the same thing and used to get none of
+// it. This file is only the editor half: where the resulting image goes, and what to say when
+// it cannot get there.
 import type { Editor } from '@tiptap/core';
-import { api } from '../../lib/api';
 import { toast } from '../../components/Toast';
+import { uploadImageWithProgress } from '../import/uploadImageWithProgress';
 
-export function uploadAndInsertImage(editor: Editor, file: File) {
-  const form = new FormData();
-  form.append('file', file);
-  api
-    .uploadImage(form)
-    .then(({ url }) => {
-      editor.chain().focus().setImage({ src: url, alt: file.name }).run();
-    })
-    .catch((e) => {
-      toast(e instanceof Error ? e.message : 'Image upload failed', 'error');
-    });
+export async function uploadAndInsertImage(editor: Editor, file: File): Promise<void> {
+  try {
+    const { url } = await uploadImageWithProgress(file);
+    editor.chain().focus().setImage({ src: url, alt: file.name }).run();
+  } catch (e) {
+    // The progress card has already reported the phase it died in; the toast is the
+    // diagnosis, and stays the app's single failure channel.
+    toast(e instanceof Error ? e.message : 'Image upload failed', 'error');
+  }
 }
 
 export function pickAndInsertImage(editor: Editor) {
@@ -23,7 +26,7 @@ export function pickAndInsertImage(editor: Editor) {
   input.style.display = 'none';
   input.addEventListener('change', () => {
     const file = input.files?.[0];
-    if (file) uploadAndInsertImage(editor, file);
+    if (file) void uploadAndInsertImage(editor, file);
     input.remove();
   });
   document.body.appendChild(input);

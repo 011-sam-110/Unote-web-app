@@ -16,6 +16,7 @@ import { api, ApiError } from '../../lib/api';
 import type { AiSuggestResult, Note, NoteLite, Attachment } from '../../lib/types';
 import { relativeTime, plural, formatBytes, errorMessage, formatDate } from '../../lib/format';
 import { toast } from '../../components/Toast';
+import { startTask } from '../../components/taskProgressBus';
 import { setActiveNotebook, clearActiveNotebook } from '../../lib/notebookContext';
 import EmptyState from '../../components/EmptyState';
 import Skeleton from '../../components/Skeleton';
@@ -665,33 +666,48 @@ function NoteWorkspace({ initialNote, initialBacklinks }: NoteWorkspaceProps) {
     else toast(e instanceof Error ? e.message : 'AI request failed', 'error');
   }
 
-  async function handleSummarize(close: () => void) {
-    close();
-    setAiBusy('summarize');
+  /**
+   * Run an AI action from the More menu with something on screen while it runs.
+   *
+   * `setAiBusy` alone was not feedback: the menu is closed on the way in, so the only thing
+   * it changed was the disabled state of items nobody could see. A summarise on a long note
+   * is a five-to-thirty second model call, and it looked exactly like a click that missed.
+   *
+   * Indeterminate by design - the gateway streams nothing back until the whole completion is
+   * ready, so there is no honest percentage to show. See taskProgressBus.
+   */
+  async function runAiAction<T>(key: string, label: string, run: () => Promise<T>, onDone: (r: T) => void) {
+    setAiBusy(key);
+    const task = startTask(label);
     try {
-      const res = await api.aiSummarize(note.id);
-      setSummaryResult({ model: res.model, markdown: res.markdown });
+      const res = await run();
+      task.done();
+      onDone(res);
     } catch (e) {
+      // The task card carries the phase; the toast carries the diagnosis. aiError already
+      // distinguishes "gateway down" from everything else, so it stays the single voice for that.
+      task.fail('AI request failed');
       aiError(e);
     } finally {
       setAiBusy(null);
     }
   }
+
+  async function handleSummarize(close: () => void) {
+    close();
+    await runAiAction('summarize', 'Summarising note…', () => api.aiSummarize(note.id), (res) => {
+      setSummaryResult({ model: res.model, markdown: res.markdown });
+    });
+  }
   async function handleTitleSuggest(close: () => void) {
     close();
-    setAiBusy('title');
-    try {
-      const res = await api.aiTitle(note.id);
+    await runAiAction('title', 'Suggesting a title…', () => api.aiTitle(note.id), (res) => {
       setTitle(res.title);
       titleRef.current = res.title;
       capturePending();
       autosave.schedule();
       toast('Title updated', 'ok');
-    } catch (e) {
-      aiError(e);
-    } finally {
-      setAiBusy(null);
-    }
+    });
   }
   /**
    * Run the tool the assistant chose, and answer in the terms the conversation shows.

@@ -1,0 +1,127 @@
+.tp-stack {
+  position: fixed;
+  bottom: 16px;
+  left: 16px;
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 8px;
+  /* Under modals (100) and tooltips (300), over page chrome. Deliberately below the
+     toaster's 200 so a toast is never obscured by a card that is only informational. */
+  z-index: 190;
+  max-width: min(320px, calc(100vw - 32px));
+  /* The card must never eat a click meant for the editor underneath it. */
+  pointer-events: none;
+}
+
+.tp-card {
+  background: var(--bg-elevated);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-2);
+  padding: 9px 11px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  animation: tp-in var(--dur-slow) var(--ease-out);
+}
+
+.tp-card.is-error {
+  border-color: var(--danger);
+  background: var(--danger-soft);
+}
+
+@keyframes tp-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+.tp-card__head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.tp-card__icon {
+  display: flex;
+  align-items: center;
+  color: var(--accent);
+  flex: none;
+}
+
+.tp-card.is-error .tp-card__icon {
+  color: var(--danger);
+}
+
+.tp-card__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: tp-pulse 1s ease-in-out infinite;
+}
+
+@keyframes tp-pulse {
+  0%, 100% { opacity: 0.28; }
+  50% { opacity: 1; }
+}
+
+.tp-card__label {
+  font-size: 12.5px;
+  color: var(--ink-2);
+  flex: 1;
+  min-width: 0;
+  /* One line: the label is a phase name, and a wrapping card resizes while you read it. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tp-card.is-error .tp-card__label {
+  color: var(--ink);
+}
+
+.tp-card__pct {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-3);
+  flex: none;
+  /* Fixed width so the card does not jitter as the number goes 9% -> 10% -> 100%. */
+  min-width: 4ch;
+  text-align: right;
+}
+
+.tp-card__track {
+  height: 3px;
+  border-radius: 999px;
+  background: var(--bg-active);
+  overflow: hidden;
+}
+
+.tp-card__bar {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+  transition: width var(--dur) var(--ease-out);
+}
+
+.tp-card__bar.is-indeterminate {
+  width: 40%;
+  transition: none;
+  animation: tp-sweep 1.25s ease-in-out infinite;
+}
+
+@keyframes tp-sweep {
+  0% { transform: translateX(-110%); }
+  50% { transform: translateX(75%); }
+  100% { transform: translateX(255%); }
+}
+
+/* base.css already flattens every animation under prefers-reduced-motion. This adds the
+   part a duration override cannot express: an indeterminate bar with no motion reads as a
+   bar stuck at 40%, so it fills the track instead and says "busy" by being solid. */
+@media (prefers-reduced-motion: reduce) {
+  .tp-card__bar.is-indeterminate {
+    width: 100%;
+    opacity: 0.55;
+  }
+}
