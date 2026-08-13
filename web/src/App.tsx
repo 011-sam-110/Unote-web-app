@@ -5,6 +5,7 @@ import Sidebar from './components/Sidebar';
 import QuickSwitcher from './components/QuickSwitcher';
 import CommandPalette from './components/CommandPalette';
 import { Toaster, toast } from './components/Toast';
+import TaskProgress from './components/TaskProgress';
 import Icon from './components/Icon';
 import Tooltip from './components/Tooltip';
 import { useShortcuts } from './lib/useShortcuts';
@@ -294,6 +295,7 @@ function AppShell() {
 
       <SyncRunner />
       <Toaster />
+      <TaskProgress />
       <QuickSwitcher
         open={quickSwitcherOpen}
         onClose={() => setQuickSwitcherOpen(false)}
