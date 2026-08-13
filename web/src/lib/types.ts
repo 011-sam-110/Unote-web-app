@@ -1,5 +1,9 @@
 // Shared API types - mirror of docs/API.md. Do not drift from the contract.
 
+import type { NoteLayout } from '../features/editor/pagination/layout';
+
+export type { NoteLayout };
+
 /** The signed-in account, as returned by every /api/auth endpoint that yields a user.
  *  Deliberately has no token field: the session lives in an httpOnly cookie the
  *  browser attaches itself, so JS never sees or stores credentials. */
@@ -73,6 +77,10 @@ export interface Note {
   tags: string[];
   notebook: NotebookLite;
   attachments?: Attachment[];
+  /** Paper size, margins and header/footer. The server always sends a complete object
+   *  (it resolves the NULL-means-default case), but this stays optional so a response
+   *  from an older deployment still typechecks against a newer client. */
+  layout?: NoteLayout;
 }
 
 export interface NoteVersionMeta {

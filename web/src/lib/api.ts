@@ -2,7 +2,7 @@ import type {
   AiChatTurn, AiHealthInfo, AiKeyInfo, AiSuggestResult, AiUsage, AuthProviderInfo,
   CanvasEdge, CanvasItem, CanvasItemData, CanvasItemKind,
   DashboardData, Flashcard, ImportJob, InkStroke, MetaInfo, Note, NoteKind, NoteLite, NotebookLite, Notebook,
-  NoteComment, NoteVersion, NoteVersionMeta, QrCode, SearchParsed, SearchResult, SessionScope, StudyStats,
+  NoteComment, NoteLayout, NoteVersion, NoteVersionMeta, QrCode, SearchParsed, SearchResult, SessionScope, StudyStats,
   ShareCreated, ShareEvents, ShareGuest, ShareLink, SharePeek, SharePermission, SharedNote,
   Template, TitleResult, User,
 } from './types';
@@ -152,7 +152,7 @@ const serverApi = {
   note: (id: string) => http<{ note: Note; backlinks: NoteLite[]; outgoingLinks: NoteLite[] }>(`/api/notes/${id}`),
   createNote: (b: { notebookId: string; title?: string; contentJson?: unknown; contentText?: string; tags?: string[]; kind?: NoteKind }) =>
     http<{ note: Note }>('/api/notes', json('POST', b)),
-  updateNote: (id: string, b: Partial<{ title: string; contentJson: unknown; contentText: string; pinned: boolean; archived: boolean; notebookId: string; tags: string[] }>) =>
+  updateNote: (id: string, b: Partial<{ title: string; contentJson: unknown; contentText: string; pinned: boolean; archived: boolean; notebookId: string; tags: string[]; layout: NoteLayout }>) =>
     http<{ note: Note }>(`/api/notes/${id}`, json('PATCH', b)),
   deleteNote: (id: string) => http<{ ok: true }>(`/api/notes/${id}`, { method: 'DELETE' }),
   undeleteNote: (id: string) => http<{ note: Note }>(`/api/notes/${id}/undelete`, { method: 'POST' }),
