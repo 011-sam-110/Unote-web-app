@@ -92,7 +92,7 @@ export default function FolioEditor({ content, notebookId, onReady, onDestroy, o
         const file = event.dataTransfer?.files?.[0];
         if (file && file.type.startsWith('image/')) {
           event.preventDefault();
-          if (editorBox.current) uploadAndInsertImage(editorBox.current, file);
+          if (editorBox.current) void uploadAndInsertImage(editorBox.current, file);
           return true;
         }
         return false;
@@ -101,7 +101,7 @@ export default function FolioEditor({ content, notebookId, onReady, onDestroy, o
         const file = Array.from(event.clipboardData?.files ?? []).find((f) => f.type.startsWith('image/'));
         if (file) {
           event.preventDefault();
-          if (editorBox.current) uploadAndInsertImage(editorBox.current, file);
+          if (editorBox.current) void uploadAndInsertImage(editorBox.current, file);
           return true;
         }
         return false;
