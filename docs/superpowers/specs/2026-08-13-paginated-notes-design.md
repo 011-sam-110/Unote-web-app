@@ -40,7 +40,7 @@ risk rather than an afterthought.
 - Formatting lives in a **selection bubble menu** (`SelectionToolbar.tsx`), not a
   persistent toolbar. The existing `NoteActionBar.tsx` at the top is Insert + panel toggles
   + note-object actions; it is not a formatting bar and does not become one.
-- **`TextStyleKit` already ships `fontFamily`, `fontSize` and `lineHeight`** — they are
+- **`TextStyleKit` already ships `fontFamily`, `fontSize` and `lineHeight`** - they are
   explicitly switched off in `TextColor.ts:18-20`. Three extensions I expected to write are
   a config flip.
 - `schema.sql` is applied idempotently on boot; the established migration idiom is to
@@ -49,11 +49,11 @@ risk rather than an afterthought.
 
 ## Scope: two slices
 
-**Slice A — the page.** Page geometry, live pagination, headers/footers, and all four
+**Slice A - the page.** Page geometry, live pagination, headers/footers, and all four
 exports. These share one model and cannot sensibly be separated: a footer that says
 "Page 2 of 7" needs a page count, and a PDF has to agree with the sheet on screen.
 
-**Slice B — the formatting bar.** Independent. Needs new marks and a new component, and
+**Slice B - the formatting bar.** Independent. Needs new marks and a new component, and
 could ship before or after A.
 
 This document specifies both. Slice A is the larger and riskier one.
@@ -94,14 +94,14 @@ becomes an A4 document the first time it is opened. Shape:
 Header/footer default to **off**: an A4 sheet with two empty bands on it looks broken. They
 are turned on from the bottom bar, and once on they render on every sheet.
 
-Zone strings are plain text plus **field tokens** — `{{page}}`, `{{pages}}`, `{{title}}`,
-`{{date}}`, `{{notebook}}` — rendered as non-editable chips in the UI and resolved per page
+Zone strings are plain text plus **field tokens** - `{{page}}`, `{{pages}}`, `{{title}}`,
+`{{date}}`, `{{notebook}}` - rendered as non-editable chips in the UI and resolved per page
 at render, print and export time. This is the one piece of syntax in the feature; it is
 chosen over a rich structure because a header is a line of text with two or three
 substitutions in it, and a document model for that would be a lot of machinery for no gain.
 
 **Delta sync**: `layout_json` must be added to whatever column list the note sync payload
-selects, or a layout change will not propagate to another device. This is a real trap —
+selects, or a layout change will not propagate to another device. This is a real trap -
 the column will work perfectly in one browser and silently not exist in another.
 
 **Canvas notes** (`kind = 'canvas'`) are always `plain`. A board has no reading order, so
@@ -112,7 +112,7 @@ it has no pages.
 A ProseMirror plugin, `web/src/features/editor/pagination/`. The core idea: **one
 continuous ProseMirror document, with spacer decorations that push blocks onto the next
 sheet, and a separate non-editable layer behind it that draws the paper.** The document is
-never split into per-page containers — doing that would break selection, undo, find, and
+never split into per-page containers - doing that would break selection, undo, find, and
 every node view in the app.
 
 ```
@@ -147,7 +147,7 @@ every node view in the app.
 
 Doc change (debounced), container resize (`ResizeObserver`), web font load
 (`document.fonts.ready`), async node views finishing (images, 3D models, chemistry,
-sketches — a `MutationObserver` plus `load` listeners on the content root), and any change
+sketches - a `MutationObserver` plus `load` listeners on the content root), and any change
 to page size, orientation or margins.
 
 Debounce is **one animation frame plus a 120ms trailing idle**, so a burst of typing
@@ -157,11 +157,11 @@ layout thrash.
 ### The three things that will bite
 
 - **Hidden tab panes measure as zero.** Several note panes are mounted at once (see
-  `features/tabs/`), and a hidden one has every height at 0 — which would compute
+  `features/tabs/`), and a hidden one has every height at 0 - which would compute
   thousands of pages and then thrash when it became visible. The plugin **must** bail when
   `view.dom.offsetParent === null`, and recompute on becoming visible. Everything the
   plugin does outside its own pane is guarded on `useIsActiveTab()`.
-- **A block taller than one content box cannot be pushed** — pushing it would leave the
+- **A block taller than one content box cannot be pushed** - pushing it would leave the
   next sheet just as overfull, forever. Rule: such a block starts on a fresh sheet and is
   allowed to overflow it; the page list marks the sheet `overflow: true` and the UI shows a
   quiet inline note ("This block is taller than one page"). It is not silently clipped.
@@ -183,10 +183,10 @@ sheet 1 edits `firstZones` and the rest edit `zones`.
 
 ## Exports
 
-One menu — `Export` in the bottom bar's status strip — with four entries. Each names what
+One menu - `Export` in the bottom bar's status strip - with four entries. Each names what
 it cannot carry, rather than dropping content silently.
 
-### PDF — browser print
+### PDF - browser print
 
 A print stylesheet over the sheets already on screen. `@page { size: <w>mm <h>mm; margin: 0 }`
 with the margins living inside each sheet, and `break-after: page` on `.folio-sheet`. All
@@ -197,14 +197,14 @@ Because pagination is suspended below 820px, printing on a phone must first run 
 **synchronous layout-for-print pass** at the note's real page geometry, otherwise a phone
 would print the unpaginated column. `beforeprint` triggers it; `afterprint` restores.
 
-### DOCX — server-side, real OOXML
+### DOCX - server-side, real OOXML
 
 New `server/src/lib/docx.ts` using the `docx` package, served from
 `GET /api/notes/:id/export?format=docx`. Maps the page geometry to section properties
 (page size and margins in twips), and header/footer zones to real Word headers/footers with
-a `PAGE`/`NUMPAGES` field for `{{page}}`/`{{pages}}` — so page numbers stay live in Word.
+a `PAGE`/`NUMPAGES` field for `{{page}}`/`{{pages}}` - so page numbers stay live in Word.
 
-Nodes that OOXML cannot hold — chemistry structures, 3D models, sketches, canvas items —
+Nodes that OOXML cannot hold - chemistry structures, 3D models, sketches, canvas items -
 become an **unmistakable placeholder paragraph** naming exactly what was omitted and where
 to see it, in a distinct style. Not an approximation, not a blank: if a reader cannot tell
 from the document itself that something was left out, the export has lied to them.
@@ -220,7 +220,7 @@ so once.
 ### Plain text
 
 New `tiptapToPlainText` in `server/src/lib/export.ts`. Not "Markdown with the syntax
-stripped" — a proper walk that keeps heading text, list markers and table cells as readable
+stripped" - a proper walk that keeps heading text, list markers and table cells as readable
 columns, and drops only the notation.
 
 ## Mobile
@@ -228,7 +228,7 @@ columns, and drops only the notation.
 Below 820px the plugin does not run: the note is the column it is today, at 19px, fully
 writable. A **Page view** button renders the sheets read-only so the layout can be checked,
 and printing works as described above. The layout settings still exist on the note and
-still govern export — the phone simply does not render them live.
+still govern export - the phone simply does not render them live.
 
 ---
 
@@ -237,24 +237,24 @@ still govern export — the phone simply does not render them live.
 `web/src/features/editor/formatbar/FormatBar.tsx` + `formatBar.css`. Sticky to the bottom
 of the note pane, guarded on `useIsActiveTab()`.
 
-**Row 1 — formatting.** Paragraph style (Normal / H1 / H2 / H3 / Quote / Code), font
+**Row 1 - formatting.** Paragraph style (Normal / H1 / H2 / H3 / Quote / Code), font
 family, font size, grow/shrink, bold, italic, underline, strikethrough, subscript,
 superscript, text colour, highlight, clear formatting, bullet / ordered / task lists,
 indent / outdent, four alignments, line spacing, paragraph marks, and a `...` overflow that
 absorbs the tail at narrow widths.
 
-**Row 2 — status strip.** `Page m of n`, word count, the page-size dropdown, header/footer
+**Row 2 - status strip.** `Page m of n`, word count, the page-size dropdown, header/footer
 toggle, zoom, and the Export menu.
 
 Extensions required:
 
 | Need | Source |
 |---|---|
-| Font family, font size, line height | **Already present** — flip the three `false`s in `TextColor.ts` |
+| Font family, font size, line height | **Already present** - flip the three `false`s in `TextColor.ts` |
 | Text colour, highlight | Already present |
 | Underline, subscript, superscript | Verify against StarterKit v3.28 before adding packages |
 | Text align | `@tiptap/extension-text-align` |
-| Indent / outdent | Custom — no official extension exists |
+| Indent / outdent | Custom - no official extension exists |
 
 The existing selection bubble menu stays. It is a different affordance (act on what you
 just selected, without moving the mouse) and removing it would be a regression.
@@ -264,7 +264,7 @@ just selected, without moving the mouse) and removing it would be a regression.
 - **Unit** (`server`): `tiptapToPlainText` and the DOCX mapper against fixture documents,
   including one that contains every node type the placeholder rule covers.
 - **Unit** (`web`): the break-placement function as a pure function over a list of
-  `{height}` blocks and a content height — no DOM. This is where the oversized-block and
+  `{height}` blocks and a content height - no DOM. This is where the oversized-block and
   exact-fit edge cases get pinned down.
 - **e2e** (Playwright): type past the bottom of sheet 1 and assert a second sheet appears;
   change page size and assert the count changes; set a footer field and assert it renders
@@ -286,6 +286,6 @@ field; PDF/A; importing page geometry from an uploaded DOCX.
 `grammar-desktop` is working in the shared checkout at `C:\Users\sampo\Documents\folio` on
 `feat/referencing`, applying a website-grammar pass to the desktop frontend. Agreed split:
 they own `web/src/styles/**` (tokens, base, theme) and all non-editor features; this branch
-owns `web/src/features/editor/**` — including `editor.css` and `notePage.css` — plus
+owns `web/src/features/editor/**` - including `editor.css` and `notePage.css` - plus
 `web/src/features/export/**` and the two server export files. Typography values that belong
 in the note body come to this branch as values, not as diffs.

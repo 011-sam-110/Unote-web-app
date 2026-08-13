@@ -146,7 +146,7 @@ function placeholder(what: string, indentLevel = 0): Paragraph {
     },
     children: [
       new TextRun({
-        text: `[ ${what} — this cannot be stored in a Word document. Open the note in Unote to see it. ]`,
+        text: `[ ${what} - this cannot be stored in a Word document. Open the note in Unote to see it. ]`,
         italics: true,
         color: 'B45309',
         size: BODY_HALF_POINTS - 2,
