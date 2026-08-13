@@ -6,13 +6,15 @@
 // several surfaces (history preview, the read-only share view) render notes with no pages
 // at all.
 
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import type { BreakPlan, PagePlan } from './placeBreaks';
+import { sheetOffsets } from './placeBreaks';
 import { geometryFor, type PageGeometry } from './geometry';
 import type { NoteLayout, Zone } from './layout';
 import type { PaginationBox } from './PaginationExtension';
 import type { PaginationOptions } from './paginationPlugin';
 import { PAGE_SIZES } from './pageSizes';
+import { readPageZoom, writePageZoom, ZOOM_EVENT } from './zoomPref';
 
 /**
  * Below this width an A4 sheet scales to under half size, which renders the note's 19px
@@ -20,6 +22,8 @@ import { PAGE_SIZES } from './pageSizes';
  * have always had; the layout still exists on the note and still governs export.
  */
 export const PAGED_MIN_WIDTH_PX = 820;
+
+export { ZOOM_STEPS } from './zoomPref';
 
 export interface PagedSurfaceProps {
   layout: NoteLayout;
@@ -33,6 +37,8 @@ export interface PagedSurfaceProps {
 interface InactiveSurface {
   active: false;
   box: PaginationBox;
+  zoom: number;
+  setZoom: (z: number) => void;
 }
 
 interface ActiveSurface {
@@ -44,6 +50,10 @@ interface ActiveSurface {
   fields: PagedSurfaceProps['fields'];
   onEditBand: PagedSurfaceProps['onEditBand'];
   style: CSSProperties;
+  zoom: number;
+  setZoom: (z: number) => void;
+  /** Wrapper style that reserves the RIGHT amount of room for the scaled page stack. */
+  zoomStyle: CSSProperties;
 }
 
 export type PagedSurface = InactiveSurface | ActiveSurface;
@@ -67,6 +77,18 @@ function useIsWideEnough(): boolean {
 export function usePagedSurface(props: PagedSurfaceProps | undefined): PagedSurface {
   const wide = useIsWideEnough();
   const [plan, setPlan] = useState<BreakPlan | null>(null);
+  // Read from the shared preference, and re-read whenever the format bar writes it. Two
+  // copies of "what zoom is this" is how the page and the readout end up disagreeing.
+  const [zoom, setZoomState] = useState(readPageZoom);
+  useEffect(() => {
+    const sync = () => setZoomState(readPageZoom());
+    window.addEventListener(ZOOM_EVENT, sync);
+    return () => window.removeEventListener(ZOOM_EVENT, sync);
+  }, []);
+  const setZoom = useCallback((z: number) => {
+    writePageZoom(z);
+    setZoomState(z);
+  }, []);
 
   const paged = Boolean(props) && props!.layout.mode === 'paged' && wide;
   const geometry = useMemo(
@@ -121,7 +143,7 @@ export function usePagedSurface(props: PagedSurfaceProps | undefined): PagedSurf
   }
 
   if (!props || !paged || !geometry) {
-    return { active: false, box };
+    return { active: false, box, zoom, setZoom };
   }
 
   // One sheet is always drawn, even before the first measure lands, so opening a note shows
@@ -143,6 +165,24 @@ export function usePagedSurface(props: PagedSurfaceProps | undefined): PagedSurf
     '--folio-print-size': printSize,
   } as CSSProperties;
 
+  // Scaling is a transform, which does NOT affect layout - that is the point. Every
+  // measurement the paginator takes stays in unscaled pixels, so zoom cannot perturb where
+  // the breaks fall. The cost is that the scaled stack no longer occupies the right amount
+  // of flow, which is what zoomStyle's explicit height puts back. The page plan already
+  // knows the true total height, so this is exact rather than observed.
+  const tops = sheetOffsets(pages, geometry.pageHeightPx, geometry.gapPx);
+  const lastPage = pages[pages.length - 1];
+  const documentHeightPx =
+    (tops[tops.length - 1] ?? 0) + geometry.pageHeightPx + (lastPage?.overflowPx ?? 0);
+
+  const zoomStyle: CSSProperties = {
+    height: `${documentHeightPx * zoom}px`,
+    // The scaled stack is narrower than the column, so centre what is actually drawn
+    // rather than leaving it pinned left inside a full-width box.
+    width: `${geometry.pageWidthPx * zoom}px`,
+    margin: '0 auto',
+  };
+
   return {
     active: true,
     box,
@@ -151,6 +191,9 @@ export function usePagedSurface(props: PagedSurfaceProps | undefined): PagedSurf
     pages,
     fields: props.fields,
     onEditBand: props.onEditBand,
-    style,
+    style: { ...style, transform: zoom === 1 ? undefined : `scale(${zoom})`, transformOrigin: 'top left' },
+    zoom,
+    setZoom,
+    zoomStyle,
   };
 }

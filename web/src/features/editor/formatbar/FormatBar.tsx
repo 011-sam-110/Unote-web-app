@@ -20,6 +20,7 @@ import {
   BulletList, IndentLess, IndentMore, LineHeight, OrderedList, TaskList,
 } from './FormatIcons';
 import { PAGE_SIZES, PAGE_SIZE_IDS, type PageSizeId } from '../pagination/pageSizes';
+import { ZOOM_STEPS } from '../pagination/usePagedSurface';
 import type { NoteLayout } from '../pagination/layout';
 import './formatBar.css';
 
@@ -33,10 +34,12 @@ export interface FormatBarProps {
    *  reporting a number that does not correspond to anything on screen. */
   paged: boolean;
   onExport: (format: 'pdf' | 'docx' | 'markdown' | 'text') => void;
+  zoom: number;
+  onZoom: (z: number) => void;
 }
 
 export default function FormatBar(props: FormatBarProps) {
-  const { editor, layout, onLayoutChange, pageCount, wordCount, paged, onExport } = props;
+  const { editor, layout, onLayoutChange, pageCount, wordCount, paged, onExport, zoom, onZoom } = props;
 
   // TipTap mutates the editor in place, so React has no idea a selection moved. Without
   // this subscription every button in the bar would render its state once and then lie:
@@ -193,19 +196,25 @@ export default function FormatBar(props: FormatBarProps) {
 
         <Sep />
 
-        {(['left', 'center', 'right', 'justify'] as const).map(align => (
-          <button
-            key={align}
-            type="button"
-            className={'folio-fmt-btn' + (editor.isActive({ textAlign: align }) ? ' on' : '')}
-            aria-pressed={editor.isActive({ textAlign: align })}
-            title={`Align ${align}`}
-            aria-label={`Align ${align}`}
-            onClick={() => editor.chain().focus().setTextAlign(align).run()}
-          >
-            {ALIGN_GLYPHS[align]}
-          </button>
-        ))}
+        {/* Word puts the four alignments together as one visual unit and so does this -
+            four loose icons in a row of twenty read as four more icons. Titles name the
+            shortcut because these are the controls people reach for by muscle memory. */}
+        <div className="folio-fmt-group" role="group" aria-label="Paragraph alignment">
+          {ALIGNMENTS.map(({ id, label, shortcut }) => (
+            <button
+              key={id}
+              type="button"
+              className={'folio-fmt-btn' + (editor.isActive({ textAlign: id }) ? ' on' : '')}
+              aria-pressed={editor.isActive({ textAlign: id })}
+              title={`${label} (${shortcut})`}
+              aria-label={label}
+              data-testid={`align-${id}`}
+              onClick={() => editor.chain().focus().setTextAlign(id).run()}
+            >
+              {ALIGN_GLYPHS[id]}
+            </button>
+          ))}
+        </div>
 
         <DropdownButton label={<LineHeight />}>
           {close =>
@@ -304,6 +313,32 @@ export default function FormatBar(props: FormatBarProps) {
 
         <span className="folio-format-bar__spacer" />
 
+        {paged && (
+          <div className="folio-fmt-zoom" role="group" aria-label="Zoom">
+            <button
+              type="button"
+              className="folio-fmt-btn"
+              aria-label="Zoom out"
+              title="Zoom out"
+              disabled={zoom <= ZOOM_STEPS[0]}
+              onClick={() => onZoom(ZOOM_STEPS[Math.max(0, ZOOM_STEPS.indexOf(zoom) - 1)])}
+            >
+              &minus;
+            </button>
+            <span className="folio-fmt-stat folio-fmt-zoom__value">{Math.round(zoom * 100)}%</span>
+            <button
+              type="button"
+              className="folio-fmt-btn"
+              aria-label="Zoom in"
+              title="Zoom in"
+              disabled={zoom >= ZOOM_STEPS[ZOOM_STEPS.length - 1]}
+              onClick={() => onZoom(ZOOM_STEPS[Math.min(ZOOM_STEPS.length - 1, ZOOM_STEPS.indexOf(zoom) + 1)])}
+            >
+              +
+            </button>
+          </div>
+        )}
+
         <DropdownButton
           align="right"
           label={
@@ -338,6 +373,14 @@ export default function FormatBar(props: FormatBarProps) {
 }
 
 /** Alignment glyphs by name, so the four buttons stay a loop rather than four copies. */
+/** Word's own labels and shortcuts, in Word's order. */
+const ALIGNMENTS = [
+  { id: 'left', label: 'Align left', shortcut: 'Ctrl+L' },
+  { id: 'center', label: 'Centre', shortcut: 'Ctrl+E' },
+  { id: 'right', label: 'Align right', shortcut: 'Ctrl+R' },
+  { id: 'justify', label: 'Justify', shortcut: 'Ctrl+J' },
+] as const;
+
 const ALIGN_GLYPHS = {
   left: <AlignLeft />,
   center: <AlignCenter />,

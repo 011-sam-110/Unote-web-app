@@ -24,6 +24,7 @@ import NoteCard from '../../components/NoteCard';
 import FolioEditor from './FolioEditor';
 import FormatBar from './formatbar/FormatBar';
 import { defaultLayout, type NoteLayout, type Zone } from './pagination/layout';
+import { readPageZoom, writePageZoom } from './pagination/zoomPref';
 import TagEditor from './TagEditor';
 import OutlinePane from './OutlinePane';
 import HistoryPanel from './HistoryPanel';
@@ -212,6 +213,10 @@ function NoteWorkspace({ initialNote, initialBacklinks }: NoteWorkspaceProps) {
   // The server always sends a resolved layout; the fallback covers a response from an
   // older deployment, and a board, which never has one.
   const layout = note.layout ?? defaultLayout();
+  // Zoom is the reader's, not the note's, so it lives in localStorage next to the existing
+  // focused-width preference rather than in layout_json. Held here because both the editor
+  // surface and the format bar need it.
+  const [pageZoom, setPageZoom] = useState(readPageZoom);
   // The outline rail used to render unconditionally, visible only at ≥1200px via a
   // media query - so it was a panel with no control. It is a toggle in the action bar
   // now, defaulting to on so wide screens behave exactly as they did before. The media
@@ -1107,6 +1112,8 @@ function NoteWorkspace({ initialNote, initialBacklinks }: NoteWorkspaceProps) {
               wordCount={wordCount}
               paged={layout.mode === 'paged'}
               onExport={exportNote}
+              zoom={pageZoom}
+              onZoom={(z) => { setPageZoom(z); writePageZoom(z); }}
             />
           )}
 

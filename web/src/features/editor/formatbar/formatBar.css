@@ -9,12 +9,12 @@
   bottom: 0;
   z-index: 20;
   margin-top: 24px;
-  background: var(--surface);
+  background: var(--bg-elevated);
   border: 1px solid var(--line);
   border-radius: 8px 8px 0 0;
   border-bottom: 0;
   box-shadow: 0 -2px 14px -8px rgb(0 0 0 / 25%);
-  font-family: var(--font-ui, var(--font-sans));
+  font-family: var(--font-ui);
 }
 
 .folio-format-bar__row {
@@ -26,7 +26,7 @@
 }
 
 .folio-format-bar__row + .folio-format-bar__row {
-  border-top: 1px solid var(--line-soft, var(--line));
+  border-top: 1px solid var(--line);
 }
 
 /* The status row is about the document, not the selection, so it is quieter: mono, small,
@@ -67,7 +67,7 @@
 
 .folio-fmt-btn--wide { padding: 0 10px; font-size: 11.5px; }
 
-.folio-fmt-btn:hover:not(:disabled) { background: var(--surface-2); }
+.folio-fmt-btn:hover:not(:disabled) { background: var(--bg-hover); }
 
 .folio-fmt-btn:focus-visible {
   outline: 2px solid var(--accent);
@@ -91,6 +91,31 @@
 .folio-fmt-btn i { font-family: var(--font-display); }
 .folio-fmt-btn sub,
 .folio-fmt-btn sup { font-size: 0.65em; }
+
+/* A set of mutually exclusive controls, drawn as one unit the way Word draws its
+   alignment cluster - so four icons in a row of twenty read as one control with four
+   states rather than as four more buttons. */
+.folio-fmt-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  padding: 1px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+.folio-fmt-group .folio-fmt-btn { border-radius: 4px; }
+
+.folio-fmt-zoom {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.folio-fmt-zoom__value {
+  min-width: 40px;
+  text-align: center;
+}
 
 .folio-fmt-sep {
   width: 1px;

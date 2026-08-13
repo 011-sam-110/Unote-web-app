@@ -130,6 +130,25 @@ export default function FolioEditor({ content, notebookId, onReady, onDestroy, o
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editor]);
 
+  // Re-paginate when the PAGE changes rather than when the text does.
+  //
+  // The plugin re-measures on doc changes, on a ResizeObserver over the editor, and on
+  // late-loading node views. None of those fire for a geometry change that does not alter
+  // the editor's width - turning a header on is the clearest case: it shortens every text
+  // box on every sheet while the editor's own box stays exactly the same size. The result
+  // was blocks laid out for the old geometry sitting under newly drawn bands until
+  // something unrelated happened to trigger a measure.
+  //
+  // Any transaction makes the plugin's view.update run, so an empty one is enough. It is
+  // kept out of the undo stack: repagination is not an edit.
+  const geometrySignature = surface.active
+    ? `${surface.geometry.contentHeightPx}x${surface.geometry.contentWidthPx}x${surface.geometry.interPageSkipPx}`
+    : 'none';
+  useEffect(() => {
+    if (!editor || editor.isDestroyed) return;
+    editor.view.dispatch(editor.state.tr.setMeta('addToHistory', false));
+  }, [editor, geometrySignature]);
+
   // A table wide enough to scroll must be reachable by keyboard, or a keyboard-only
   // user simply cannot see the off-screen columns (axe: scrollable-region-focusable).
   // TipTap builds .tableWrapper itself, so the attributes are applied to whatever it
@@ -198,6 +217,7 @@ export default function FolioEditor({ content, notebookId, onReady, onDestroy, o
         <InsertMenuPopover editor={editor} anchor={plusRef.current} onClose={() => setInsertOpen(false)} prepare={caretIntoPending} />
       )}
       {surface.active ? (
+        <div className="folio-zoom" style={surface.zoomStyle}>
         <div className="folio-paged" style={surface.style}>
           <SheetLayer
             pages={surface.pages}
@@ -209,6 +229,7 @@ export default function FolioEditor({ content, notebookId, onReady, onDestroy, o
           <div className="folio-page-content">
             <EditorContent editor={editor} />
           </div>
+        </div>
         </div>
       ) : (
         <EditorContent editor={editor} />

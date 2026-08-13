@@ -15,6 +15,14 @@
   padding-bottom: var(--folio-sheet-gap, 28px);
 }
 
+/* Zoom wrapper. The scale lives on .folio-paged as a transform, which does not affect
+   layout - so the paginator keeps measuring in real pixels and zoom can never move a page
+   break. This box puts back the flow space the transform does not occupy; its height is
+   computed from the page plan, so it is exact rather than estimated. */
+.folio-zoom {
+  position: relative;
+}
+
 /* ---------- the paper ---------- */
 
 .folio-sheet-layer {
@@ -35,8 +43,8 @@
 .folio-sheet__paper {
   position: absolute;
   inset: 0;
-  background: var(--surface, #fff);
-  border: 1px solid var(--line, #e4e4e7);
+  background: var(--bg-paper);
+  border: 1px solid var(--line);
   border-radius: 2px;
   box-shadow: 0 1px 2px rgb(0 0 0 / 6%), 0 12px 28px -18px rgb(0 0 0 / 45%);
 }
@@ -46,7 +54,7 @@
    grew so it reads as deliberate. */
 .folio-sheet.is-overflowing .folio-sheet__paper {
   border-style: dashed;
-  border-color: var(--warn, #b45309);
+  border-color: var(--warn);
 }
 
 .folio-sheet__overflow {
@@ -58,7 +66,7 @@
   text-align: center;
   font-family: var(--font-mono);
   font-size: 10.5px;
-  color: var(--warn, #b45309);
+  color: var(--warn);
   pointer-events: none;
 }
 
@@ -76,8 +84,8 @@
   z-index: 1;
 }
 
-.folio-band--header { border-bottom: 1px solid var(--line-soft, #ededf0); }
-.folio-band--footer { border-top: 1px solid var(--line-soft, #ededf0); }
+.folio-band--header { border-bottom: 1px solid var(--line); }
+.folio-band--footer { border-top: 1px solid var(--line); }
 
 .folio-band__zone {
   flex: 1;
@@ -101,13 +109,13 @@ button.folio-band__zone { cursor: text; }
 
 button.folio-band__zone:hover,
 button.folio-band__zone:focus-visible {
-  border-color: var(--line, #e4e4e7);
-  background: var(--surface-2, #fafafa);
+  border-color: var(--line);
+  background: var(--bg-hover);
 }
 
 .folio-band__zone.is-editing {
-  border-color: var(--accent, #3556c8);
-  background: var(--surface, #fff);
+  border-color: var(--accent);
+  background: var(--bg-elevated);
   outline: none;
 }
 
@@ -126,6 +134,17 @@ button.folio-band__zone:focus-visible {
 .folio-paged .folio-prosemirror {
   padding-bottom: 0;
   min-height: var(--folio-content-h);
+}
+
+/* The global :focus-visible rule in styles/base.css paints --focus-ring on ANY focused
+   element, including the contenteditable. That was invisible while the note filled the
+   page; inset on a sheet it draws a purple rounded rectangle around the whole document,
+   which is what a page is for. No accessibility loss: a text editor's focus indicator is
+   the caret, which is exactly how Word and Google Docs do it. */
+.folio-paged .folio-prosemirror:focus-visible,
+.folio-paged .folio-prosemirror:focus {
+  box-shadow: none;
+  border-radius: 0;
 }
 
 .folio-page-spacer {
@@ -168,7 +187,16 @@ button.folio-band__zone:focus-visible {
     height: auto !important;
   }
 
+  /* Zoom is a screen affordance. Printing a scaled page would silently produce a PDF at
+     67% with everything shrunk inside a full-size sheet - the transform and the flow box
+     that compensates for it both have to go. */
+  .folio-zoom {
+    height: auto !important;
+    width: auto !important;
+  }
+
   .folio-paged {
+    transform: none !important;
     padding-bottom: 0;
     /* The gap between sheets is a screen affordance. In print the page break is the
        separation, and a gap would push every sheet progressively down its own page. */
