@@ -9,6 +9,8 @@ import { tiptapToMarkdown, type TTNode } from '../lib/export.js';
 import { recordNoteEvent } from '../lib/events.js';
 import { plainTextFromDoc } from '../lib/plainText.js';
 import { parseLayout, defaultLayout } from '../lib/pageLayout.js';
+import { tiptapToPlainText } from '../lib/plainTextExport.js';
+import { tiptapToDocx } from '../lib/docx.js';
 import { claimAttachmentsForNote } from '../lib/attachments.js';
 
 const router = Router();
@@ -582,18 +584,49 @@ router.get('/:id/export', async (req, res) => {
     res.status(404).json({ error: 'note not found' });
     return;
   }
+  // PDF is deliberately absent: it is produced by printing the pages the browser has
+  // already laid out, which is the only way to guarantee it matches what the writer saw.
+  // See pagination.css's @media print block.
   const format = typeof req.query.format === 'string' ? req.query.format : 'markdown';
-  if (format !== 'markdown') {
+  if (format !== 'markdown' && format !== 'text' && format !== 'docx') {
     res.status(400).json({ error: 'unsupported export format' });
     return;
   }
 
-  const markdown = tiptapToMarkdown(JSON.parse(note.content_json) as TTNode);
+  const doc = JSON.parse(note.content_json) as TTNode;
   const safeName = (note.title || 'untitled').replace(/[^a-z0-9\-_ ]/gi, '').trim().replace(/\s+/g, '-').slice(0, 80) || 'untitled';
+
+  if (format === 'text') {
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${safeName}.txt"`);
+    res.send(tiptapToPlainText(doc));
+    return;
+  }
+
+  if (format === 'docx') {
+    const notebook = await db
+      .prepare('SELECT name FROM notebooks WHERE id = ? AND user_id = ?')
+      .get<{ name: string }>(note.notebook_id, uid);
+    const buffer = await tiptapToDocx(doc, {
+      title: note.title || 'Untitled',
+      layout: parseLayout(note.layout_json),
+      fields: {
+        title: note.title || 'Untitled',
+        notebook: notebook?.name ?? '',
+        // The date the export was taken, which is what a "date" field in a header means on
+        // a printed document - not the date the note was written.
+        date: new Date().toISOString().slice(0, 10),
+      },
+    });
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+    res.setHeader('Content-Disposition', `attachment; filename="${safeName}.docx"`);
+    res.send(buffer);
+    return;
+  }
 
   res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
   res.setHeader('Content-Disposition', `attachment; filename="${safeName}.md"`);
-  res.send(markdown);
+  res.send(tiptapToMarkdown(doc));
 });
 
 router.get('/:id/unlinked-mentions', async (req, res) => {
