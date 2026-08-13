@@ -568,6 +568,55 @@ CREATE INDEX IF NOT EXISTS idx_canvas_items_sync ON canvas_items(note_id, update
 CREATE INDEX IF NOT EXISTS idx_canvas_edges_sync ON canvas_edges(note_id, updated_at, id);
 CREATE INDEX IF NOT EXISTS idx_note_ink_sync     ON note_ink(note_id, updated_at, id);
 
+-- ===========================================================================
+-- REFERENCING (feature: references) - appended block, see
+-- docs/superpowers/specs/2026-08-12-referencing-design.md
+-- Append-only convention agreed with the parallel spellcheck work so two
+-- features can add tables without tangling with each other's edits.
+-- ===========================================================================
+
+-- A source is stored as CSL-JSON, the format citeproc-js consumes directly, so no
+-- internal citation format is invented and a DOI lookup can be stored verbatim.
+CREATE TABLE IF NOT EXISTS sources (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  -- One of sourceTypes.ts ids ('website', 'journal', ...). The CSL type lives inside
+  -- csl_json; this is what the intake form was filled in as.
+  kind TEXT NOT NULL,
+  csl_json TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT to_char(now() AT TIME ZONE 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+  updated_at TEXT NOT NULL DEFAULT to_char(now() AT TIME ZONE 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')
+);
+CREATE INDEX IF NOT EXISTS sources_user_idx ON sources(user_id, updated_at DESC);
+
+-- A citation is a note pointing at a library source. The note NEVER stores formatted
+-- text: switching Harvard to APA has to re-render every citation without editing the
+-- student's prose, which is only possible if the rendered form is derived, not stored.
+CREATE TABLE IF NOT EXISTS citations (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  note_id TEXT NOT NULL REFERENCES notes(id) ON DELETE CASCADE,
+  source_id TEXT NOT NULL REFERENCES sources(id) ON DELETE CASCADE,
+  -- "p. 14", "ch. 2" - the page or chapter inside the source.
+  locator TEXT NOT NULL DEFAULT '',
+  prefix TEXT NOT NULL DEFAULT '',
+  suffix TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT to_char(now() AT TIME ZONE 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')
+);
+CREATE INDEX IF NOT EXISTS citations_note_idx ON citations(note_id);
+CREATE INDEX IF NOT EXISTS citations_source_idx ON citations(source_id);
+
+-- One verdict per source, replaced on each check. checked_at is load-bearing rather than
+-- audit noise: a stored verdict must state its own age, so an offline student sees
+-- "checked 9 Aug" instead of a claim implying it was confirmed just now.
+CREATE TABLE IF NOT EXISTS source_verdicts (
+  source_id TEXT PRIMARY KEY REFERENCES sources(id) ON DELETE CASCADE,
+  state TEXT NOT NULL CHECK (state IN ('verified', 'unconfirmed', 'refuted', 'unreachable')),
+  registry TEXT,
+  evidence TEXT NOT NULL DEFAULT '',
+  checked_at TEXT NOT NULL
+);
+
 -- Page layout: what shape of paper a note is, and what its header and footer say.
 --
 -- TEXT holding JSON rather than JSONB, matching notes.content_json and canvas_items.data.

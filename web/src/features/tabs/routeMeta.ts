@@ -34,6 +34,8 @@ export function routeMeta(path: string, notebooks: Notebook[]): TabMeta {
       return { label: 'Ask AI', icon: 'sparkles' };
     case '/tags':
       return { label: 'Tags', hash: true };
+    case '/references':
+      return { label: 'Sources', icon: 'link' };
     case '/notebook/:notebookId': {
       const nb = notebooks.find((n) => n.id === matched?.params.notebookId);
       return { label: nb?.name ?? 'Notebook', dot: nb?.color };

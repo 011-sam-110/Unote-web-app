@@ -26,6 +26,7 @@ import LocalImage from './nodes/LocalImage';
 import ChemNode from './nodes/chem/ChemNode';
 import Model3d from './nodes/model3d/Model3dNode';
 import { SketchNode } from './nodes/sketch';
+import { SpellCheck } from './spell/SpellExtension';
 import { createPaginationExtension, type PaginationBox } from './pagination/PaginationExtension';
 import TextAlign from '@tiptap/extension-text-align';
 import Subscript from '@tiptap/extension-subscript';
@@ -174,6 +175,9 @@ export function createFolioExtensions(opts: BuildExtensionsOpts): Extensions {
 
   if (opts.editable) {
     extensions.push(SlashCommand);
+    // Editable only: the read-only history preview would otherwise pull a 15 MB engine to
+    // squiggle a document nobody can correct.
+    extensions.push(SpellCheck);
   }
 
   if (opts.paginationBox) {

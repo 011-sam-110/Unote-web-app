@@ -172,7 +172,7 @@ export interface SyncMetaRow {
    *
    * `searchIndex` holds the serialised offline search index (local/search).
    */
-  key: 'cursor' | 'clockOffsetMs' | 'lastSyncAt' | 'initialSyncDone' | 'searchIndex';
+  key: 'cursor' | 'clockOffsetMs' | 'lastSyncAt' | 'initialSyncDone' | 'searchIndex' | 'customDictionary';
   value: string;
 }
 

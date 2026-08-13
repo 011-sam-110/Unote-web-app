@@ -1,0 +1,84 @@
+/* Spelling decorations.
+ *
+ * Deliberately the platform's own vocabulary - a red wavy underline under running text is
+ * what Chrome, Safari, Firefox, Windows and macOS all draw for a misspelling, so borrowing
+ * it means the feature needs no explaining. It also means no other annotation in this app
+ * may use this form: citation state is a badge on its node, AI review is a range highlight.
+ *
+ * Ambient by design: no background, no weight change, no hover card. A possible typo is an
+ * observation the reader is free to ignore, and it sits at the bottom of the annotation
+ * z-order for that reason. Everything interactive about it lives in the right-click menu. */
+.folio-spell-error {
+  text-decoration-line: underline;
+  text-decoration-style: wavy;
+  text-decoration-color: var(--spell-underline);
+  text-decoration-thickness: 1px;
+  /* Clear of descenders, or the wave cuts through every g and y it passes under. */
+  text-underline-offset: 2px;
+  /* Never let a squiggle stop text being selected or clicked through. */
+  text-decoration-skip-ink: auto;
+}
+
+/* Anyone who has asked for less decoration gets a plain underline instead of a wave: the
+ * signal survives, the motion-adjacent shimmer of a wavy line at small sizes does not. */
+@media (prefers-reduced-motion: reduce) {
+  .folio-spell-error {
+    text-decoration-style: solid;
+  }
+}
+
+/* The unified right-click menu. Fixed rather than absolute: it is positioned from pointer
+ * coordinates, and each tab pane is its own scroll container, so an absolutely positioned
+ * menu would drift the moment the pane scrolled underneath it. */
+.folio-spell-menu {
+  position: fixed;
+  z-index: 60;
+  min-width: 210px;
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-2);
+  font-size: 0.875rem;
+}
+
+.folio-spell-menu button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: calc(var(--radius) - 5px);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+}
+
+.folio-spell-menu button:hover {
+  background: var(--bg-hover);
+}
+
+.folio-spell-menu button:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+/* Corrections read as the answer, not as a list of options - they are the reason the menu
+ * opened, so they carry the weight and everything below them is secondary. */
+.folio-spell-suggestion {
+  font-weight: 600;
+}
+
+.folio-spell-empty {
+  padding: 6px 10px;
+  color: var(--ink-3);
+}
+
+.folio-spell-sep {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--line);
+}

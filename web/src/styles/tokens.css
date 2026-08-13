@@ -99,6 +99,13 @@
 
   --focus-ring: 0 0 0 3px var(--accent-soft), 0 0 0 1px var(--accent);
 
+  /* ---- spell check ---- */
+  /* Its own token rather than --danger: a possible typo is an ambient observation, not an
+     error, and sharing the error colour would make it assert more than it knows. Red wavy
+     under prose is the platform's own spelling signal on every browser and both desktop
+     OSes, so this deliberately matches that vocabulary rather than inventing one. */
+  --spell-underline: #d2342a;
+
   color-scheme: light;
 }
 
@@ -161,5 +168,67 @@
   --shadow-2: 0 4px 20px rgba(0, 0, 0, 0.45);
   --ring-subtle: rgba(255, 255, 255, 0.16);
 
+  /* ---- spell check ---- */
+  /* Lifted off the light value: #d2342a on this ground is close to vibrating, and a
+     squiggle the eye has to fight is worse than no squiggle. */
+  --spell-underline: #f0705f;
+
   color-scheme: dark;
 }
+
+/* ===== BEGIN referencing (source library) =====================================
+   Four verdict states, in a block of their own so this feature's colours arrive
+   in BOTH themes in one edit. The file's own history is the argument for that:
+   the syntax palette above was a set of hard-coded light-theme hexes served
+   unchanged in dark mode, where keywords measured 2.88:1 - a real failure, in
+   this file, invisible until somebody measured it. So every value below was
+   measured before it was written.
+
+   HUE IS THE SECOND CHANNEL, NEVER THE ONLY ONE. `verified` and `refuted`
+   differ on the red-green axis, the most common colour vision deficiency, on
+   the two states that matter most - so the badge leads with a GLYPH of its own
+   shape (tick / question mark / exclamation / dash) and `unreachable` also
+   carries a dashed border. Strip the colour entirely and all four still read.
+
+   `unreachable` is a cool slate rather than any shade of amber or red: it is
+   the absence of a claim, not a weak accusation. `unconfirmed` is plain ink,
+   because it is the most common state by far and the one a student's honest
+   lecture notes will sit in permanently.
+
+   Measured contrast, ink on the surfaces a badge lands on
+   (light: --bg #fcfbf9 / --bg-elevated #fffefb / --bg-paper / --tint):
+     verified    6.32 / 6.48 / 6.05 / 5.64
+     unconfirmed 6.92 / 7.10 / 6.63 / 6.18
+     refuted     6.38 / 6.54 / 6.11 / 5.70
+     unreachable 6.88 / 7.06 / 6.60 / 6.15
+   and ink on its own -soft fill: verified 5.77, unconfirmed 6.12,
+   refuted 5.64, unreachable 6.07. All >= 4.5.                                */
+:root {
+  --verdict-verified: #146c2e;
+  --verdict-verified-soft: #e7f4eb;
+  --verdict-unconfirmed: #5c5750;
+  --verdict-unconfirmed-soft: #f0ede6;
+  --verdict-refuted: #b3222c;
+  --verdict-refuted-soft: #fbe9e9;
+  --verdict-unreachable: #455a70;
+  --verdict-unreachable-soft: #eaedf2;
+}
+
+/* Dark. Soft fills are the ink at 11% over whatever surface is behind them, so
+   a badge keeps its tint on a card, the page and a hover row alike. Measured
+   ink-on-own-fill over --bg / --bg-elevated / --bg-paper / --tint:
+     verified    7.03 / 6.36 / 6.66 / 5.84
+     unconfirmed 5.74 / 5.19 / 5.44 / 4.83
+     refuted     5.45 / 4.94 / 5.18 / 4.55
+     unreachable 6.95 / 6.27 / 6.58 / 5.77                                    */
+:root[data-theme='dark'] {
+  --verdict-verified: #63c983;
+  --verdict-verified-soft: rgba(99, 201, 131, 0.11);
+  --verdict-unconfirmed: #a8a196;
+  --verdict-unconfirmed-soft: rgba(168, 161, 150, 0.11);
+  --verdict-refuted: #f4756f;
+  --verdict-refuted-soft: rgba(244, 117, 111, 0.11);
+  --verdict-unreachable: #a2b6d1;
+  --verdict-unreachable-soft: rgba(162, 182, 209, 0.11);
+}
+/* ===== END referencing ====================================================== */

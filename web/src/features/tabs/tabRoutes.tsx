@@ -16,6 +16,7 @@ import TagsPage from '../../pages/TagsPage';
 import NotePage from '../editor/NotePage';
 import StudyPage from '../study/StudyPage';
 import AskPage from '../ask/AskPage';
+import ReferencesPage from '../references/ReferencesPage';
 
 export interface TabRoute {
   /** An absolute react-router pattern. */
@@ -31,6 +32,7 @@ export const TAB_ROUTES: TabRoute[] = [
   { pattern: '/ask', element: <AskPage /> },
   { pattern: '/search', element: <SearchPage /> },
   { pattern: '/tags', element: <TagsPage /> },
+  { pattern: '/references', element: <ReferencesPage /> },
 ];
 
 /** The query string is not part of what a path renders - `/search?q=trees` is the search
