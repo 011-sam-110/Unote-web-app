@@ -27,6 +27,11 @@ import ChemNode from './nodes/chem/ChemNode';
 import Model3d from './nodes/model3d/Model3dNode';
 import { SketchNode } from './nodes/sketch';
 import { SpellCheck } from './spell/SpellExtension';
+import { createPaginationExtension, type PaginationBox } from './pagination/PaginationExtension';
+import TextAlign from '@tiptap/extension-text-align';
+import Subscript from '@tiptap/extension-subscript';
+import Superscript from '@tiptap/extension-superscript';
+import { Indent } from './formatbar/Indent';
 
 const lowlight = createLowlight(common);
 
@@ -38,6 +43,10 @@ export interface BuildExtensionsOpts {
    *  menu, which is wrong anywhere that menu is not mounted (the shared-link
    *  editor, for one). Pass '' for no placeholder at all. */
   paragraphPlaceholder?: string;
+  /** Live page geometry + plan callback. Omitted anywhere pages are not wanted - the
+   *  history preview and the read-only share editor both render a note as a single
+   *  continuous column, and measuring one of those would be pure cost. */
+  paginationBox?: PaginationBox;
 }
 
 const UNIQUE_ID_TYPES = [
@@ -147,6 +156,13 @@ export function createFolioExtensions(opts: BuildExtensionsOpts): Extensions {
       blockOptions: { onClick: createMathClickHandler(opts.editorBox, 'block') },
     }),
     UniqueID.configure({ types: UNIQUE_ID_TYPES }),
+    // Alignment is a block property, so it is configured with the block types it may sit
+    // on rather than applied as a mark. Lists are omitted deliberately: aligning a list
+    // moves the bullets away from the text and there is no sensible DOCX equivalent.
+    TextAlign.configure({ types: ['heading', 'paragraph'] }),
+    Subscript,
+    Superscript,
+    Indent,
     Callout,
     Wikilink.configure({ getNotebookId: opts.getNotebookId }),
     ColumnList,
@@ -162,6 +178,10 @@ export function createFolioExtensions(opts: BuildExtensionsOpts): Extensions {
     // Editable only: the read-only history preview would otherwise pull a 15 MB engine to
     // squiggle a document nobody can correct.
     extensions.push(SpellCheck);
+  }
+
+  if (opts.paginationBox) {
+    extensions.push(createPaginationExtension(opts.paginationBox));
   }
 
   return extensions;

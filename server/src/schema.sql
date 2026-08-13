@@ -616,3 +616,11 @@ CREATE TABLE IF NOT EXISTS source_verdicts (
   evidence TEXT NOT NULL DEFAULT '',
   checked_at TEXT NOT NULL
 );
+
+-- Page layout: what shape of paper a note is, and what its header and footer say.
+--
+-- TEXT holding JSON rather than JSONB, matching notes.content_json and canvas_items.data.
+-- Nullable and NULL by default, which is the whole reason this needed no backfill: the
+-- parser in lib/pageLayout.ts reads NULL as "default A4 document", so every note written
+-- before pagination existed becomes one the first time it is opened.
+ALTER TABLE notes ADD COLUMN IF NOT EXISTS layout_json TEXT;

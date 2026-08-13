@@ -1,4 +1,5 @@
 import { db } from '../db.js';
+import { parseLayout } from './pageLayout.js';
 
 export interface NotebookLiteRow { id: string; name: string; emoji: string; color: string }
 
@@ -85,6 +86,9 @@ export interface NoteRow {
   // predate the column - they fall back to 'doc' in the serialisers below.
   kind?: string;
   pinned: number; archived: number; created_at: string; updated_at: string;
+  // Page layout (paper size, margins, header/footer). Optional for the same reason `kind`
+  // is: rows and callers predating the column, which read as the default A4 document.
+  layout_json?: string | null;
 }
 
 /**
@@ -148,5 +152,9 @@ export async function noteFull(row: NoteRow) {
     tags,
     notebook,
     attachments,
+    // Always a complete object, never the raw column. The client should not have to know
+    // that NULL means "default", nor carry a second copy of the fallback rules - and a
+    // half-written blob from a sync conflict resolves here rather than in a render.
+    layout: parseLayout(row.layout_json),
   };
 }

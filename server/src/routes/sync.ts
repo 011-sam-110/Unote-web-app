@@ -46,8 +46,12 @@ const SOURCES: Array<{ entity: SyncEntity; alias: string; sql: string }> = [
     // another device arrives with its new title and body but no tags, and the
     // client's merge leaves the old set in place. Push was never the problem (tags
     // ride inside the note's own PATCH payload); pull was.
+    // layout_json rides along for the same reason tags do. It is a column on the note with
+    // no updated_at of its own, so without naming it here a page-size change made on the
+    // laptop reaches the phone as a note whose body updated and whose paper did not - and
+    // the layout would look correct in one browser and be silently absent in the other.
     sql: `SELECT id, updated_at, deleted_at, notebook_id, title, content_json, content_text,
-                 kind, pinned, archived, created_at,
+                 kind, pinned, archived, created_at, layout_json,
                  COALESCE(
                    (SELECT array_agg(nt.tag ORDER BY nt.tag)
                       FROM note_tags nt WHERE nt.note_id = notes.id),

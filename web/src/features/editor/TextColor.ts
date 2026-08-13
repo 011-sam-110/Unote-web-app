@@ -7,19 +7,18 @@
 // promoted to a direct dependency. No `Color` extension package was needed as a fallback.
 //
 // TextStyleKit mirrors the TableKit pattern already used in buildExtensions.ts: opt into
-// just the pieces we want (Color + BackgroundColor) and disable the rest (font family/size/
-// line height - out of scope for this feature).
+// just the pieces we want and disable the rest.
+//
+// Font family, font size and line height were disabled here as "out of scope" when this
+// file only had to serve the Color action. The bottom formatting bar needs all three, and
+// they were already in the package - so this is a config change rather than three new
+// extensions. They all write to the same `textStyle` mark, which is why they compose:
+// a run can carry a family, a size and a colour at once without fighting.
 import { TextStyleKit } from '@tiptap/extension-text-style';
 import type { Extensions } from '@tiptap/core';
 
 export function createTextColorExtensions(): Extensions {
-  return [
-    TextStyleKit.configure({
-      fontFamily: false,
-      fontSize: false,
-      lineHeight: false,
-    }),
-  ];
+  return [TextStyleKit];
 }
 
 export interface ColorSwatch {

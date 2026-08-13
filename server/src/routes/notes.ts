@@ -8,6 +8,9 @@ import { syncLinksForNote, renameWikilinksToTitle, resyncNotesReferencingTitle }
 import { tiptapToMarkdown, type TTNode } from '../lib/export.js';
 import { recordNoteEvent } from '../lib/events.js';
 import { plainTextFromDoc } from '../lib/plainText.js';
+import { parseLayout, defaultLayout } from '../lib/pageLayout.js';
+import { tiptapToPlainText } from '../lib/plainTextExport.js';
+import { tiptapToDocx } from '../lib/docx.js';
 import { claimAttachmentsForNote } from '../lib/attachments.js';
 
 const router = Router();
@@ -339,6 +342,18 @@ router.patch('/:id', async (req, res) => {
   const newPinned = b.pinned !== undefined ? (b.pinned ? 1 : 0) : row.pinned;
   const newArchived = b.archived !== undefined ? (b.archived ? 1 : 0) : row.archived;
   const newNotebookId = b.notebookId !== undefined ? b.notebookId : row.notebook_id;
+  // Round-tripped through parseLayout rather than stored as sent, so the column can only
+  // ever hold a layout this server understands: unknown keys are dropped, out-of-range
+  // margins are clamped, and a client that posts nonsense gets a default rather than
+  // writing a note that later fails to render. Storing NULL for a default layout keeps
+  // the column empty for the overwhelming majority of notes that never change their paper.
+  const newLayoutJson =
+    b.layout !== undefined
+      ? (() => {
+          const parsed = parseLayout(JSON.stringify(b.layout));
+          return JSON.stringify(parsed) === JSON.stringify(defaultLayout()) ? null : JSON.stringify(parsed);
+        })()
+      : (row.layout_json ?? null);
 
   // Conflict adjudication, for a write that arrived from an offline client.
   //
@@ -384,10 +399,10 @@ router.patch('/:id', async (req, res) => {
 
   await db
     .prepare(
-      `UPDATE notes SET title = ?, content_json = ?, content_text = ?, pinned = ?, archived = ?, notebook_id = ?, updated_at = ?
+      `UPDATE notes SET title = ?, content_json = ?, content_text = ?, pinned = ?, archived = ?, notebook_id = ?, layout_json = ?, updated_at = ?
        WHERE id = ? AND user_id = ?`,
     )
-    .run(newTitle, newContentJson, newContentText, newPinned, newArchived, newNotebookId, nowIso(), row.id, uid);
+    .run(newTitle, newContentJson, newContentText, newPinned, newArchived, newNotebookId, newLayoutJson, nowIso(), row.id, uid);
 
   if (b.tags !== undefined) await setTags(uid, row.id, b.tags);
   if (b.contentText !== undefined || b.contentJson !== undefined) await syncLinksForNote(uid, row.id, newContentText);
@@ -569,18 +584,49 @@ router.get('/:id/export', async (req, res) => {
     res.status(404).json({ error: 'note not found' });
     return;
   }
+  // PDF is deliberately absent: it is produced by printing the pages the browser has
+  // already laid out, which is the only way to guarantee it matches what the writer saw.
+  // See pagination.css's @media print block.
   const format = typeof req.query.format === 'string' ? req.query.format : 'markdown';
-  if (format !== 'markdown') {
+  if (format !== 'markdown' && format !== 'text' && format !== 'docx') {
     res.status(400).json({ error: 'unsupported export format' });
     return;
   }
 
-  const markdown = tiptapToMarkdown(JSON.parse(note.content_json) as TTNode);
+  const doc = JSON.parse(note.content_json) as TTNode;
   const safeName = (note.title || 'untitled').replace(/[^a-z0-9\-_ ]/gi, '').trim().replace(/\s+/g, '-').slice(0, 80) || 'untitled';
+
+  if (format === 'text') {
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${safeName}.txt"`);
+    res.send(tiptapToPlainText(doc));
+    return;
+  }
+
+  if (format === 'docx') {
+    const notebook = await db
+      .prepare('SELECT name FROM notebooks WHERE id = ? AND user_id = ?')
+      .get<{ name: string }>(note.notebook_id, uid);
+    const buffer = await tiptapToDocx(doc, {
+      title: note.title || 'Untitled',
+      layout: parseLayout(note.layout_json),
+      fields: {
+        title: note.title || 'Untitled',
+        notebook: notebook?.name ?? '',
+        // The date the export was taken, which is what a "date" field in a header means on
+        // a printed document - not the date the note was written.
+        date: new Date().toISOString().slice(0, 10),
+      },
+    });
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+    res.setHeader('Content-Disposition', `attachment; filename="${safeName}.docx"`);
+    res.send(buffer);
+    return;
+  }
 
   res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
   res.setHeader('Content-Disposition', `attachment; filename="${safeName}.md"`);
-  res.send(markdown);
+  res.send(tiptapToMarkdown(doc));
 });
 
 router.get('/:id/unlinked-mentions', async (req, res) => {

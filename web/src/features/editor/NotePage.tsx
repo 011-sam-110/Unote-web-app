@@ -14,7 +14,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import type { Editor } from '@tiptap/core';
 import { api, ApiError } from '../../lib/api';
 import type { AiSuggestResult, Note, NoteLite, Attachment } from '../../lib/types';
-import { relativeTime, plural, formatBytes, errorMessage } from '../../lib/format';
+import { relativeTime, plural, formatBytes, errorMessage, formatDate } from '../../lib/format';
 import { toast } from '../../components/Toast';
 import { setActiveNotebook, clearActiveNotebook } from '../../lib/notebookContext';
 import EmptyState from '../../components/EmptyState';
@@ -22,6 +22,9 @@ import Skeleton from '../../components/Skeleton';
 import Icon from '../../components/Icon';
 import NoteCard from '../../components/NoteCard';
 import FolioEditor from './FolioEditor';
+import FormatBar from './formatbar/FormatBar';
+import { defaultLayout, type NoteLayout, type Zone } from './pagination/layout';
+import { readPageZoom, writePageZoom } from './pagination/zoomPref';
 import TagEditor from './TagEditor';
 import OutlinePane from './OutlinePane';
 import HistoryPanel from './HistoryPanel';
@@ -203,6 +206,17 @@ function NoteWorkspace({ initialNote, initialBacklinks }: NoteWorkspaceProps) {
   const [tags, setTags] = useState<string[]>(() => splitTags(initialNote.tags, initialNote.contentText).explicit);
   const [bodyTags, setBodyTags] = useState<string[]>(() => extractHashtags(initialNote.contentText));
   const [outline, setOutline] = useState<OutlineItem[]>([]);
+  // Live page count, published by the pagination plugin. Only the format bar reads it, so
+  // it is state rather than a ref - but the plugin only reports when the number actually
+  // changes, so this does not re-render on every break that moves.
+  const [pageCount, setPageCount] = useState(1);
+  // The server always sends a resolved layout; the fallback covers a response from an
+  // older deployment, and a board, which never has one.
+  const layout = note.layout ?? defaultLayout();
+  // Zoom is the reader's, not the note's, so it lives in localStorage next to the existing
+  // focused-width preference rather than in layout_json. Held here because both the editor
+  // surface and the format bar need it.
+  const [pageZoom, setPageZoom] = useState(readPageZoom);
   // The outline rail used to render unconditionally, visible only at ≥1200px via a
   // media query - so it was a panel with no control. It is a toggle in the action bar
   // now, defaulting to on so wide screens behave exactly as they did before. The media
@@ -248,6 +262,10 @@ function NoteWorkspace({ initialNote, initialBacklinks }: NoteWorkspaceProps) {
   const [inkOpen, setInkOpen] = useState(false);
 
   const editorRef = useRef<Editor | null>(null);
+  // The same editor as editorRef, held in state purely so components that RENDER from it
+  // (the formatting bar) mount when it appears. Everything that only reads it inside a
+  // handler keeps using the ref.
+  const [liveEditor, setLiveEditor] = useState<Editor | null>(null);
   // The restore point for the review currently on screen: one per RUN, not one per approval.
   // Null means "this run has not written anything yet"; a run reaching its first approval
   // fills it in and every later approval reuses it. See `snapshotBeforeReview`.
@@ -530,9 +548,13 @@ function NoteWorkspace({ initialNote, initialBacklinks }: NoteWorkspaceProps) {
     capturePending();
     setWordCount(editor.storage.characterCount?.words() ?? 0);
     setCharCount(editor.storage.characterCount?.characters() ?? 0);
+    // The formatting bar renders FROM the editor, so it needs one in state - a ref does
+    // not re-render, and the bar would stay unmounted for the life of the note.
+    setLiveEditor(editor);
   }
   function handleEditorDestroy() {
     editorRef.current = null;
+    setLiveEditor(null);
   }
   function handleDocChange() {
     capturePending();
@@ -573,6 +595,58 @@ function NoteWorkspace({ initialNote, initialBacklinks }: NoteWorkspaceProps) {
   /** Chip / Ctrl+clicked #hashtag → that tag's filtered view on the tags page. */
   function openTag(tag: string) {
     navigate(`/tags?tag=${encodeURIComponent(tag)}`);
+  }
+
+  /**
+   * Write a layout change through, optimistically.
+   *
+   * Same shape as togglePin: paint it immediately, persist, roll back and say so if the
+   * write fails. Layout changes are rare and deliberate (someone picked Letter, or typed a
+   * header), so unlike the body they do not go through the autosave debounce - waiting a
+   * second to see the paper change size would read as the control not working.
+   */
+  async function updateLayout(next: NoteLayout) {
+    const previous = layout;
+    setNote((n) => ({ ...n, layout: next }));
+    try {
+      await api.updateNote(note.id, { layout: next });
+    } catch {
+      setNote((n) => ({ ...n, layout: previous }));
+      toast('Could not save the page layout', 'error');
+    }
+  }
+
+  /**
+   * Get the note out, in one of four formats.
+   *
+   * PDF is the odd one: it does not fetch anything. The pages on screen ARE the document,
+   * so printing them is what guarantees the PDF matches - the print stylesheet in
+   * pagination.css hides the app chrome and gives each sheet its own page box. The other
+   * three are server renders, because they need the whole document rather than the part
+   * currently mounted.
+   */
+  function exportNote(format: 'pdf' | 'docx' | 'markdown' | 'text') {
+    if (format === 'pdf') {
+      if (layout.mode !== 'paged') {
+        toast('Turn pages on to export a PDF with page breaks', 'info');
+      }
+      window.print();
+      return;
+    }
+    if (isGuest()) {
+      downloadGuestNote(note.id);
+      return;
+    }
+    window.open(api.exportUrl(note.id, format), '_blank');
+  }
+
+  function setBandZone(band: 'header' | 'footer', zone: Zone, first: boolean, value: string) {
+    const current = layout[band];
+    const key = first ? 'firstZones' : 'zones';
+    updateLayout({
+      ...layout,
+      [band]: { ...current, [key]: { ...current[key], [zone]: value } },
+    });
   }
 
   async function togglePin() {
@@ -1008,7 +1082,40 @@ function NoteWorkspace({ initialNote, initialBacklinks }: NoteWorkspaceProps) {
             onDestroy={handleEditorDestroy}
             onDocChange={handleDocChange}
             onOutline={setOutline}
+            paged={
+              // A board has no reading order, so it has no pages. Everything else is a
+              // paginated document unless its own layout says otherwise.
+              note.kind === 'canvas'
+                ? undefined
+                : {
+                    layout,
+                    fields: {
+                      title: title || 'Untitled',
+                      notebook: note.notebook?.name ?? '',
+                      date: formatDate(new Date().toISOString()),
+                    },
+                    onEditBand: setBandZone,
+                    onPageCount: setPageCount,
+                  }
+            }
           />
+
+          {/* Boards have no text to format and no pages to describe. Everything else gets
+              the bar, including a note in plain mode - the formatting half still applies,
+              only the page controls change what they say. */}
+          {note.kind !== 'canvas' && liveEditor && (
+            <FormatBar
+              editor={liveEditor}
+              layout={layout}
+              onLayoutChange={updateLayout}
+              pageCount={pageCount}
+              wordCount={wordCount}
+              paged={layout.mode === 'paged'}
+              onExport={exportNote}
+              zoom={pageZoom}
+              onZoom={(z) => { setPageZoom(z); writePageZoom(z); }}
+            />
+          )}
 
           <section className="folio-links-section" data-testid="backlinks-section">
             <h4>Linked from {plural(backlinks.length, 'note')}</h4>

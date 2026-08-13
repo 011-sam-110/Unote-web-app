@@ -1,0 +1,254 @@
+/* The page surface: sheets, header/footer bands, the spacers between pages, and the print
+   rules that turn all of it into a PDF.
+
+   A note in paged mode is two stacked layers inside .folio-paged - the sheet layer, which
+   is paper, and the ProseMirror content, which is text. The content is offset to sit
+   exactly on the first sheet's text box; from there the spacer decorations keep it in
+   register with every sheet below. */
+
+.folio-paged {
+  position: relative;
+  /* Set inline by NotePage from the geometry, so the CSS never recomputes mm itself. */
+  width: var(--folio-page-w);
+  margin: 0 auto;
+  /* Room for the last sheet's bottom edge; without it the paper is clipped by the pane. */
+  padding-bottom: var(--folio-sheet-gap, 28px);
+}
+
+/* Zoom wrapper. The scale lives on .folio-paged as a transform, which does not affect
+   layout - so the paginator keeps measuring in real pixels and zoom can never move a page
+   break. This box puts back the flow space the transform does not occupy; its height is
+   computed from the page plan, so it is exact rather than estimated. */
+.folio-zoom {
+  position: relative;
+}
+
+/* ---------- the paper ---------- */
+
+.folio-sheet-layer {
+  position: absolute;
+  inset: 0;
+  /* Behind the text, and transparent to the mouse EXCEPT for the bands, which re-enable
+     it below. Without this, clicking anywhere on the page to place the caret would hit
+     the paper instead of the note. */
+  pointer-events: none;
+  z-index: 0;
+}
+
+.folio-sheet {
+  position: absolute;
+  left: 0;
+}
+
+.folio-sheet__paper {
+  position: absolute;
+  inset: 0;
+  background: var(--bg-paper);
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 6%), 0 12px 28px -18px rgb(0 0 0 / 45%);
+}
+
+/* An overflowing sheet is not a normal sheet, and the difference has to be visible or the
+   note just looks wrong. The paper grows to contain the block; this marks the edge that
+   grew so it reads as deliberate. */
+.folio-sheet.is-overflowing .folio-sheet__paper {
+  border-style: dashed;
+  border-color: var(--warn);
+}
+
+.folio-sheet__overflow {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 6px;
+  margin: 0;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--warn);
+  pointer-events: none;
+}
+
+/* ---------- header and footer bands ---------- */
+
+.folio-band {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  pointer-events: auto;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-3);
+  z-index: 1;
+}
+
+.folio-band--header { border-bottom: 1px solid var(--line); }
+.folio-band--footer { border-top: 1px solid var(--line); }
+
+.folio-band__zone {
+  flex: 1;
+  min-width: 0;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  padding: 2px 4px;
+  font: inherit;
+  color: inherit;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.folio-band__zone--left   { text-align: left; }
+.folio-band__zone--center { text-align: center; }
+.folio-band__zone--right  { text-align: right; }
+
+button.folio-band__zone { cursor: text; }
+
+button.folio-band__zone:hover,
+button.folio-band__zone:focus-visible {
+  border-color: var(--line);
+  background: var(--bg-hover);
+}
+
+.folio-band__zone.is-editing {
+  border-color: var(--accent);
+  background: var(--bg-elevated);
+  outline: none;
+}
+
+/* ---------- the text ---------- */
+
+.folio-page-content {
+  position: relative;
+  z-index: 1;
+  /* Sits exactly on the first sheet's text box. Everything below is kept in register by
+     the spacer widgets, which is why this offset is applied once rather than per page. */
+  padding: var(--folio-content-top) var(--folio-margin-r) 0 var(--folio-margin-l);
+}
+
+/* In paged mode the editor's own tail padding would push the last sheet miles down - the
+   sheet layer is sized from the page plan, not from the content box. */
+.folio-paged .folio-prosemirror {
+  padding-bottom: 0;
+  min-height: var(--folio-content-h);
+}
+
+/* The global :focus-visible rule in styles/base.css paints --focus-ring on ANY focused
+   element, including the contenteditable. That was invisible while the note filled the
+   page; inset on a sheet it draws a purple rounded rectangle around the whole document,
+   which is what a page is for. No accessibility loss: a text editor's focus indicator is
+   the caret, which is exactly how Word and Google Docs do it. */
+.folio-paged .folio-prosemirror:focus-visible,
+.folio-paged .folio-prosemirror:focus {
+  box-shadow: none;
+  border-radius: 0;
+}
+
+.folio-page-spacer {
+  /* The gap between two sheets. Nothing renders here: it exists to move the next block
+     onto the next page. Selectable content inside it would let the caret sit off-paper. */
+  pointer-events: none;
+  user-select: none;
+}
+
+/* ---------- print: this IS the PDF export ---------- */
+
+@media print {
+  /* Margins live inside each sheet, so the page box itself has none. Size is written
+     inline by NotePage as `--folio-print-size`, e.g. `210mm 297mm`. */
+  @page {
+    size: var(--folio-print-size, A4);
+    margin: 0;
+  }
+
+  /* Everything that is not the note. The note page keeps only its own text. */
+  .app-sidebar,
+  .folio-tab-strip,
+  .folio-action-bar,
+  .folio-format-bar,
+  .folio-breadcrumb,
+  .folio-outline,
+  .folio-drawer,
+  .folio-selection-toolbar,
+  .folio-block-menu,
+  .folio-find-bar,
+  .folio-sheet__overflow {
+    display: none !important;
+  }
+
+  html, body, .app-main, .tab-pane {
+    background: #fff !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    height: auto !important;
+  }
+
+  /* Zoom is a screen affordance. Printing a scaled page would silently produce a PDF at
+     67% with everything shrunk inside a full-size sheet - the transform and the flow box
+     that compensates for it both have to go. */
+  .folio-zoom {
+    height: auto !important;
+    width: auto !important;
+  }
+
+  .folio-paged {
+    transform: none !important;
+    padding-bottom: 0;
+    /* The gap between sheets is a screen affordance. In print the page break is the
+       separation, and a gap would push every sheet progressively down its own page. */
+    --folio-sheet-gap: 0px;
+  }
+
+  /* Paper printed onto paper does not need a shadow or a border. */
+  .folio-sheet__paper {
+    box-shadow: none !important;
+    border: none !important;
+  }
+
+  .folio-sheet {
+    break-after: page;
+    page-break-after: always;
+  }
+
+  .folio-sheet:last-child {
+    break-after: auto;
+    page-break-after: auto;
+  }
+
+  /* A break in the middle of a line is the one thing worse than a break in the wrong
+     place; the spacers already put the boundaries where they belong. */
+  .folio-prosemirror p,
+  .folio-prosemirror li,
+  .folio-prosemirror h1,
+  .folio-prosemirror h2,
+  .folio-prosemirror h3 {
+    orphans: 2;
+    widows: 2;
+  }
+
+  .folio-band__zone { border-color: transparent !important; background: none !important; }
+}
+
+/* ---------- phones: pagination is off, so undo the page surface ---------- */
+
+@media (max-width: 820px) {
+  .folio-paged {
+    width: 100%;
+    padding-bottom: 0;
+  }
+
+  .folio-paged .folio-sheet-layer { display: none; }
+
+  .folio-page-content {
+    padding: 0;
+  }
+
+  .folio-paged .folio-prosemirror {
+    padding-bottom: 12rem;
+    min-height: 40vh;
+  }
+}

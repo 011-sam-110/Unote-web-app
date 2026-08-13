@@ -14,7 +14,10 @@ import InsertMenuPopover from './InsertMenuPopover';
 import Icon from '../../components/Icon';
 import { uploadAndInsertImage } from './imageUpload';
 import { computeOutline, type OutlineItem } from './outline';
+import SheetLayer from './pagination/SheetLayer';
+import { usePagedSurface, type PagedSurfaceProps } from './pagination/usePagedSurface';
 import './editor.css';
+import './pagination/pagination.css';
 
 export interface FolioEditorProps {
   content: JSONContent | Record<string, unknown> | string | null | undefined;
@@ -23,12 +26,20 @@ export interface FolioEditorProps {
   onDestroy: () => void;
   onDocChange: () => void;
   onOutline: (items: OutlineItem[]) => void;
+  /** Page layout and its callbacks. Omit entirely to render the note as one continuous
+   *  column - which is what every non-note surface (history preview, share view) wants. */
+  paged?: PagedSurfaceProps;
 }
 
-export default function FolioEditor({ content, notebookId, onReady, onDestroy, onDocChange, onOutline }: FolioEditorProps) {
+export default function FolioEditor({ content, notebookId, onReady, onDestroy, onDocChange, onOutline, paged }: FolioEditorProps) {
   const editorBox = useRef<Editor | null>(null);
   const notebookIdRef = useRef(notebookId);
   notebookIdRef.current = notebookId;
+
+  // Owns the geometry box the pagination plugin reads, the published page plan, and the
+  // phone breakpoint at which pages switch off. Always called - hooks cannot be
+  // conditional - and returns `active: false` when there is nothing to paginate.
+  const surface = usePagedSurface(paged);
 
   // The block the drag handle is currently sitting beside, tracked live so the "+" knows
   // where to insert. `pendingBlock` snapshots it at click time (the handle can move while
@@ -54,6 +65,7 @@ export default function FolioEditor({ content, notebookId, onReady, onDestroy, o
         editable: true,
         editorBox,
         getNotebookId: () => notebookIdRef.current,
+        paginationBox: surface.box,
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
@@ -121,6 +133,25 @@ export default function FolioEditor({ content, notebookId, onReady, onDestroy, o
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editor]);
+
+  // Re-paginate when the PAGE changes rather than when the text does.
+  //
+  // The plugin re-measures on doc changes, on a ResizeObserver over the editor, and on
+  // late-loading node views. None of those fire for a geometry change that does not alter
+  // the editor's width - turning a header on is the clearest case: it shortens every text
+  // box on every sheet while the editor's own box stays exactly the same size. The result
+  // was blocks laid out for the old geometry sitting under newly drawn bands until
+  // something unrelated happened to trigger a measure.
+  //
+  // Any transaction makes the plugin's view.update run, so an empty one is enough. It is
+  // kept out of the undo stack: repagination is not an edit.
+  const geometrySignature = surface.active
+    ? `${surface.geometry.contentHeightPx}x${surface.geometry.contentWidthPx}x${surface.geometry.interPageSkipPx}`
+    : 'none';
+  useEffect(() => {
+    if (!editor || editor.isDestroyed) return;
+    editor.view.dispatch(editor.state.tr.setMeta('addToHistory', false));
+  }, [editor, geometrySignature]);
 
   // A table wide enough to scroll must be reachable by keyboard, or a keyboard-only
   // user simply cannot see the off-screen columns (axe: scrollable-region-focusable).
@@ -190,7 +221,24 @@ export default function FolioEditor({ content, notebookId, onReady, onDestroy, o
       {insertOpen && (
         <InsertMenuPopover editor={editor} anchor={plusRef.current} onClose={() => setInsertOpen(false)} prepare={caretIntoPending} />
       )}
-      <EditorContent editor={editor} />
+      {surface.active ? (
+        <div className="folio-zoom" style={surface.zoomStyle}>
+        <div className="folio-paged" style={surface.style}>
+          <SheetLayer
+            pages={surface.pages}
+            geometry={surface.geometry}
+            layout={surface.layout}
+            fields={surface.fields}
+            onEditBand={surface.onEditBand}
+          />
+          <div className="folio-page-content">
+            <EditorContent editor={editor} />
+          </div>
+        </div>
+        </div>
+      ) : (
+        <EditorContent editor={editor} />
+      )}
     </div>
   );
 }
