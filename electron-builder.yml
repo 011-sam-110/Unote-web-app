@@ -1,6 +1,6 @@
 appId: com.unote.desktop
 productName: Unote
-copyright: Unote
+copyright: Copyright © 2026 Sam Poplett. AGPL-3.0-only.
 
 directories:
   output: release
