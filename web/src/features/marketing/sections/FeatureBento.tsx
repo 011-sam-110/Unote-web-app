@@ -69,14 +69,17 @@ const FEATURES: Feature[] = [
 export default function FeatureBento() {
   return (
     <section className="mkt-features" id="features">
+      {/* COPY CHANGE, needs Sam's sign-off. This heading used to read "The whole week, from
+          the lecture hall to the exam." - which is now the week spine's job, and the spine
+          demonstrates it rather than claiming it. Two adjacent sections making the same
+          argument meant the second one read as a repeat. This grid is now explicitly the
+          reference list for the loop the reader has just been walked through. */}
       <header className="mkt-section-head mkt-reveal">
         <p className="mkt-eyebrow">Everything in one place</p>
-        <h2 className="mkt-section-title">
-          The whole week, from the lecture hall to the exam.
-        </h2>
+        <h2 className="mkt-section-title">Every part of it, on its own terms.</h2>
         <p className="mkt-section-lede">
-          One app for the notes you take, the recordings you never re-watch, and the revision you
-          keep putting off.
+          The week above is the loop. These are the seven things it is built out of, and each one
+          is worth having on its own.
         </p>
       </header>
 

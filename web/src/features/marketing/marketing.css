@@ -117,6 +117,44 @@
   overflow-x: clip;
 }
 
+/* --- the surfaces this page did not draw ----------------------------------
+   Selection, focus and underlines ship with defaults that belong to no design system, and
+   on this page they were worse than generic: base.css themes ::selection from the APP's
+   --accent-soft, and the landing deliberately declares its own palette and never reads the
+   app's tokens. So dragging across the headline of a paper-and-ink page highlighted it in
+   the product UI's accent, from a different colour world entirely.
+
+   Highlighter yellow is the obvious and the correct answer here - on a page whose signature
+   element is a hand-drawn highlighter swipe, selecting text should look like using one.
+   --mkt-hl-ink on --mkt-hl measures 7.4:1.
+
+   NOT fixed here, deliberately: the page scrollbar. It belongs to the document element,
+   which is outside .mkt, so it cannot be themed for the landing without changing it for
+   the whole app. */
+.mkt ::selection,
+.mkt::selection {
+  background: var(--mkt-hl);
+  color: var(--mkt-hl-ink);
+}
+
+/* Extends the treatment .mkt-btn already had to every focusable thing on the page, rather
+   than letting the rest fall back to the app's ring. */
+.mkt :focus-visible {
+  outline: 2px solid var(--mkt-accent);
+  outline-offset: 3px;
+}
+
+/* Underlines sit off the baseline rather than through the descenders. */
+.mkt a {
+  text-underline-offset: 2px;
+  text-decoration-thickness: 1px;
+}
+
+/* The notebook counts in the replica's sidebar are a column of figures. */
+.mkt-shot__count {
+  font-variant-numeric: tabular-nums;
+}
+
 /* Auto-hyphenation is right for justified body text and wrong for a centred marketing
    lede. Left on, "re-watch" and "view-only" broke across the line at every width. */
 .mkt-hero__lede,
@@ -657,6 +695,35 @@
   }
 }
 
+/* --- hero parallax --------------------------------------------------------
+   Three depths against one scroll. Hero.tsx writes a single --plx (0 at the top of the
+   page, 1 once the hero has fully passed) and each layer reads it at its own amplitude:
+   the far light lags most, the near glow least, and the difference is what reads as depth.
+
+   AMPLITUDES IN PIXELS, NOT RATES. An unbounded `scrollY * rate` is the usual way to write
+   this and it cannot be capped: far enough down the page the lamps have travelled further
+   than the section is tall. Bounding the whole effect to the hero's own travel means every
+   layer's maximum offset is stated right here and nothing can drift out of its band.
+
+   `translate`, NOT `transform`, and that is load-bearing: the lamps already run the
+   mkt-breathe animation on `transform`, and an animation beats a static declaration of the
+   same property outright. `translate` is an independent property applied before `transform`,
+   so the parallax and the breathing compose instead of one silently winning. Browsers
+   without it simply get no parallax, which is the correct degradation.
+
+   The copy is deliberately NOT parallaxed. Sliding a headline against its own background
+   at a different rate is the point where the effect stops reading as depth and starts
+   reading as text that will not sit still. */
+.mkt-hero.is-plx .mkt-hero__lamp {
+  translate: 0 calc(var(--plx, 0) * 110px);
+}
+.mkt-hero.is-plx .mkt-hero__lamp--2 {
+  translate: 0 calc(var(--plx, 0) * 62px);
+}
+.mkt-hero.is-plx .mkt-shot__glow {
+  translate: 0 calc(var(--plx, 0) * 44px);
+}
+
 .mkt-hero__inner {
   position: relative;
   z-index: 1;
@@ -1128,34 +1195,200 @@
    which means opacity 0 for the whole delay - so any render that did not run the timeline
    to completion showed an empty hole where the product is. A full-page screenshot caught
    exactly that. The page has motion enough without betting the hero on it. */
+/* Every selector here is scoped away from .mkt-shot--stepped. The stepped replica is the
+   SAME markup driven by scroll position instead of by a clock, so a timed sequence running
+   underneath it would fight the playhead: the typed line would fill itself in on load
+   whatever step the reader had scrolled to, and the flashcard would arrive on Monday. The
+   two modes must never both be animating the same element. */
 @media (min-width: 761px) and (prefers-reduced-motion: no-preference) {
-  .mkt-shot__typed {
+  /* Shrink-wraps to the sentence, so the `width: 100%` below has the TEXT as its
+     containing block rather than the paragraph. Percentages count as auto when a browser
+     works out an inline-block's shrink-to-fit width, so this measures the full sentence
+     even though its child's width is mid-animation. */
+  .mkt-shot:not(.mkt-shot--stepped) .mkt-shot__type-wrap {
+    display: inline-block;
+    max-width: 100%;
+    vertical-align: bottom;
+  }
+  .mkt-shot:not(.mkt-shot--stepped) .mkt-shot__typed {
     display: inline-block;
     max-width: 100%;
     overflow: hidden;
     white-space: nowrap;
     vertical-align: bottom;
     border-right: 1.5px solid transparent;
-    /* The caret keeps blinking, as it does in the design and as a real one does in a real
-       editor. Three blinks and stop read as the mock finishing and going dead, which is
-       most of why the hero looked static a couple of seconds after landing. */
+    /* THE CARET IS NOW FINITE, and it used to be `infinite`. Two things were wrong with it.
+       It ran forever, including while the hero was scrolled far off screen, which is the one
+       thing a decorative loop must never do. And because `width: 100%` used to resolve
+       against the paragraph rather than the sentence, it finished its travel 98px to the
+       right of the full stop and blinked there in open space - it read as a stray mark, not
+       as a cursor in a document.
+
+       The wrapper above fixes where it lands. Two iterations plus `forwards` fixes how long
+       it stays: it blinks through the typing and rests about a beat after the sentence
+       arrives, then holds the final keyframe, which is transparent. The mock is not left
+       looking dead - the hero now has parallax on its ambient light and the pinned week
+       below it, so a blinking caret is no longer the only thing keeping it alive. */
     animation:
       mkt-type 900ms steps(54, end) 900ms both,
-      mkt-caret 1060ms steps(1, end) 900ms infinite;
+      mkt-caret 1060ms steps(1, end) 900ms 2 forwards;
   }
-  .mkt-shot__para--2 {
+  .mkt-shot:not(.mkt-shot--stepped) .mkt-shot__para--2 {
     animation: mkt-fade 460ms var(--ease-out) 1900ms both;
   }
-  .mkt-shot__hl {
+  .mkt-shot:not(.mkt-shot--stepped) .mkt-shot__hl {
     background-size: 0% 100%;
     animation: mkt-hl-sweep 480ms var(--ease-out) 2200ms forwards;
   }
-  .mkt-shot__toolbar {
+  .mkt-shot:not(.mkt-shot--stepped) .mkt-shot__toolbar {
     animation: mkt-pop 260ms var(--ease-out) 2600ms both;
   }
-  .mkt-shot__card {
+  .mkt-shot:not(.mkt-shot--stepped) .mkt-shot__card {
     animation: mkt-card-in 440ms var(--ease-out) 3000ms both;
   }
+}
+
+/* --- the stepped replica -------------------------------------------------------------
+   The week spine's mode. Read WeekSpine.tsx first.
+
+   ONE RULE GOVERNS ALL OF IT: nothing here may change the frame's SIZE. A part that has
+   not arrived yet is transparent and slightly offset, never `display: none` and never
+   removed - because the frame is pinned while these five states play, and a frame that
+   resizes under a pin makes the whole page jump under the reader's cursor. Every property
+   below is opacity, transform or colour for exactly that reason.
+
+   These rules are NOT gated behind .is-armed: they are gated on .mkt-shot--stepped, which
+   React only puts on the replica when useScrollProgress has armed. Un-armed, the spine
+   passes no step at all, this class is absent, and the replica renders its finished
+   state - the same one the hero shows. */
+.mkt-shot--stepped .mkt-shot__para,
+.mkt-shot--stepped .mkt-shot__toolbar,
+.mkt-shot--stepped .mkt-shot__card,
+.mkt-shot--stepped .mkt-shot__rail-block {
+  opacity: 0;
+  transform: translateY(9px);
+  transition:
+    opacity 420ms var(--ease-out),
+    transform 420ms var(--ease-out);
+}
+.mkt-shot--stepped .mkt-shot__para.is-on,
+.mkt-shot--stepped .mkt-shot__toolbar.is-on,
+.mkt-shot--stepped .mkt-shot__card.is-on,
+.mkt-shot--stepped .mkt-shot__rail-block.is-on {
+  opacity: 1;
+  transform: none;
+}
+/* The second paragraph trails the first by a beat, so Tuesday reads as writing rather than
+   as two blocks appearing at once. */
+.mkt-shot--stepped .mkt-shot__para--2 {
+  transition-delay: 90ms;
+}
+
+/* The highlighter sweeps across the passage on Thursday, using the same background-size
+   trick as the hero - just driven by a class change instead of a keyframe delay. */
+.mkt-shot--stepped .mkt-shot__hl {
+  background-size: 0% 100%;
+  transition: background-size 480ms var(--ease-out);
+}
+.mkt-shot--stepped .mkt-shot__hl.is-on {
+  background-size: 100% 100%;
+}
+
+/* Monday's imported lecture. Absolutely positioned with `top` left at auto, so it takes
+   the STATIC position it would have had in flow - directly under the tags, self-adjusting
+   as the title wraps - while contributing nothing to the frame's height. That is what lets
+   it fill Monday's empty note without making the pinned frame taller at every other step.
+   The horizontal insets repeat the doc's own padding so it lines up with the title. */
+.mkt-shot__lecture {
+  position: absolute;
+  left: clamp(18px, 3vw, 34px);
+  right: clamp(18px, 3vw, 34px);
+  margin-top: 20px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 380ms var(--ease-out);
+}
+.mkt-shot__lecture.is-on {
+  opacity: 1;
+}
+.mkt-shot__lecture-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--t-sm);
+  font-weight: 500;
+  color: var(--mkt-ink-2);
+}
+.mkt-shot__slides {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+/* A slide, not a grey box. An empty rounded rectangle standing in for content is the tell
+   that nobody drew the thing; a title rule and a few body rules cost two pseudo-elements
+   and read as a lecture slide at this size. */
+.mkt-shot__slides span {
+  position: relative;
+  aspect-ratio: 16 / 10;
+  border: 1px solid var(--mkt-rule);
+  border-radius: 6px;
+  background: var(--mkt-paper-2);
+  overflow: hidden;
+}
+.mkt-shot__slides span::before {
+  content: '';
+  position: absolute;
+  top: 22%;
+  left: 13%;
+  width: 46%;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--mkt-rule-strong);
+}
+.mkt-shot__slides span::after {
+  content: '';
+  position: absolute;
+  top: 44%;
+  left: 13%;
+  right: 17%;
+  height: 30%;
+  background: repeating-linear-gradient(
+    to bottom,
+    var(--mkt-rule) 0 2px,
+    transparent 2px 8px
+  );
+}
+.mkt-shot__transcript {
+  display: flex;
+  gap: 10px;
+  margin: 10px 0 0;
+  font-size: var(--t-sm);
+  line-height: 1.5;
+  color: var(--mkt-ink-faint);
+}
+.mkt-shot__stamp {
+  flex: none;
+  padding-top: 1px;
+  font-family: var(--mkt-mono);
+  font-size: var(--t-xs);
+  color: var(--mkt-accent);
+}
+
+/* Wednesday. The wikilink is PRESENT from the start and reads as plain typed text -
+   [[Dijkstra]] is what you actually type - then resolves into a link. Fading the text in
+   would have said "you wrote this on Wednesday"; recolouring it says "it resolved", which
+   is the true claim. */
+.mkt-shot--stepped .mkt-shot__wikilink {
+  color: var(--mkt-ink-faint);
+  text-decoration-color: transparent;
+  transition:
+    color 360ms var(--ease-out),
+    text-decoration-color 360ms var(--ease-out);
+}
+.mkt-shot--stepped .mkt-shot__wikilink.is-on {
+  color: var(--mkt-accent);
+  text-decoration-color: currentColor;
 }
 
 @keyframes mkt-rise {
@@ -1279,18 +1512,16 @@
   background: rgba(92, 87, 79, 0.75);
   transform-origin: left center;
 }
-.mkt.is-armed .mkt-strip__strike {
+/* Scroll-LINKED, not triggered. CapabilityStrip.tsx writes each strike's scaleX inline on
+   every frame, so the crossings-out are drawn by the reader's own scrolling and lift again
+   on the way back up. The rule below is only the starting point that inline value replaces;
+   without .is-linked there is no rule at all and the strikes render fully drawn, which is
+   what a reduced-motion reader and any render before the first frame gets.
+
+   This replaced a 500ms keyframe with a per-item delay. The old version ran once on entry
+   and finished on its own clock whether or not anyone was still looking at it. */
+.mkt-strip__inner.is-linked .mkt-strip__strike {
   transform: scaleX(0);
-}
-/* Drawn left to right, one after another, once the row is in view. */
-.mkt.is-armed .mkt-reveal.is-in .mkt-strip__strike {
-  animation: mkt-strike 500ms cubic-bezier(0.16, 1, 0.3, 1) calc(200ms + var(--strike, 0) * 110ms)
-    forwards;
-}
-@keyframes mkt-strike {
-  to {
-    transform: scaleX(1);
-  }
 }
 
 /* --- feature bento -------------------------------------------------------- */
@@ -2083,13 +2314,36 @@
 .mkt-maker__title {
   max-width: 14ch;
 }
+/* COLOUR CHANGE, needs Sam's sign-off: this was --mkt-ink-2, the page's secondary body
+   grey. It is full ink now for two reasons that agree with each other - it is the page's
+   most personal passage and the only one written in the first person, and it is the
+   destination of the scrub below, so a reader with reduced motion sees exactly what a
+   reader who scrolled through it ends up with. */
 .mkt-maker__body {
   margin: 20px 0 0;
   max-width: 52ch;
   font-size: var(--t-md);
   line-height: 1.6;
-  color: var(--mkt-ink-2);
+  color: var(--mkt-ink);
   text-wrap: pretty;
+}
+
+/* The ink scrub. Read MakerNote.tsx first.
+
+   Pencil is --mkt-ink-3 and not one of the faint greys, and that is not a nicety: the
+   un-darkened words are real body copy that somebody may well be reading ahead of the
+   scrub. --mkt-ink-3 measures 5.6:1 on paper and --mkt-ink 16.9:1, so the passage is
+   legible at both ends of the effect and the difference is still plainly a pencil line
+   turning into an ink one.
+
+   Both selectors need .is-ink, which React adds only when the linked hook has armed. With
+   reduced motion the spans are still in the markup and simply inherit the paragraph. */
+.mkt-maker__copy.is-ink .mkt-ink {
+  color: var(--mkt-ink-3);
+  transition: color 220ms linear;
+}
+.mkt-maker__copy.is-ink .mkt-ink.is-lit {
+  color: var(--mkt-ink);
 }
 .mkt-maker__facts {
   display: flex;
@@ -2402,9 +2656,20 @@
     white-space: normal;
     animation: none;
   }
-  .mkt.is-armed .mkt-strip__strike {
+  .mkt-strip__inner.is-linked .mkt-strip__strike {
     transform: scaleX(1);
-    animation: none;
+  }
+  /* Same belt and braces for the linked sections: neither hook arms under this
+     preference, so neither class should be present, but if the preference changes
+     mid-session the page settles finished rather than half-drawn. */
+  .mkt-maker__copy.is-ink .mkt-ink {
+    color: inherit;
+    transition: none;
+  }
+  .mkt-hero.is-plx .mkt-hero__lamp,
+  .mkt-hero.is-plx .mkt-hero__lamp--2,
+  .mkt-hero.is-plx .mkt-shot__glow {
+    translate: none;
   }
 
   .mkt-mark__ink {
@@ -2514,5 +2779,261 @@
   .mkt-desk__inner {
     grid-template-columns: minmax(0, 1fr);
     gap: 28px;
+  }
+}
+
+/* --- the week spine ------------------------------------------------------------------
+   Read WeekSpine.tsx and useScrollProgress.ts before changing any number here.
+
+   This is the page's one scroll-LINKED section, and the only one that pins. Everything
+   else on the landing is triggered: it crosses a threshold, plays, and is done. Here the
+   scroll position IS the playhead, and the editor frame holds still while five days run
+   through it.
+
+   The composition is deliberately a film frame, not a split screen: the replica takes the
+   full column and the caption sits beneath it like a subtitle. The side-by-side version
+   was tried first and lost - the replica's own three-column body needs about 600px before
+   the note itself gets squeezed, and giving 360px of the column to a caption left the
+   document at 278px, which is a narrower note than the thing is arguing for.
+
+   TWO LAYOUTS LIVE HERE and the `is-pinned` class is the switch. Un-pinned is the default
+   and the base state: a plain stack of five readable moments with the finished editor
+   below. Everything that pins, overlays, hides or scrubs is nested under .is-pinned, which
+   React adds ONLY once useScrollProgress has armed - which it declines to do below 861px
+   and under prefers-reduced-motion. That ordering is the whole safety story: the failure
+   mode of this technique is four blank screens, and it is unreachable from here rather
+   than merely unlikely, because no rule that hides anything exists until the hook has
+   committed to driving the section. */
+
+.mkt-spine {
+  padding: var(--sp-section) 0 0;
+  /* The nav is sticky, so a bare #week jump would land the heading underneath it. */
+  scroll-margin-top: 76px;
+}
+
+.mkt-spine__head {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 0 var(--sp-gutter);
+  text-align: center;
+}
+
+.mkt-spine__grid {
+  max-width: var(--mkt-max);
+  margin: 0 auto;
+  padding: 0 var(--sp-gutter);
+}
+
+/* --- un-pinned: the base state ------------------------------------------------------ */
+
+.mkt-spine__steps {
+  list-style: none;
+  display: grid;
+  gap: 30px;
+  margin: clamp(40px, 6vw, 60px) 0 0;
+  padding: 0;
+}
+
+.mkt-spine__step {
+  max-width: 64ch;
+}
+
+.mkt-spine__day {
+  display: block;
+  font-family: var(--mkt-mono);
+  font-size: var(--t-xs);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--mkt-ink-3);
+}
+
+.mkt-spine__step-title {
+  margin: 8px 0 0;
+  font-family: var(--mkt-display);
+  font-size: var(--t-xl);
+  font-weight: 600;
+  letter-spacing: -0.014em;
+  line-height: 1.16;
+  text-wrap: balance;
+}
+
+.mkt-spine__step-body {
+  margin: 10px 0 0;
+  font-size: var(--t-md);
+  line-height: 1.6;
+  color: var(--mkt-ink-2);
+  text-wrap: pretty;
+  hyphens: none;
+}
+
+.mkt-spine__frame {
+  margin-top: clamp(36px, 5vw, 52px);
+}
+
+/* The replica arrives shaped for the hero, where it runs off the bottom edge of the band
+   on purpose. Here it is a closed object on the page, so it gets its fourth border back. */
+.mkt-spine__frame .mkt-shot {
+  max-width: none;
+  margin: 0;
+  padding: 0;
+}
+.mkt-spine__frame .mkt-shot__frame {
+  border-bottom: 1px solid var(--mkt-rule);
+  border-radius: var(--mkt-radius-lg);
+  box-shadow: var(--mkt-shadow-lg);
+}
+/* The hero's glow is aimed at a frame bleeding into the band below it. Under a closed
+   frame it is just a blurred smudge escaping the corners. */
+.mkt-spine__frame .mkt-shot__glow {
+  display: none;
+}
+
+/* Progress through a pin means nothing when there is no pin. */
+.mkt-spine__progress {
+  display: none;
+}
+
+/* --- pinned ------------------------------------------------------------------------- */
+
+/* Five bands of roughly three-quarters of a viewport each. travel = 460 − 82 − 9 = 369vh,
+   so each moment holds for ~74vh of scrolling: long enough to read the caption, short
+   enough that nobody feels held. useScrollProgress derives the same number from the DOM
+   rather than repeating it, so changing this height re-times the section correctly. */
+.mkt-spine.is-pinned .mkt-spine__track {
+  position: relative;
+  height: 460vh;
+}
+
+.mkt-spine.is-pinned .mkt-spine__stage {
+  position: sticky;
+  top: 9vh;
+  height: 82vh;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: clamp(16px, 2.4vh, 28px);
+}
+
+.mkt-spine.is-pinned .mkt-spine__grid {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: clamp(16px, 2.6vh, 30px);
+  align-content: center;
+}
+
+.mkt-spine.is-pinned .mkt-spine__frame {
+  margin: 0;
+  min-height: 0;
+}
+/* The replica's own floor is 400px, which is right in a hero that owns the viewport and
+   wrong inside a stage that has to also hold a caption and a week rail. On a 700px-tall
+   laptop the fixed floor pushed the rail off the bottom of the pin. */
+.mkt-spine.is-pinned .mkt-shot__body {
+  min-height: clamp(300px, 44vh, 420px);
+}
+
+/* The caption. Absolutely stacked so all five occupy the same box and cross-fade, with a
+   floor under the box: without it the rail beneath would step up and down as the captions
+   swap and the section would feel like it was breathing. */
+.mkt-spine.is-pinned .mkt-spine__steps {
+  position: relative;
+  display: block;
+  margin: 0;
+  min-height: 104px;
+  text-align: center;
+}
+.mkt-spine.is-pinned .mkt-spine__step {
+  position: absolute;
+  inset: 0 0 auto;
+  max-width: 62ch;
+  margin: 0 auto;
+  opacity: 0;
+  transform: translateY(12px);
+  transition:
+    opacity 420ms var(--ease-out),
+    transform 420ms var(--ease-out);
+}
+.mkt-spine.is-pinned .mkt-spine__step.is-on {
+  opacity: 1;
+  transform: none;
+}
+.mkt-spine.is-pinned .mkt-spine__step-body {
+  margin-inline: auto;
+}
+
+/* The week rail. The fill is the one thing on this page that is scrubbed continuously
+   rather than switched: it tracks the playhead every frame, which is what makes the
+   section read as linked rather than as five slides. scaleX on a transform-origin, so it
+   stays on the compositor and never touches layout. */
+/* `margin: 0 auto` here collapsed the rail to 135px and printed the week as MONTUEWEDTHUFRI.
+   An auto inline margin on a GRID ITEM switches off the default `stretch`, so the item
+   shrink-wrapped to the max-content width of five three-letter labels. Centring a grid item
+   is justify-self's job, not the margin's. */
+.mkt-spine.is-pinned .mkt-spine__progress {
+  display: block;
+  justify-self: center;
+  width: 100%;
+  max-width: var(--mkt-max);
+  padding: 0 var(--sp-gutter);
+}
+.mkt-spine__progress-track {
+  position: relative;
+  height: 2px;
+  background: var(--mkt-rule);
+  overflow: hidden;
+}
+.mkt-spine__progress-fill {
+  position: absolute;
+  inset: 0;
+  background: var(--mkt-ink);
+  transform-origin: left center;
+  will-change: transform;
+}
+.mkt-spine__ticks {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  margin-top: 11px;
+}
+/* Centred in its fifth, so a label sits under the middle of the band it names rather than
+   at the edge where two bands meet. */
+.mkt-spine__tick {
+  font-family: var(--mkt-mono);
+  font-size: var(--t-xs);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  text-align: center;
+  color: var(--mkt-ink-fainter);
+  transition: color 300ms var(--ease-out);
+}
+.mkt-spine__tick.is-on {
+  color: var(--mkt-ink);
+}
+
+/* Belt and braces, matching the rest of this file: useScrollProgress declines to arm under
+   this preference, so .is-pinned should never be present here. If the preference changes
+   mid-session before the media listener fires, the section falls back to the readable
+   stack rather than freezing as a pin with four hidden captions. */
+@media (prefers-reduced-motion: reduce) {
+  .mkt-spine.is-pinned .mkt-spine__track {
+    height: auto;
+  }
+  .mkt-spine.is-pinned .mkt-spine__stage {
+    position: static;
+    height: auto;
+    display: block;
+  }
+  .mkt-spine.is-pinned .mkt-spine__steps {
+    display: grid;
+    min-height: 0;
+    text-align: left;
+  }
+  .mkt-spine.is-pinned .mkt-spine__step {
+    position: static;
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+  .mkt-spine.is-pinned .mkt-spine__progress {
+    display: none;
   }
 }
