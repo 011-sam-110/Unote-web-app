@@ -42,9 +42,19 @@ export default function MarketingFooter({ sectionsOnPage = false }: MarketingFoo
           </nav>
         </div>
         <div className="mkt-foot__bottom">
-          <span>© 2026 Unote</span>
+          <span>© 2026 Sam Poplett</span>
           <span>A calmer home for your coursework.</span>
-          <p className="mkt-foot__note">Built by a student, in the open.</p>
+          <p className="mkt-foot__note">
+            Built by a student, in the open. Unote is free software under the{' '}
+            <a
+              href="https://github.com/011-sam-110/Unote-web-app"
+              target="_blank"
+              rel="noreferrer"
+            >
+              AGPL-3.0
+            </a>
+            .
+          </p>
         </div>
       </div>
     </footer>

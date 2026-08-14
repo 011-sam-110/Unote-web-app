@@ -8,6 +8,7 @@
 <p align="center">
   <a href="https://unote-six.vercel.app"><img src="https://img.shields.io/badge/live-unote--six.vercel.app-2ea44f" alt="Live demo"></a>
   <a href="https://github.com/011-sam-110/Folio/releases/latest"><img src="https://img.shields.io/badge/desktop-Windows%20%C2%B7%20macOS-0b7285" alt="Desktop installers"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/licence-AGPL--3.0-blue" alt="Licensed AGPL-3.0-only"></a>
   <img src="https://img.shields.io/badge/React-19-61dafb?logo=react&logoColor=white" alt="React 19">
   <img src="https://img.shields.io/badge/TypeScript-6-3178c6?logo=typescript&logoColor=white" alt="TypeScript 6">
   <img src="https://img.shields.io/badge/Postgres-336791?logo=postgresql&logoColor=white" alt="Postgres">
@@ -139,3 +140,30 @@ ever uploaded, and the video never leaves the machine.
 **Collaboration polls instead of holding a socket.** A serverless function cannot keep a
 WebSocket open, so shared notes sync through a monotonic `note_events` feed that collaborators
 poll for "everything since revision N". It is not instant, and the UI does not pretend it is.
+
+## Licence
+
+Copyright © 2026 Sam Poplett.
+
+Unote is free software licensed under the **[GNU Affero General Public License v3.0](LICENSE)**
+(`AGPL-3.0-only`).
+
+You may use, study, modify and redistribute it. The condition is reciprocity: if you distribute
+a modified version, **or run one as a network service**, you must make your source available to
+its users under the same licence. That network clause (section 13) is the reason this licence
+was chosen over MIT. Unote is a hosted web app before it is a download, so the natural way to
+reuse it is to deploy it, and a licence that only bound redistribution would not reach that.
+
+Concretely, the site footer links to this repository. That link is how section 13's offer of
+source is served, so it is a licence obligation rather than decoration.
+
+### Your notes are not covered by this licence
+
+The AGPL covers **this codebase only**. It says nothing about the notes, files and flashcards
+you create in Unote, which remain yours.
+
+### Dependencies
+
+Every third-party package keeps its own licence, listed in `package-lock.json`. Unote's
+in-browser lecture import additionally downloads Whisper model weights from Hugging Face at
+runtime; those weights are licensed by their publishers, not by this project.
