@@ -7,6 +7,7 @@ import { useRef } from 'react';
 import MarketingNav from './sections/MarketingNav';
 import Hero from './sections/Hero';
 import CapabilityStrip from './sections/CapabilityStrip';
+import WeekSpine from './sections/WeekSpine';
 import FeatureBento from './sections/FeatureBento';
 import AiBand from './sections/AiBand';
 import DesktopBand from './sections/DesktopBand';
@@ -29,6 +30,11 @@ export default function LandingPage() {
       <main id="main">
         <Hero />
         <CapabilityStrip />
+        {/* The strip claims Unote replaces six things; the spine is where that claim gets
+            demonstrated rather than asserted, by walking one note through a week. It has to
+            sit before the feature grid, because the grid is now the reference list for a
+            loop the reader has already been shown. */}
+        <WeekSpine />
         <FeatureBento />
         <AiBand />
         {/* After the product has argued for itself, before the maker note. Somebody who has not

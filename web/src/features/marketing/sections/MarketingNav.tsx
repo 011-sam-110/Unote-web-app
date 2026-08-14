@@ -13,6 +13,7 @@ import { Link, useLocation } from 'react-router-dom';
 import Wordmark from '../Wordmark';
 
 const LINKS = [
+  { href: '#week', label: 'How it works' },
   { href: '#features', label: 'Features' },
   { href: '#ai', label: 'AI' },
   { href: '#maker', label: 'Who made it' },

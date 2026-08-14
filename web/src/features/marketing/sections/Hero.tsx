@@ -3,12 +3,29 @@
 // The signature element is the highlighter swipe under "degree" - a hand-drawn stroke
 // rather than a rounded pill, because a highlighter is the actual instrument of the
 // audience's world. It sweeps on once at load and then rests; it never loops.
+import { useRef } from 'react';
 import { Link } from 'react-router-dom';
 import ProductShot from './ProductShot';
+import useScrollLink from '../useScrollLink';
 
 export default function Hero() {
+  const root = useRef<HTMLElement>(null);
+
+  // Parallax, written as ONE custom property that every layer reads at its own amplitude.
+  // start and end are both 0, which is the mapping the hero needs and no other section
+  // does: p is 0 at the top of the page and 1 once the hero has fully scrolled past, so
+  // the effect is over exactly when the hero is.
+  //
+  // The value goes straight onto the node rather than into state - see useScrollLink on
+  // why a scrubbed number never belongs in a re-render.
+  const armed = useScrollLink(
+    root,
+    (p) => root.current?.style.setProperty('--plx', String(p)),
+    { start: 0, end: 0 },
+  );
+
   return (
-    <section className="mkt-hero">
+    <section className={`mkt-hero${armed ? ' is-plx' : ''}`} ref={root}>
       {/* Ambient layer. Two very slow, very faint gradients breathing out of phase, so the
           paper reads as lit by something rather than as a flat fill. It is deliberately
           almost subliminal: anything you can consciously watch on a hero becomes a thing
@@ -44,7 +61,10 @@ export default function Hero() {
           <Link className="mkt-btn mkt-btn--primary mkt-btn--lg" to="/try">
             Start writing, it's free
           </Link>
-          <a className="mkt-btn mkt-btn--quiet mkt-btn--lg" href="#features">
+          {/* Points at the week spine, not the feature grid. The button says "see how it
+              works" and the spine is the section that actually shows it working; the grid
+              is the parts list you read afterwards. */}
+          <a className="mkt-btn mkt-btn--quiet mkt-btn--lg" href="#week">
             See how it works
           </a>
         </div>
