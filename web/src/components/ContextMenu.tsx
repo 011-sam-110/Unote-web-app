@@ -40,6 +40,11 @@ export function menuLabel(key: string, label: string): MenuLabelEntry {
   return { kind: 'label', key, label };
 }
 
+/** How long the submenu survives the pointer crossing a sibling item. The way
+ *  from "Move to notebook" to a notebook often clips the row above or below, and
+ *  closing on that first touch left the submenu impossible to reach. */
+const SUBMENU_CLOSE_DELAY_MS = 300;
+
 export default function ContextMenu({
   trigger,
   items,
@@ -64,12 +69,51 @@ export default function ContextMenu({
   const menuRef = useRef<HTMLDivElement | null>(null);
   const submenuAnchorRef = useRef<HTMLElement | null>(null);
   const submenuRef = useRef<HTMLDivElement | null>(null);
+  const closeTimerRef = useRef<number | null>(null);
+  // Set when the submenu was opened from the keyboard, so focus follows it in.
+  const focusSubmenuRef = useRef(false);
+
+  function cancelSubmenuClose() {
+    if (closeTimerRef.current !== null) {
+      window.clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+  }
+
+  function scheduleSubmenuClose() {
+    if (closeTimerRef.current !== null) return;
+    closeTimerRef.current = window.setTimeout(() => {
+      closeTimerRef.current = null;
+      setSubmenuKey(null);
+    }, SUBMENU_CLOSE_DELAY_MS);
+  }
+
+  function focusFirstSubmenuItem() {
+    submenuRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]:not(:disabled)')?.focus({ preventScroll: true });
+  }
+
+  function openSubmenu(anchor: HTMLElement, key: string, focusFirst = false) {
+    cancelSubmenuClose();
+    submenuAnchorRef.current = anchor;
+    // Already open (the pointer hovered it first): no re-render is coming, so focus now.
+    if (focusFirst && submenuKey === key) {
+      focusFirstSubmenuItem();
+      return;
+    }
+    focusSubmenuRef.current = focusFirst;
+    setSubmenuKey(key);
+  }
 
   function setOpen(v: boolean) {
     setOpenState(v);
     onOpenChange?.(v);
-    if (!v) setSubmenuKey(null);
+    if (!v) {
+      cancelSubmenuClose();
+      setSubmenuKey(null);
+    }
   }
+
+  useEffect(() => cancelSubmenuClose, []);
 
   useEffect(() => {
     if (!open) return;
@@ -122,41 +166,66 @@ export default function ContextMenu({
     });
   }, [submenuKey]);
 
+  useEffect(() => {
+    if (!submenuKey || !focusSubmenuRef.current) return;
+    focusSubmenuRef.current = false;
+    focusFirstSubmenuItem();
+  }, [submenuKey]);
+
   function select(entry: MenuItemEntry) {
     if (entry.disabled) return;
     entry.onSelect?.();
     setOpen(false);
   }
 
-  function renderEntries(entries: MenuEntry[]) {
+  // `inSubmenu` marks the entries of the open submenu. Hovering one of those must
+  // leave submenuKey alone: they used to share the root's "hovered a plain item,
+  // so shut the submenu" branch, and the submenu closed the moment the pointer
+  // reached it.
+  function renderEntries(entries: MenuEntry[], inSubmenu = false) {
     return entries.map((entry) => {
       if (entry.kind === 'divider') return <div key={entry.key} className="folio-menu__divider" role="separator" />;
       if (entry.kind === 'label') return <div key={entry.key} className="folio-menu__label">{entry.label}</div>;
-      const hasSubmenu = !!entry.submenu?.length;
+      const hasSubmenu = !inSubmenu && !!entry.submenu?.length;
       return (
         <button
           key={entry.key}
           type="button"
           role="menuitem"
-          className={`folio-menu__item${entry.danger ? ' danger' : ''}${submenuKey === entry.key ? ' is-active' : ''}`}
+          aria-haspopup={hasSubmenu ? 'menu' : undefined}
+          aria-expanded={hasSubmenu ? submenuKey === entry.key : undefined}
+          className={`folio-menu__item${entry.danger ? ' danger' : ''}${!inSubmenu && submenuKey === entry.key ? ' is-active' : ''}`}
           disabled={entry.disabled}
           onMouseEnter={(e) => {
+            if (inSubmenu) return;
             if (hasSubmenu) {
-              submenuAnchorRef.current = e.currentTarget;
-              setSubmenuKey(entry.key);
+              openSubmenu(e.currentTarget, entry.key);
             } else if (submenuKey) {
+              // Not at once: this may just be the pointer cutting the corner on its
+              // way into the submenu. Entering the submenu cancels it.
+              scheduleSubmenuClose();
+            }
+          }}
+          onKeyDown={(e) => {
+            if (hasSubmenu && e.key === 'ArrowRight') {
+              e.preventDefault();
+              openSubmenu(e.currentTarget, entry.key, true);
+            } else if (inSubmenu && e.key === 'ArrowLeft') {
+              e.preventDefault();
               setSubmenuKey(null);
+              submenuAnchorRef.current?.focus();
             }
           }}
           onClick={(e) => {
             e.stopPropagation();
             if (hasSubmenu) {
-              submenuAnchorRef.current = e.currentTarget;
               // Open, never toggle. The pointer is by definition already hovering this
               // item, so onMouseEnter has just opened the submenu - a toggle here shut
               // it again on the way in, and "Color" looked like a dead menu item to
-              // anyone who clicked it rather than hovering and sliding right.
-              setSubmenuKey(entry.key);
+              // anyone who clicked it rather than hovering and sliding right. A click
+              // is also the only way in on touch, where there is no hover. detail 0
+              // means Enter/Space rather than a pointer, so focus moves in with it.
+              openSubmenu(e.currentTarget, entry.key, e.detail === 0);
               return;
             }
             select(entry);
@@ -224,8 +293,9 @@ export default function ContextMenu({
             className="folio-menu"
             style={{ position: 'fixed', top: submenuPos.y, left: submenuPos.x }}
             onMouseDown={(e) => e.stopPropagation()}
+            onMouseEnter={cancelSubmenuClose}
           >
-            {renderEntries(activeSubmenu)}
+            {renderEntries(activeSubmenu, true)}
           </div>,
           document.body,
         )}
