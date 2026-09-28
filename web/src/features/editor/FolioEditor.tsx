@@ -10,6 +10,7 @@ import { createFolioExtensions } from './buildExtensions';
 import SelectionToolbar from './SelectionToolbar';
 import SpellContextMenu from './spell/SpellContextMenu';
 import TableToolbar from './TableToolbar';
+import ImageToolbar from './ImageToolbar';
 import InsertMenuPopover from './InsertMenuPopover';
 import Icon from '../../components/Icon';
 import { uploadAndInsertImage } from './imageUpload';
@@ -197,6 +198,7 @@ export default function FolioEditor({ content, notebookId, onReady, onDestroy, o
       <SelectionToolbar editor={editor} />
       <SpellContextMenu editor={editor} />
       <TableToolbar editor={editor} />
+      <ImageToolbar editor={editor} />
       <DragHandle editor={editor} onNodeChange={handleNodeChange}>
         <div className="folio-block-gutter">
           <button
