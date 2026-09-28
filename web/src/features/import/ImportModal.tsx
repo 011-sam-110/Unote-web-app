@@ -35,7 +35,11 @@ export interface ImportModalProps {
   onImported?: (resultNoteId: string) => void;
 }
 
-type MergeMode = 'append' | 'improve';
+// 'improve' ("Improve & merge") is no longer offered: it had the AI rewrite the whole note
+// and saved the result over what the student had written. Their words are theirs; a
+// PowerPoint blend that only ever SUGGESTS changes replaces it. The server still accepts
+// the mode, so an older client mid-import does not start failing.
+type MergeMode = 'append';
 /** 'bulk' is the multi-photo path: stage every photo, group them, review, then commit. */
 type Phase = 'pick' | 'running' | 'bulk' | 'done' | 'error';
 /** The server-backed kinds, plus the fully client-side lecture-video flow. */
@@ -55,7 +59,7 @@ export default function ImportModal({ open, onClose, notebookId, noteId, default
   const [selectedNotebookId, setSelectedNotebookId] = useState<string>(notebookId ?? '');
   const [targetNote, setTargetNote] = useState<Note | null>(null);
   const [targetNoteLoading, setTargetNoteLoading] = useState(false);
-  const [mergeMode, setMergeMode] = useState<MergeMode>('append');
+  const mergeMode: MergeMode = 'append';
   const [files, setFiles] = useState<File[]>([]);
   const [pagePreviews, setPagePreviews] = useState<string[]>([]);
   const [dragActive, setDragActive] = useState(false);
@@ -86,7 +90,6 @@ export default function ImportModal({ open, onClose, notebookId, noteId, default
     setResultNoteId(null);
     setResultTitle(null);
     setErrorMessage(null);
-    setMergeMode('append');
     chainRef.current = { index: 0, mode: 'new' };
     reset();
   }, [open, defaultKind, reset]);
@@ -323,16 +326,7 @@ export default function ImportModal({ open, onClose, notebookId, noteId, default
                       </span>
                       <span className="im-target__title">{targetNote.title || 'Untitled'}</span>
                     </div>
-                    <div className="im-mode">
-                      <label className={`im-mode-option${mergeMode === 'append' ? ' is-active' : ''}`}>
-                        <input type="radio" name="import-merge-mode" value="append" checked={mergeMode === 'append'} onChange={() => setMergeMode('append')} />
-                        <span><strong>Append</strong>: add to the end of the note</span>
-                      </label>
-                      <label className={`im-mode-option${mergeMode === 'improve' ? ' is-active' : ''}`}>
-                        <input type="radio" name="import-merge-mode" value="improve" checked={mergeMode === 'improve'} onChange={() => setMergeMode('improve')} />
-                        <span><strong>Improve &amp; merge</strong>: AI blends this into the existing note</span>
-                      </label>
-                    </div>
+                    <p className="im-mode-note">Added to the end of this note. Nothing you have already written is changed.</p>
                   </>
                 ) : (
                   <div className="im-target__loading">Note unavailable</div>
