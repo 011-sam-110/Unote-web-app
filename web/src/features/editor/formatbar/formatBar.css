@@ -42,15 +42,15 @@
   color: var(--ink-3);
   background: var(--bg-sunken);
   border-top: 1px solid var(--line);
-  gap: 12px;
-  padding: 0 14px;
-  height: 36px;
-  flex-wrap: nowrap;
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-.folio-format-bar__status::-webkit-scrollbar {
-  height: 0;
+  gap: 4px 12px;
+  padding: 3px 14px;
+  min-height: 36px;
+  /* Wraps, and must NOT scroll. The row once had overflow-x: auto, and overflow in
+     either axis clips in both: the page size and export menus open upward out of this
+     row, so they were cut off at its top edge and drew nothing at all - the button
+     pressed and no menu appeared. The rule the top row follows holds here too: a
+     control that only a sideways scroll can reach is a control nobody finds. */
+  flex-wrap: wrap;
 }
 /* The row is mono-uppercase, but its buttons are UI text - they are controls, not
    readings, and setting a dropdown label in 10px mono caps made them hard to hit and
@@ -63,6 +63,21 @@
   height: 22px;
   min-width: 22px;
   border-radius: 6px;
+}
+/* The same for the dropdowns in this row - their triggers and the menus they open, which
+   sit inside the row and would otherwise inherit its 10px mono capitals. */
+.folio-format-bar__status .folio-btn,
+.folio-format-bar__status .folio-dropdown-menu {
+  font-family: var(--font-ui);
+  letter-spacing: 0;
+  text-transform: none;
+}
+/* A flex row, so Export's icon sits beside the word. The icon is a block-level SVG, and
+   in a plain button it sat ABOVE "Export", overflowing a 30px button in a 36px row. */
+.folio-format-bar__status .folio-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .folio-format-bar__spacer { flex: 1 1 auto; }
@@ -184,6 +199,19 @@
   font-size: 12.5px;
 }
 
+/* The font and size boxes read the text under the caret, so their contents change as the
+   caret moves. A fixed width stops that from nudging every control after them along the
+   row, the way Word's two boxes hold still. An empty box (a selection that mixes sizes)
+   keeps its width too, rather than collapsing to a lone chevron. 88px is the widest
+   common label, JetBrains Mono; Times New Roman ellipsises, as it does in Word's box.
+   Any wider and the row no longer fits beside the outline pane at 1500px. */
+.folio-fmt-value--family { width: 88px; }
+.folio-fmt-value--size {
+  width: 2em;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
 .folio-format-bar .folio-dropdown-menu {
   min-width: 168px;
   max-height: 320px;
@@ -195,12 +223,29 @@
   margin-bottom: 6px;
 }
 
+/* The page size menu's rule between the paper sizes and the two mode switches. Unstyled,
+   a bare <hr> in a flex column shrank to a dot. */
+.folio-format-bar .folio-dropdown-menu hr {
+  align-self: stretch;
+  margin: 6px 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+}
+
 .folio-format-bar .folio-dropdown-menu button {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 12px;
   width: 100%;
+}
+
+/* The entry in force - the size the text is, the paper the note is on. aria-checked was
+   already set for a screen reader and drew nothing for anyone else. Same neutral fill as
+   an "on" button in the bar, so "this one" reads the same way in a menu as out of it. */
+.folio-format-bar .folio-dropdown-menu [role='menuitemradio'][aria-checked='true'] {
+  background: var(--bg-active);
+  font-weight: 600;
 }
 
 /* The secondary half of a menu row - a page's dimensions, or what an export will do. */
@@ -227,6 +272,10 @@
      behind a gesture nobody performs on a toolbar. */
   .folio-format-bar__row { gap: 2px; }
   .folio-fmt-value { max-width: 84px; }
+  .folio-fmt-value--family { width: 84px; }
+  /* Not the status row's: "Normal margins" and "A4 landscape" are short and fixed, and
+     that row has room - cut at 84px they read "Normal mar...". */
+  .folio-format-bar__status .folio-fmt-value { max-width: none; }
 }
 
 @media (max-width: 820px) {

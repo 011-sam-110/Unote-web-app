@@ -12,7 +12,19 @@ export default function DropdownButton({ label, disabled, align = 'left', childr
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const menuId = useId();
+
+  // A menu that scrolls opens on its ticked entry - the font size menu is seventeen rows
+  // in a box that shows nine, and "you are at 28" is no help below the fold. The menu's
+  // own scrollTop, not scrollIntoView, which would also scroll the note behind it.
+  useEffect(() => {
+    const menu = menuRef.current;
+    if (!open || !menu) return;
+    const ticked = menu.querySelector<HTMLElement>('[aria-checked="true"]');
+    if (!ticked || menu.scrollHeight <= menu.clientHeight) return;
+    menu.scrollTop = ticked.offsetTop - (menu.clientHeight - ticked.offsetHeight) / 2;
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -58,7 +70,7 @@ export default function DropdownButton({ label, disabled, align = 'left', childr
         <span aria-hidden="true"> ▾</span>
       </button>
       {open && (
-        <div id={menuId} className={`folio-dropdown-menu folio-dropdown-${align}`}>
+        <div id={menuId} ref={menuRef} className={`folio-dropdown-menu folio-dropdown-${align}`}>
           {children(() => setOpen(false))}
         </div>
       )}

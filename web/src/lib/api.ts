@@ -162,7 +162,7 @@ const serverApi = {
   },
   recentNotes: (limit = 12) => http<{ notes: NoteLite[] }>(`/api/notes/recent?limit=${limit}`),
   note: (id: string) => http<{ note: Note; backlinks: NoteLite[]; outgoingLinks: NoteLite[] }>(`/api/notes/${id}`),
-  createNote: (b: { notebookId: string; title?: string; contentJson?: unknown; contentText?: string; tags?: string[]; kind?: NoteKind }) =>
+  createNote: (b: { notebookId: string; title?: string; contentJson?: unknown; contentText?: string; tags?: string[]; kind?: NoteKind; layout?: NoteLayout }) =>
     http<{ note: Note }>('/api/notes', json('POST', b)),
   updateNote: (id: string, b: Partial<{ title: string; contentJson: unknown; contentText: string; pinned: boolean; archived: boolean; notebookId: string; tags: string[]; layout: NoteLayout }>) =>
     http<{ note: Note }>(`/api/notes/${id}`, json('PATCH', b)),

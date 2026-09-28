@@ -83,6 +83,9 @@ export async function migrateGuestWork(onProgress?: (p: MigrationProgress) => vo
         contentJson: note.contentJson,
         contentText: note.contentText,
         tags: note.tags,
+        // The paper the guest set up - margins, page size, header - rather than
+        // every carried-over note opening as default A4.
+        ...(note.layout ? { layout: note.layout } : {}),
       });
     } catch {
       notesFailed++;

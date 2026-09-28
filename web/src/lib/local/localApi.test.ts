@@ -1,7 +1,8 @@
 import 'fake-indexeddb/auto';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { localDb } from './db';
-import { importLegacyGuestData, localApi, resetLegacyImportForTests } from './localApi';
+import { importLegacyGuestData, localApi, localSnapshot, resetLegacyImportForTests } from './localApi';
+import { defaultLayout, type NoteLayout } from '../../features/editor/pagination/layout';
 import { pendingCount, drainOrder } from './outbox';
 
 describe('localApi', () => {
@@ -469,5 +470,110 @@ describe('legacy guest data', () => {
 
     expect(await importLegacyGuestData()).toBe(0);
     expect((await localApi.notebooks()).notebooks.map((n) => n.name)).toEqual(['Already here']);
+  });
+});
+
+describe('page layout in the local store', () => {
+  beforeEach(async () => {
+    await localDb.delete();
+    await localDb.open();
+    resetLegacyImportForTests();
+  });
+
+  const narrow = (): NoteLayout => ({
+    ...defaultLayout(),
+    margins: { top: 6.35, right: 6.35, bottom: 6.35, left: 6.35 },
+  });
+
+  it('keeps a layout change for the next read - the reload a guest does', async () => {
+    // Before this, updateNote dropped `layout` and toNoteDto never returned one, so the
+    // margins were painted on the change and gone on the next load.
+    const { notebook } = await localApi.createNotebook({ name: 'N' });
+    const { note } = await localApi.createNote({ notebookId: notebook.id, title: 'T' });
+    await localApi.updateNote(note.id, { layout: narrow() });
+    const reread = (await localApi.note(note.id)).note;
+    expect(reread.layout?.margins).toEqual({ top: 6.35, right: 6.35, bottom: 6.35, left: 6.35 });
+  });
+
+  it('reads a default layout for a note that never had one', async () => {
+    const { notebook } = await localApi.createNotebook({ name: 'N' });
+    const { note } = await localApi.createNote({ notebookId: notebook.id, title: 'T' });
+    expect((await localApi.note(note.id)).note.layout).toEqual(defaultLayout());
+  });
+
+  it('reads the layout the sync feed wrote, so an offline open keeps the paper', async () => {
+    await localDb.notebooks.put({
+      id: 'bbbbbbbbbbbbbb', name: 'Pulled', emoji: '📓', color: '#000', position: 0, archived: 0,
+      createdAt: '2026-08-01T00:00:00.000Z', updatedAt: '2026-08-01T00:00:00.000Z',
+      deletedAt: null, baseUpdatedAt: '2026-08-01T00:00:00.000Z',
+    });
+    await localDb.notes.put({
+      id: 'cccccccccccccc', notebookId: 'bbbbbbbbbbbbbb', title: 'From the server',
+      contentJson: '{"type":"doc"}', contentText: '', kind: 'doc', pinned: 0, archived: 0, tags: [],
+      createdAt: '2026-08-01T00:00:00.000Z', updatedAt: '2026-08-01T00:00:00.000Z',
+      deletedAt: null, baseUpdatedAt: '2026-08-01T00:00:00.000Z',
+      // The feed's camelCased layout_json, exactly as the pull's merge stores it.
+      layoutJson: JSON.stringify({ ...defaultLayout(), pageSize: 'letter', margins: { top: 25.4, right: 19.05, bottom: 25.4, left: 19.05 } }),
+    });
+    const { note } = await localApi.note('cccccccccccccc');
+    expect(note.layout?.pageSize).toBe('letter');
+    expect(note.layout?.margins.left).toBe(19.05);
+  });
+
+  it('pushes the layout with the note, on an update and on a coalesced create', async () => {
+    const { notebook } = await localApi.createNotebook({ name: 'N' });
+    const { note } = await localApi.createNote({ notebookId: notebook.id, title: 'T' });
+    await localApi.updateNote(note.id, { layout: narrow() });
+    const create = (await drainOrder()).find((e) => e.entity === 'note');
+    expect(create?.op).toBe('create');
+    expect((create?.payload.layout as NoteLayout).margins.left).toBe(6.35);
+
+    // Now as a note the server already has.
+    await localDb.notes.update(note.id, { baseUpdatedAt: '2026-01-01T00:00:00.000Z' });
+    await localDb.outbox.clear();
+    await localApi.updateNote(note.id, { title: 'renamed' });
+    const update = (await drainOrder()).find((e) => e.entity === 'note');
+    expect(update?.op).toBe('update');
+    // A rename carries the layout the note holds: payloads are complete bodies.
+    expect((update?.payload.layout as NoteLayout).margins.left).toBe(6.35);
+  });
+
+  it('sends no layout for a note that has never had one on this device', async () => {
+    // So the server keeps whatever it holds rather than being told "the default".
+    const { notebook } = await localApi.createNotebook({ name: 'N' });
+    const { note } = await localApi.createNote({ notebookId: notebook.id, title: 'T' });
+    await localApi.updateNote(note.id, { title: 'T2' });
+    const entry = (await drainOrder()).find((e) => e.entity === 'note');
+    expect(entry?.payload).not.toHaveProperty('layout');
+  });
+
+  it('sends a reset to the default layout rather than dropping it', async () => {
+    // Dropped, the server would keep the narrow margins and the next pull would put them back.
+    const { notebook } = await localApi.createNotebook({ name: 'N' });
+    const { note } = await localApi.createNote({ notebookId: notebook.id, title: 'T' });
+    await localApi.updateNote(note.id, { layout: narrow() });
+    await localApi.updateNote(note.id, { layout: defaultLayout() });
+    const entry = (await drainOrder()).find((e) => e.entity === 'note');
+    expect(entry?.payload.layout).toEqual(defaultLayout());
+  });
+
+  it('clamps a nonsense layout the way the server does', async () => {
+    const { notebook } = await localApi.createNotebook({ name: 'N' });
+    const { note } = await localApi.createNote({ notebookId: notebook.id, title: 'T' });
+    await localApi.updateNote(note.id, {
+      layout: { ...defaultLayout(), margins: { top: -5, right: 'x', bottom: 12.7, left: 12.7 } } as never,
+    });
+    const margins = (await localApi.note(note.id)).note.layout?.margins;
+    expect(margins).toEqual({ top: 0, right: 25.4, bottom: 12.7, left: 12.7 });
+  });
+
+  it('hands the layout to the account on signup', async () => {
+    const { notebook } = await localApi.createNotebook({ name: 'N' });
+    const { note } = await localApi.createNote({ notebookId: notebook.id, title: 'T' });
+    await localApi.createNote({ notebookId: notebook.id, title: 'Plain' });
+    await localApi.updateNote(note.id, { layout: narrow() });
+    const snapshot = await localSnapshot();
+    expect(snapshot.notes.find((n) => n.id === note.id)?.layout?.margins.top).toBe(6.35);
+    expect(snapshot.notes.find((n) => n.title === 'Plain')).not.toHaveProperty('layout');
   });
 });

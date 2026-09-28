@@ -195,6 +195,20 @@ router.get('/', async (req, res) => {
   res.json({ notes: await Promise.all(rows.map(r => noteLite(r))), total });
 });
 
+/**
+ * What `layout_json` stores for a layout a client sent.
+ *
+ * Round-tripped through parseLayout rather than stored as sent, so the column can only
+ * ever hold a layout this server understands: unknown keys are dropped, out-of-range
+ * margins are clamped, and a client that posts nonsense gets a default rather than
+ * writing a note that later fails to render. Storing NULL for a default layout keeps
+ * the column empty for the overwhelming majority of notes that never change their paper.
+ */
+function layoutColumn(sent: unknown): string | null {
+  const parsed = parseLayout(JSON.stringify(sent));
+  return JSON.stringify(parsed) === JSON.stringify(defaultLayout()) ? null : JSON.stringify(parsed);
+}
+
 router.post('/', async (req, res) => {
   const uid = userId(req);
   const b = req.body ?? {};
@@ -255,13 +269,17 @@ router.post('/', async (req, res) => {
   // note arrived; the pin did not, and nothing reported it.
   const pinned = b.pinned === true ? 1 : 0;
   const archived = b.archived === true ? 1 : 0;
+  // The page layout, by the same rule and for the same reason: a note made offline and
+  // then given narrow margins reaches the server as ONE create carrying both, and so does
+  // a guest's note carried into a new account.
+  const layoutJson = b.layout !== undefined ? layoutColumn(b.layout) : null;
 
   await db
     .prepare(
-      `INSERT INTO notes (id, user_id, notebook_id, title, content_json, content_text, kind, pinned, archived, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO notes (id, user_id, notebook_id, title, content_json, content_text, kind, pinned, archived, layout_json, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
-    .run(id, uid, b.notebookId, title, contentJson, contentText, kind, pinned, archived, now, now);
+    .run(id, uid, b.notebookId, title, contentJson, contentText, kind, pinned, archived, layoutJson, now, now);
 
   if (b.tags !== undefined) await setTags(uid, id, b.tags);
   if (contentText) await syncLinksForNote(uid, id, contentText);
@@ -342,18 +360,7 @@ router.patch('/:id', async (req, res) => {
   const newPinned = b.pinned !== undefined ? (b.pinned ? 1 : 0) : row.pinned;
   const newArchived = b.archived !== undefined ? (b.archived ? 1 : 0) : row.archived;
   const newNotebookId = b.notebookId !== undefined ? b.notebookId : row.notebook_id;
-  // Round-tripped through parseLayout rather than stored as sent, so the column can only
-  // ever hold a layout this server understands: unknown keys are dropped, out-of-range
-  // margins are clamped, and a client that posts nonsense gets a default rather than
-  // writing a note that later fails to render. Storing NULL for a default layout keeps
-  // the column empty for the overwhelming majority of notes that never change their paper.
-  const newLayoutJson =
-    b.layout !== undefined
-      ? (() => {
-          const parsed = parseLayout(JSON.stringify(b.layout));
-          return JSON.stringify(parsed) === JSON.stringify(defaultLayout()) ? null : JSON.stringify(parsed);
-        })()
-      : (row.layout_json ?? null);
+  const newLayoutJson = b.layout !== undefined ? layoutColumn(b.layout) : (row.layout_json ?? null);
 
   // Conflict adjudication, for a write that arrived from an offline client.
   //
