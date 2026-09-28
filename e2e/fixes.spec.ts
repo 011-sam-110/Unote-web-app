@@ -1,7 +1,7 @@
 // Iteration-1 fix coverage: editor data integrity (load race, failed-save retry,
 // restore-refresh), soft-delete undo, notebook type-to-delete, context filing (Ctrl+N),
-// and the study notebook filter. Import-pipeline fixes live in import.spec.ts /
-// mobile-capture.spec.ts.
+// the study notebook filter and the "Move to notebook" submenu. Import-pipeline fixes
+// live in import.spec.ts / mobile-capture.spec.ts.
 import { expect, test } from './auth.fixture';
 import {
   TESTIDS,
@@ -337,5 +337,57 @@ test.describe('Study notebook filter', () => {
         timeout: 10_000,
       })
       .toBeGreaterThanOrEqual(3);
+  });
+});
+
+test.describe('Move to notebook submenu', () => {
+  // The note row's "..." sits at the right edge, so the submenu flips to the LEFT of the
+  // menu. It used to shut the moment the pointer reached it (a submenu row shared the
+  // root's "hovered a plain item, close the submenu" branch), so no notebook could ever
+  // be picked with a mouse. Real pointer moves with steps, not locator.hover(), because
+  // the bug lived in the enter events fired along the way.
+  test('the submenu survives the pointer travelling into it, and the pick moves the note', async ({ page, request }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    const source = await apiCreateNotebook(request, uniqueName('E2E Move Source'));
+    const target = await apiCreateNotebook(request, uniqueName('E2E Move Target'));
+    const note = await apiCreateNote(request, source.id, uniqueName('Movable Note'));
+
+    await page.goto(`/notebook/${source.id}`);
+    await expect(page.getByText(exact(note.title)).first()).toBeVisible({ timeout: 10_000 });
+    await page.locator(`button[aria-label="${note.title} options"]`).click();
+
+    const trigger = page.getByRole('menuitem', { name: 'Move to notebook' });
+    const tb = await trigger.boundingBox();
+    if (!tb) throw new Error('no Move to notebook item');
+    await page.mouse.move(tb.x + tb.width - 20, tb.y + tb.height / 2, { steps: 5 });
+
+    const pick = page.getByRole('menuitem', { name: exact(target.name) });
+    await expect(pick).toBeVisible();
+    const menuBox = await page.locator('.folio-menu').first().boundingBox();
+    const subBox = await page.locator('.folio-menu').nth(1).boundingBox();
+    if (!menuBox || !subBox) throw new Error('menu or submenu has no box');
+    expect(subBox.x, 'submenu should open to the left of the menu here').toBeLessThan(menuBox.x);
+
+    // Cut the corner across the row below on the way, as a hand does.
+    const archive = await page.getByRole('menuitem', { name: 'Archive' }).boundingBox();
+    if (!archive) throw new Error('no Archive item');
+    await page.mouse.move(archive.x + archive.width - 40, archive.y + archive.height / 2, { steps: 6 });
+    // Other specs' notebooks share this list, so the pick may sit below the fold of a
+    // scrolling submenu. Scrolling it does not move the pointer.
+    await pick.scrollIntoViewIfNeeded();
+    const pb = await pick.boundingBox();
+    if (!pb) throw new Error('submenu item has no box');
+    await page.mouse.move(pb.x + pb.width / 2, pb.y + pb.height / 2, { steps: 12 });
+    // Longer than the close delay: the submenu must still be there, not just slow to go.
+    await page.waitForTimeout(500);
+    await expect(pick).toBeVisible();
+
+    await page.mouse.down();
+    await page.mouse.up();
+    await expect(page.getByText('Note moved')).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByRole('main').getByText(exact(note.title))).toHaveCount(0);
+    const res = await request.get(`/api/notes/${note.id}`);
+    expect(res.ok()).toBeTruthy();
+    expect((await res.json()).note.notebookId).toBe(target.id);
   });
 });
