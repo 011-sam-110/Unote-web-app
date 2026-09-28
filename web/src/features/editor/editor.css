@@ -995,6 +995,12 @@ a.folio-wikilink--missing:hover {
   z-index: 60;
 }
 
+/* The body-mounted wrapper around the '/' and '[[' popups (suggestionRenderer). The
+   surface's own z-index does nothing - it is not positioned - so the layer lives here. */
+.folio-suggestion-layer {
+  z-index: 60;
+}
+
 /* '/' menu: sized like the palette it replaces. */
 .folio-insert-surface {
   min-width: 264px;

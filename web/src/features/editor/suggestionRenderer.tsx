@@ -16,6 +16,10 @@ export function createSuggestionRenderer(Component: ComponentType<any>) {
     return {
       onStart: (props: any) => {
         component = new ReactRenderer(Component, { props, editor: props.editor });
+        // mount() positions this wrapper absolutely on <body>; without a layer of its own it
+        // paints under the paged editor's text (z-index 1), which then takes every click
+        // and wheel event aimed at the popup.
+        component.element.classList.add('folio-suggestion-layer');
         if (!props.clientRect) return;
         unmount = props.mount(component.element);
       },
