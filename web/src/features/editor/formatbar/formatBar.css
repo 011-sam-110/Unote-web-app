@@ -184,6 +184,19 @@
   font-size: 12.5px;
 }
 
+/* The font and size boxes read the text under the caret, so their contents change as the
+   caret moves. A fixed width stops that from nudging every control after them along the
+   row, the way Word's two boxes hold still. An empty box (a selection that mixes sizes)
+   keeps its width too, rather than collapsing to a lone chevron. 88px is the widest
+   common label, JetBrains Mono; Times New Roman ellipsises, as it does in Word's box.
+   Any wider and the row no longer fits beside the outline pane at 1500px. */
+.folio-fmt-value--family { width: 88px; }
+.folio-fmt-value--size {
+  width: 2em;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
 .folio-format-bar .folio-dropdown-menu {
   min-width: 168px;
   max-height: 320px;
@@ -201,6 +214,14 @@
   justify-content: space-between;
   gap: 12px;
   width: 100%;
+}
+
+/* The entry in force - the size the text is, the paper the note is on. aria-checked was
+   already set for a screen reader and drew nothing for anyone else. Same neutral fill as
+   an "on" button in the bar, so "this one" reads the same way in a menu as out of it. */
+.folio-format-bar .folio-dropdown-menu [role='menuitemradio'][aria-checked='true'] {
+  background: var(--bg-active);
+  font-weight: 600;
 }
 
 /* The secondary half of a menu row - a page's dimensions, or what an export will do. */
@@ -227,6 +248,7 @@
      behind a gesture nobody performs on a toolbar. */
   .folio-format-bar__row { gap: 2px; }
   .folio-fmt-value { max-width: 84px; }
+  .folio-fmt-value--family { width: 84px; }
 }
 
 @media (max-width: 820px) {

@@ -15,6 +15,7 @@ import type { Editor } from '@tiptap/core';
 import Icon from '../../../components/Icon';
 import DropdownButton from '../DropdownButton';
 import { FONT_FAMILIES, FONT_SIZES, LINE_HEIGHTS, PARAGRAPH_STYLES } from './formatOptions';
+import { readCaretStyle, sizeNumber } from './caretStyle';
 import {
   AlignCenter, AlignJustify, AlignLeft, AlignRight,
   BulletList, IndentLess, IndentMore, LineHeight, OrderedList, TaskList,
@@ -58,8 +59,11 @@ export default function FormatBar(props: FormatBarProps) {
 
   const currentStyle =
     PARAGRAPH_STYLES.find(style => style.isActive(editor))?.label ?? 'Normal';
+  // The font mark, if any: it decides which menu entry is ticked, because "Default" and
+  // "Newsreader" set the same face but only one of them is a choice the user made.
   const currentFamily = (editor.getAttributes('textStyle').fontFamily as string) || '';
-  const currentSize = (editor.getAttributes('textStyle').fontSize as string) || '';
+  // What the boxes SHOW is the text as it renders, mark or not - see caretStyle.ts.
+  const caret = readCaretStyle(editor);
 
   return (
     <div className="folio-format-bar" role="toolbar" aria-label="Formatting" data-testid="format-bar">
@@ -83,9 +87,18 @@ export default function FormatBar(props: FormatBarProps) {
           }
         </DropdownButton>
 
+        {/* Fixed-width boxes, as in Word: the caret moving from body text into a code span
+            must not shove every control to its right along by a few pixels. The hidden
+            prefix names the control, because "19" alone is not a useful button name. */}
         <DropdownButton
-          label={<span className="folio-fmt-value">{familyLabel(currentFamily)}</span>}
-         
+          label={
+            <>
+              <span className="folio-visually-hidden">Font </span>
+              <span className="folio-fmt-value folio-fmt-value--family" data-testid="font-family-value">
+                {caret.family}
+              </span>
+            </>
+          }
         >
           {close =>
             FONT_FAMILIES.map(font => (
@@ -106,14 +119,24 @@ export default function FormatBar(props: FormatBarProps) {
           }
         </DropdownButton>
 
-        <DropdownButton label={<span className="folio-fmt-value">{currentSize || 'Size'}</span>}>
+        <DropdownButton
+          label={
+            <>
+              <span className="folio-visually-hidden">Font size </span>
+              <span className="folio-fmt-value folio-fmt-value--size" data-testid="font-size-value">
+                {caret.size}
+              </span>
+            </>
+          }
+        >
           {close =>
             FONT_SIZES.map(size => (
               <button
                 key={size}
                 type="button"
                 role="menuitemradio"
-                aria-checked={currentSize === size}
+                // Ticked by the size the text IS, so body text ticks 19 with no mark on it.
+                aria-checked={caret.size !== '' && caret.size === sizeNumber(size)}
                 onClick={() => {
                   editor.chain().focus().setFontSize(size).run();
                   close();
@@ -426,11 +449,6 @@ function Toggle({ editor, mark, node, label, shortcut, children }: ToggleProps) 
       {children}
     </button>
   );
-}
-
-function familyLabel(value: string): string {
-  if (!value) return 'Default';
-  return FONT_FAMILIES.find(f => f.value === value)?.label ?? value.split(',')[0].replace(/["']/g, '');
 }
 
 function sizeLabel(layout: NoteLayout): string {
