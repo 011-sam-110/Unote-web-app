@@ -143,6 +143,12 @@
   color: var(--ink);
 }
 
+.im-mode-note {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+
 .im-drop {
   display: flex;
   flex-direction: column;
