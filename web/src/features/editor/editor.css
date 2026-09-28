@@ -635,6 +635,82 @@
   display: block;
 }
 
+/* Contain a floated image that is the last thing in the note, or it hangs out of the
+   editor's box and the page below it. */
+.folio-prosemirror {
+  display: flow-root;
+}
+
+/* The node view (LocalImage.ts): a block holding a frame that shrink-wraps the picture,
+   so the corner handles sit on the image's corners rather than the column's. */
+.folio-image-block {
+  margin: 0.6em 0;
+}
+.folio-image-frame {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+  vertical-align: top;
+  line-height: 0;
+}
+.folio-image-block[data-align='center'] {
+  text-align: center;
+}
+/* Wrapped: text flows down the other side, the way Word's "Square" wrap does. The gap is
+   on the text side only, so the image still lines up with the column edge. */
+.folio-image-block[data-align='left'] {
+  float: left;
+  max-width: 100%;
+  margin: 0.25em 1.25em 0.6em 0;
+}
+.folio-image-block[data-align='right'] {
+  float: right;
+  max-width: 100%;
+  margin: 0.25em 0 0.6em 1.25em;
+}
+/* Bullets and numbers sit outside the text box, so beside a float they would be drawn
+   over the picture. Keeping the list's box clear of the float keeps its markers visible. */
+.folio-prosemirror :is(ul, ol) {
+  overflow: hidden;
+}
+
+.folio-image-block.ProseMirror-selectednode .folio-image,
+.folio-image-block.is-resizing .folio-image {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* Square corner grips, shown only on the selected image. The visible square is small;
+   the ::before gives a finger or a pen a 28px target. */
+.folio-image-handle {
+  position: absolute;
+  z-index: 2;
+  width: 12px;
+  height: 12px;
+  background: var(--bg);
+  border: 2px solid var(--accent);
+  border-radius: 3px;
+  display: none;
+  touch-action: none;
+}
+.folio-image-handle::before {
+  content: '';
+  position: absolute;
+  inset: -8px;
+}
+.folio-image-handle[data-corner='nw'] { top: -6px; left: -6px; cursor: nwse-resize; }
+.folio-image-handle[data-corner='ne'] { top: -6px; right: -6px; cursor: nesw-resize; }
+.folio-image-handle[data-corner='sw'] { bottom: -6px; left: -6px; cursor: nesw-resize; }
+.folio-image-handle[data-corner='se'] { bottom: -6px; right: -6px; cursor: nwse-resize; }
+
+.folio-prosemirror[contenteditable='true'] .folio-image-block.ProseMirror-selectednode .folio-image-handle,
+.folio-image-block.is-resizing .folio-image-handle {
+  display: block;
+}
+.folio-image-block.is-resizing {
+  user-select: none;
+}
+
 /* ---------- Wikilink ---------- */
 
 .folio-wikilink-wrap {

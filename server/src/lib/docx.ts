@@ -325,7 +325,7 @@ function blockToDocx(node: TTNode, depth: number, ctx: BlockCtx = {}): Array<Par
       // image is named and linked instead.
       const src = String(node.attrs?.src ?? '');
       const alt = String(node.attrs?.alt ?? '').trim();
-      const embedded = embedDataUri(src, alt);
+      const embedded = embedDataUri(src, alt, imageBox(node.attrs?.width, node.attrs?.height));
       if (embedded) return [embedded];
       return [placeholder(alt ? `Image: ${alt}` : 'Image', depth)];
     }
@@ -374,7 +374,26 @@ function blockToDocx(node: TTNode, depth: number, ctx: BlockCtx = {}): Array<Par
 }
 
 /** Inline base64 images become real embedded pictures; anything else returns null. */
-function embedDataUri(src: string, alt: string): Paragraph | null {
+/** A4's text box at the default margins, in the pixels ImageRun measures in. */
+const MAX_IMAGE_WIDTH_PX = 604;
+
+/**
+ * The size the writer dragged the image to in the editor, if they did. Both numbers are
+ * needed - Word wants a box - and a box wider than the page is scaled down whole.
+ */
+function imageBox(width: unknown, height: unknown): { width: number; height: number } | null {
+  const w = Number(width);
+  const h = Number(height);
+  if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) return null;
+  const scale = Math.min(1, MAX_IMAGE_WIDTH_PX / w);
+  return { width: Math.round(w * scale), height: Math.round(h * scale) };
+}
+
+function embedDataUri(
+  src: string,
+  alt: string,
+  box: { width: number; height: number } | null = null,
+): Paragraph | null {
   const match = /^data:image\/(png|jpeg|jpg|gif|bmp);base64,(.+)$/i.exec(src);
   if (!match) return null;
   try {
@@ -385,9 +404,10 @@ function embedDataUri(src: string, alt: string): Paragraph | null {
         new ImageRun({
           data,
           type,
-          // Without the real dimensions to hand, a fixed width that fits inside A4's text
-          // box with the default margins, at a 4:3 box. Word lets the reader resize.
-          transformation: { width: 480, height: 360 },
+          // An image never resized in the editor has no dimensions to hand: a fixed width
+          // that fits inside A4's text box with the default margins, at a 4:3 box. Word
+          // lets the reader resize.
+          transformation: box ?? { width: 480, height: 360 },
           altText: alt ? { title: alt, description: alt, name: alt } : undefined,
         }),
       ],
