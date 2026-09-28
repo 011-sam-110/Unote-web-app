@@ -152,4 +152,33 @@ test.describe('Core notes flow', () => {
     await page.reload();
     await expect(editorBody(page).locator('li input[type="checkbox"]').last()).toBeChecked();
   });
+
+  test('slash menu scrolls under the mouse wheel and a row below the fold can be clicked', async ({ page }) => {
+    // The popup once painted UNDER the paged editor's text layer: still visible through it,
+    // but the wheel scrolled the note and clicks landed in the text. Enter still worked.
+    const notebookName = uniqueName('E2E Slash Scroll Notebook');
+    await page.goto('/');
+    await createNotebookViaSidebar(page, notebookName);
+    await openNotebook(page, notebookName);
+    await createNoteViaButton(page);
+    await setNoteTitle(page, uniqueName('Slash Scroll Note'));
+
+    const body = editorBody(page);
+    await body.click();
+    await page.keyboard.type('/', { delay: 10 });
+    const slashMenu = page.getByTestId(TESTIDS.slashMenu);
+    await expect(slashMenu).toBeVisible({ timeout: 5_000 });
+
+    const box = (await slashMenu.boundingBox())!;
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.wheel(0, 300);
+    await expect.poll(() => slashMenu.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
+
+    // Numbered list sits below the fold until the list scrolls. click() refuses when another
+    // element would receive the pointer, which is exactly the bug.
+    await slashMenu.getByTestId(TESTIDS.slashMenuItem).filter({ hasText: /numbered list/i }).first().click();
+    await expect(slashMenu).toBeHidden();
+    await page.keyboard.type('First point', { delay: 10 });
+    await expect(body.locator('ol li')).toContainText('First point');
+  });
 });
