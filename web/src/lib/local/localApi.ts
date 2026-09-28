@@ -30,8 +30,9 @@
 // with no notebookId - which the server answers 400 to, forever.
 import type {
   CanvasEdge, CanvasItem, CanvasItemData, CanvasItemKind,
-  DashboardData, Flashcard, InkStroke, Note, NoteLite, Notebook, NotebookLite, SearchResult, StudyStats, TitleResult,
+  DashboardData, Flashcard, InkStroke, Note, NoteLayout, NoteLite, Notebook, NotebookLite, SearchResult, StudyStats, TitleResult,
 } from '../types';
+import { parseLayout, serializeLayout } from '../../features/editor/pagination/layout';
 import { hasLocalData, localDb } from './db';
 import { correctedNow } from './clock';
 import { enqueue } from './outbox';
@@ -132,6 +133,10 @@ function toNoteDto(n: LocalNote, nb: LocalNotebook | undefined): Note {
     // Attachments need a file store, so a local-only note has none. An empty array
     // rather than undefined, so the note page renders no panel instead of a broken one.
     attachments: [],
+    // Always resolved, as the server's GET is. Without it a guest's page size and margins
+    // were painted on the change and then gone on the next load, and a signed-in user
+    // offline opened every note at default A4 whatever the server held for it.
+    layout: parseLayout(n.layoutJson),
   };
 }
 
@@ -317,6 +322,9 @@ function notePayload(n: LocalNote): Record<string, unknown> {
     pinned: n.pinned === 1,
     archived: n.archived === 1,
     kind: n.kind,
+    // Only when this device holds one. A note that has never had a layout here sends
+    // none, so the server keeps what it has rather than being told "the default".
+    ...(typeof n.layoutJson === 'string' ? { layout: parseLayout(n.layoutJson) } : {}),
   };
 }
 
@@ -538,6 +546,7 @@ export async function localSnapshot(): Promise<GuestData> {
       tags: n.tags,
       createdAt: n.createdAt,
       updatedAt: n.updatedAt,
+      ...(typeof n.layoutJson === 'string' ? { layout: parseLayout(n.layoutJson) } : {}),
     })),
   };
 }
@@ -718,6 +727,7 @@ export const localApi = {
 
   createNote: async (b: {
     notebookId: string; title?: string; contentJson?: unknown; contentText?: string; tags?: string[]; kind?: string;
+    layout?: NoteLayout;
   }): Promise<{ note: Note }> => {
     await ready();
     // A board is refused for a GUEST and allowed for everyone else, which is the one
@@ -748,6 +758,7 @@ export const localApi = {
         updatedAt: now,
         deletedAt: null,
         baseUpdatedAt: null,
+        ...(b.layout ? { layoutJson: serializeLayout(parseLayout(JSON.stringify(b.layout))) } : {}),
       };
       await localDb.notes.add(note);
       await enqueue({
@@ -768,7 +779,7 @@ export const localApi = {
     id: string,
     b: Partial<{
       title: string; contentJson: unknown; contentText: string; pinned: boolean; archived: boolean;
-      notebookId: string; tags: string[];
+      notebookId: string; tags: string[]; layout: NoteLayout;
     }>,
   ): Promise<{ note: Note }> => {
     await ready();
@@ -786,6 +797,10 @@ export const localApi = {
       if (b.archived !== undefined) next.archived = b.archived ? 1 : 0;
       if (b.notebookId !== undefined) next.notebookId = b.notebookId;
       if (b.tags !== undefined) next.tags = [...new Set(b.tags)];
+      // Through parseLayout, as the server does on its PATCH, so this store can only ever
+      // hold a layout the app can render. Kept as a string even at the default - see
+      // LocalNote.layoutJson for why that matters to the push.
+      if (b.layout !== undefined) next.layoutJson = serializeLayout(parseLayout(JSON.stringify(b.layout)));
       // baseUpdatedAt is deliberately NOT touched. It records what the SERVER last showed
       // us; a local edit has not changed that, and advancing it here would make every
       // subsequent push claim a version we never saw.

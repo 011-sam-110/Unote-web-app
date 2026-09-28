@@ -23,6 +23,7 @@ import {
 import { PAGE_SIZES, PAGE_SIZE_IDS, type PageSizeId } from '../pagination/pageSizes';
 import { ZOOM_STEPS } from '../pagination/usePagedSurface';
 import type { NoteLayout } from '../pagination/layout';
+import { MARGIN_PRESETS, marginPresetFor, marginSummary } from '../pagination/marginPresets';
 import './formatBar.css';
 
 export interface FormatBarProps {
@@ -64,6 +65,7 @@ export default function FormatBar(props: FormatBarProps) {
   const currentFamily = (editor.getAttributes('textStyle').fontFamily as string) || '';
   // What the boxes SHOW is the text as it renders, mark or not - see caretStyle.ts.
   const caret = readCaretStyle(editor);
+  const marginPreset = marginPresetFor(layout.margins);
 
   return (
     <div className="folio-format-bar" role="toolbar" aria-label="Formatting" data-testid="format-bar">
@@ -316,6 +318,36 @@ export default function FormatBar(props: FormatBarProps) {
               </button>
             </>
           )}
+        </DropdownButton>
+
+        {/* "Normal margins" rather than a bare "Normal": the paragraph style box in the row
+            above already says "Normal", and two boxes with one word mean nothing apart.
+            Choosing a preset turns pages on, as choosing a paper size does - a margin is
+            a distance from the edge of a sheet, so with no sheet it would change nothing. */}
+        <DropdownButton
+          label={
+            <span className="folio-fmt-value" data-testid="margins-value">
+              {marginPreset ? `${marginPreset.label} margins` : 'Custom margins'}
+            </span>
+          }
+        >
+          {close =>
+            MARGIN_PRESETS.map(preset => (
+              <button
+                key={preset.id}
+                type="button"
+                role="menuitemradio"
+                aria-checked={marginPreset?.id === preset.id}
+                onClick={() => {
+                  onLayoutChange({ ...layout, margins: { ...preset.margins }, mode: 'paged' });
+                  close();
+                }}
+              >
+                {preset.label}
+                <span className="folio-fmt-dim">{marginSummary(preset.margins)}</span>
+              </button>
+            ))
+          }
         </DropdownButton>
 
         <button

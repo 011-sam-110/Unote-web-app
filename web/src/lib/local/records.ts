@@ -38,6 +38,18 @@ export interface LocalNote extends LocalBase {
   archived: number;
   createdAt: string;
   tags: string[];
+  /**
+   * The page layout as JSON text, like the server's `layout_json` column - which is also
+   * where it comes from: the sync feed ships that column, and the pull's merge lands it
+   * here under this name. Absent on a note from before this field existed, and null on
+   * one the server holds at the default layout; both read as the default.
+   *
+   * A local layout change writes it as a string EVEN WHEN it is the default. A string
+   * is what tells the outbox payload to carry a layout, and a reset to the default has
+   * to reach the server as much as any other change does - dropped, the server would
+   * keep the old margins and the next pull would put them back.
+   */
+  layoutJson?: string | null;
 }
 
 /** Column names match the server's `flashcards` table: question/answer, not front/back. */

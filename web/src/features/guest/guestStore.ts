@@ -19,7 +19,7 @@
 // short-lived; because migration and export want the whole store as one value; and because
 // hasGuestWork() is read during render, which an async database cannot answer without a
 // loading state in front of the warning.
-import type { Note, NoteLite, Notebook, NotebookLite } from '../../lib/types';
+import type { Note, NoteLayout, NoteLite, Notebook, NotebookLite } from '../../lib/types';
 import { buildReadme } from '../readme/buildReadme';
 
 const DATA_KEY = 'unote:guest:v1';
@@ -48,6 +48,9 @@ export interface GuestNote {
   tags: string[];
   createdAt: string;
   updatedAt: string;
+  /** Present only on a note whose page layout was set on this device. The localStorage
+   *  blob never held one; localSnapshot() adds it so an account inherits the margins. */
+  layout?: NoteLayout;
 }
 
 export interface GuestData {
